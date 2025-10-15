@@ -1,0 +1,38 @@
+# iOS Podfile with minimum platform set to iOS 13
+platform :ios, '15.0'
+
+# CocoaPods analytics sends network stats synchronously affecting Flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+install! 'cocoapods', :disable_input_output_paths => true
+
+# Prevent Cocoapods from embedding a Flutter framework dynamically.
+use_frameworks! :linkage => :static
+
+flutter_root = ENV['FLUTTER_ROOT']
+if flutter_root.nil? || flutter_root.empty?
+  flutter_executable = `which flutter`.strip
+  if flutter_executable.nil? || flutter_executable.empty?
+    raise 'Unable to locate Flutter. Ensure Flutter is installed and in your PATH.'
+  end
+  # flutter/bin/flutter -> go up 3 levels to Flutter SDK root
+  flutter_root = File.expand_path('../../..', flutter_executable)
+end
+load File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb')
+
+target 'Runner' do
+  use_modular_headers!
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+end
