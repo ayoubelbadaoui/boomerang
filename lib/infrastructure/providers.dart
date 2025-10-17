@@ -35,3 +35,14 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
     return AuthController(repo);
   },
 );
+
+/// Checks whether the current authenticated user has a profile document
+/// at `users/{uid}` in Firestore. Returns false if no user is authenticated.
+final userProfileExistsProvider = FutureProvider<bool>((ref) async {
+  final auth = ref.watch(firebaseAuthProvider);
+  final user = auth.currentUser;
+  if (user == null) return false;
+  final firestore = ref.watch(firestoreProvider);
+  final doc = await firestore.collection('users').doc(user.uid).get();
+  return doc.exists;
+});

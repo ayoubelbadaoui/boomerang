@@ -35,12 +35,7 @@ class FirebaseAuthRepo implements AuthRepo {
   }
 
   @override
-  Future<AuthUser> signUp(
-    String email,
-    String password,
-    String name,
-    String birthday,
-  ) async {
+  Future<AuthUser> signUp(String email, String password, String name) async {
     final cred = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -50,7 +45,7 @@ class FirebaseAuthRepo implements AuthRepo {
       uid: u.uid,
       email: u.email,
       name: name,
-      birthday: DateTime.parse(birthday),
+      birthday: DateTime.now(),
     );
   }
 

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import 'login_page.dart';
-import 'signup_page.dart';
+import 'auth_choice_page.dart';
 
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
@@ -70,7 +69,7 @@ class OnboardingPage extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 44.sp,
+                          fontSize: 33.sp,
                           height: 1.2,
                           fontWeight: FontWeight.w700,
                         ),
@@ -112,7 +111,7 @@ class OnboardingPage extends StatelessWidget {
                         onPressed: () async {
                           if (!pageController.hasClients) return;
                           if (isLast) {
-                            context.go(SignupPage.routeName);
+                            context.push(AuthChoicePage.routeName);
                           } else {
                             await pageController.nextPage(
                               duration: const Duration(milliseconds: 350),
@@ -132,7 +131,7 @@ class OnboardingPage extends StatelessWidget {
             top: MediaQuery.of(context).padding.top + 12.h,
             right: 16.w,
             child: TextButton(
-              onPressed: () => context.go(LoginPage.routeName),
+              onPressed: () => context.push(AuthChoicePage.routeName),
               child: const Text('Skip'),
             ),
           ),

@@ -1,37 +1,61 @@
+import 'package:boomerang/features/splash_screen/presentation/splash_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/signup_page.dart';
 import 'features/feed/presentation/home_shell.dart';
 import 'features/auth/presentation/onboarding_page.dart';
+import 'features/auth/presentation/auth_choice_page.dart';
+import 'features/auth/presentation/setup_profile_page.dart';
 import 'infrastructure/providers.dart';
 
 final router = GoRouter(
-  initialLocation: OnboardingPage.routeName,
+  initialLocation: SplashScreen.routeName,
+
   routes: [
+    GoRoute(
+      path: SplashScreen.routeName,
+      builder: (c, s) => const SplashScreen(),
+    ),
     GoRoute(
       path: OnboardingPage.routeName,
       builder: (c, s) => const OnboardingPage(),
     ),
+    GoRoute(
+      path: AuthChoicePage.routeName,
+      builder: (c, s) => const AuthChoicePage(),
+    ),
     GoRoute(path: LoginPage.routeName, builder: (c, s) => const LoginPage()),
     GoRoute(path: SignupPage.routeName, builder: (c, s) => const SignupPage()),
+    GoRoute(
+      path: SetupProfilePage.routeName,
+      builder: (c, s) => const SetupProfilePage(),
+    ),
     GoRoute(path: HomeShell.routeName, builder: (c, s) => const HomeShell()),
   ],
   redirect: (context, state) {
     final container = ProviderScope.containerOf(context, listen: false);
     final auth = container.read(authStateProvider);
-    final loggingIn =
-        state.fullPath == LoginPage.routeName ||
-        state.fullPath == SignupPage.routeName;
+    final profileExists = container.read(userProfileExistsProvider);
+    final isAuthChoice = state.fullPath == AuthChoicePage.routeName;
+    final isLogin = state.fullPath == LoginPage.routeName;
+    final isSignup = state.fullPath == SignupPage.routeName;
+    final isOnboarding = state.fullPath == OnboardingPage.routeName;
 
     if (auth.asData == null) return null; // wait until first frame resolves
     final user = auth.asData!.value;
-    if (user == null && !loggingIn) return OnboardingPage.routeName;
-    if (user != null &&
-        (state.fullPath == LoginPage.routeName ||
-            state.fullPath == SignupPage.routeName)) {
-      return HomeShell.routeName;
+
+    if (user == null) {
+      // Allow auth flow routes; otherwise push to onboarding
+      final isAuthFlow = isOnboarding || isAuthChoice || isLogin || isSignup;
+      return isAuthFlow ? null : OnboardingPage.routeName;
     }
+
+    // User is signed in: if they have a profile, send to home when on onboarding
+    if (profileExists.asData == null) return null; // wait for profile check
+    final hasProfile = profileExists.asData!.value;
+    if (hasProfile && isOnboarding) return HomeShell.routeName;
+    // allow navigation in auth/setup flow otherwise
     return null;
   },
 );
