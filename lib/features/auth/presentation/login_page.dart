@@ -1,4 +1,5 @@
 import 'package:boomerang/features/auth/presentation/signup_page.dart';
+import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -100,15 +101,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 PrimaryButton(
                   loading: state.loading,
                   onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
-                      await ref
-                          .read(authControllerProvider.notifier)
-                          .login(_email.text, _password.text);
-                      final next = ref.read(authStateProvider).asData?.value;
-                      if (next != null && mounted) {
-                        // Navigate to home and clear back stack
-                        context.go('/home');
-                      }
+                    if (!_formKey.currentState!.validate()) return;
+                    await ref
+                        .read(authControllerProvider.notifier)
+                        .login(_email.text, _password.text);
+                    if (!mounted) return;
+                    final next = ref.read(authStateProvider).asData?.value;
+                    if (next != null) {
+                      // Navigate to home and clear back stack
+                      context.go(HomeShell.routeName);
                     }
                   },
                   child: Text(

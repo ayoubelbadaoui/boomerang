@@ -85,12 +85,12 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                 PrimaryButton(
                   loading: state.loading,
                   onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
-                      await ref
-                          .read(authControllerProvider.notifier)
-                          .signup(_email.text, _password.text, _name.text);
-                      if (mounted) context.push('/setup/profile');
-                    }
+                    if (!_formKey.currentState!.validate()) return;
+                    await ref
+                        .read(authControllerProvider.notifier)
+                        .signup(_email.text, _password.text, _name.text);
+                    if (!mounted) return;
+                    context.push('/setup/profile');
                   },
                   child: Text(
                     'Sign up',

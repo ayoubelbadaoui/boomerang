@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class AuthButton extends StatelessWidget {
   const AuthButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.onPressed,
