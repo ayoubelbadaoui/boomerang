@@ -90,7 +90,10 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                         .read(authControllerProvider.notifier)
                         .signup(_email.text, _password.text, _name.text);
                     if (!mounted) return;
-                    context.push('/setup/profile');
+                    final result = ref.read(authControllerProvider);
+                    if (result.error == null) {
+                      context.push('/setup/flow');
+                    }
                   },
                   child: Text(
                     'Sign up',

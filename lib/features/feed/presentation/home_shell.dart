@@ -6,6 +6,8 @@ import 'tabs/discover_tab.dart';
 import 'tabs/create_tab.dart';
 import 'tabs/inbox_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:boomerang/infrastructure/providers.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -30,7 +32,49 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar:
+          _currentIndex == 0
+              ? AppBar(
+                centerTitle: true,
+                elevation: 0,
+                title: const Text('Home'),
+                actions: [
+                  Consumer(
+                    builder:
+                        (context, ref, _) => Padding(
+                          padding: EdgeInsets.only(right: 8.w),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () async {
+                              await ref
+                                  .read(boomerangRepoProvider)
+                                  .addRandomBoomerang();
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Random boomerang added'),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: EdgeInsets.all(10.w),
+                              decoration: const BoxDecoration(
+                                color: Colors.black,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.bolt,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                  ),
+                ],
+              )
+              : null,
       body: _tabs[_currentIndex],
+
       bottomNavigationBar: Padding(
         padding: EdgeInsets.only(bottom: 8.h, top: 8.h),
         child: SizedBox(

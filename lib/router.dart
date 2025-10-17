@@ -7,6 +7,7 @@ import 'features/feed/presentation/home_shell.dart';
 import 'features/auth/presentation/onboarding_page.dart';
 import 'features/auth/presentation/auth_choice_page.dart';
 import 'features/auth/presentation/setup_profile_page.dart';
+import 'features/auth/presentation/setup_flow_page.dart';
 import 'infrastructure/providers.dart';
 
 final router = GoRouter(
@@ -31,12 +32,17 @@ final router = GoRouter(
       path: SetupProfilePage.routeName,
       builder: (c, s) => const SetupProfilePage(),
     ),
+    GoRoute(
+      path: SetupFlowPage.routeName,
+      builder: (c, s) => const SetupFlowPage(),
+    ),
     GoRoute(path: HomeShell.routeName, builder: (c, s) => const HomeShell()),
   ],
   redirect: (context, state) {
     final container = ProviderScope.containerOf(context, listen: false);
     final auth = container.read(authStateProvider);
     final profileExists = container.read(userProfileExistsProvider);
+    final profileComplete = container.read(userProfileCompleteProvider);
     final isAuthChoice = state.fullPath == AuthChoicePage.routeName;
     final isLogin = state.fullPath == LoginPage.routeName;
     final isSignup = state.fullPath == SignupPage.routeName;
@@ -52,9 +58,16 @@ final router = GoRouter(
     }
 
     // User is signed in: if they have a profile, send to home when on onboarding
-    if (profileExists.asData == null) return null; // wait for profile check
+    if (profileExists.asData == null || profileComplete.asData == null)
+      return null; // wait checks
     final hasProfile = profileExists.asData!.value;
-    if (hasProfile && isOnboarding) return HomeShell.routeName;
+    final isComplete = profileComplete.asData!.value;
+    if (hasProfile && isComplete && isOnboarding) return HomeShell.routeName;
+    if (hasProfile &&
+        !isComplete &&
+        state.fullPath != SetupFlowPage.routeName) {
+      return SetupFlowPage.routeName;
+    }
     // allow navigation in auth/setup flow otherwise
     return null;
   },
