@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'tabs/home_tab.dart';
+import 'tabs/discover_tab.dart';
+import 'tabs/create_tab.dart';
+import 'tabs/inbox_tab.dart';
+import 'tabs/profile_tab.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -15,11 +20,11 @@ class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
 
   static final List<Widget> _tabs = <Widget>[
-    const _CenterText(label: 'Home'),
-    const _CenterText(label: 'Discover'),
-    const _CenterText(label: 'Create'),
-    const _CenterText(label: 'Inbox'),
-    const _CenterText(label: 'Profile'),
+    const HomeTab(),
+    const DiscoverTab(),
+    const CreateTab(),
+    const InboxTab(),
+    const ProfileTab(),
   ];
 
   @override
@@ -78,20 +83,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _CenterText extends StatelessWidget {
-  const _CenterText({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-}
+// Removed placeholder widget; tabs now use dedicated screens
 
 class _NavItem extends StatelessWidget {
   const _NavItem({
