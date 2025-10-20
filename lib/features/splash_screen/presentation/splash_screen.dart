@@ -25,17 +25,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authStateProvider);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (auth.isLoading) return;
-      auth.when(
-        data:
-            (user) => context.go(
-              user != null ? HomeShell.routeName : OnboardingPage.routeName,
-            ),
-        error: (_, __) => context.go(OnboardingPage.routeName),
-        loading: () {},
-      );
+    // wait 2 seconds and then navigate to the home screen
+    Future.delayed(const Duration(seconds: 2), () {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (auth.isLoading) return;
+        auth.when(
+          data:
+              (user) => context.go(
+                user != null ? HomeShell.routeName : OnboardingPage.routeName,
+              ),
+          error: (_, __) => context.go(OnboardingPage.routeName),
+          loading: () {},
+        );
+      });
     });
     return Scaffold(
       backgroundColor: Colors.white,

@@ -58,8 +58,9 @@ final router = GoRouter(
     }
 
     // User is signed in: if they have a profile, send to home when on onboarding
-    if (profileExists.asData == null || profileComplete.asData == null)
+    if (profileExists.asData == null || profileComplete.asData == null) {
       return null; // wait checks
+    }
     final hasProfile = profileExists.asData!.value;
     final isComplete = profileComplete.asData!.value;
     if (hasProfile && isComplete && isOnboarding) return HomeShell.routeName;

@@ -8,6 +8,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:boomerang/features/profile/infrastructure/user_profile_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_repo.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/features/feed/infrastructure/comments_repo.dart';
+// import 'package:path_provider/path_provider.dart';
 // import 'package:firebase_core/firebase_core.dart';
 
 final firebaseAuthProvider = Provider<FirebaseAuth>(
@@ -76,4 +79,28 @@ final userProfileRepoProvider = Provider<UserProfileRepo>((ref) {
 final boomerangRepoProvider = Provider<BoomerangRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return BoomerangRepo(fs);
+});
+
+final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
+  final auth = ref.watch(firebaseAuthProvider);
+  // bridge auth changes
+  await for (final u in auth.authStateChanges()) {
+    if (u == null) {
+      yield null;
+      continue;
+    }
+    final fs = ref.read(firestoreProvider);
+    await for (final snap in fs.collection('users').doc(u.uid).snapshots()) {
+      if (!snap.exists || snap.data() == null) {
+        yield null;
+      } else {
+        yield UserProfile.fromMap(snap.id, snap.data()!);
+      }
+    }
+  }
+});
+
+final commentsRepoProvider = Provider<CommentsRepo>((ref) {
+  final fs = ref.watch(firestoreProvider);
+  return CommentsRepo(fs);
 });

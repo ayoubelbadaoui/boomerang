@@ -13,3 +13,4 @@ void main() async {
 // TODO: Create UserProfile entity + repo (Firestore /users/{uid}).
 // TODO: Build Post entity + repo for uploads (Storage + Firestore /posts).
 // TODO: Replace HomeShell with real feed and guarded tabs.
+//

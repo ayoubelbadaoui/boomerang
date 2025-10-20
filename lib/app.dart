@@ -16,6 +16,7 @@ class BoomerangApp extends StatelessWidget {
           title: 'Boomerang',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
+            fontFamily: 'Urbanist',
             colorScheme: ColorScheme.fromSeed(
               seedColor: const Color(0xFF111111),
             ),

@@ -378,11 +378,6 @@ class _AvatarPickerState extends State<_AvatarPicker> {
     if (xFile == null) return;
     final cropped = await ImageCropper().cropImage(
       sourcePath: xFile.path,
-      aspectRatioPresets: const [
-        CropAspectRatioPreset.square,
-        CropAspectRatioPreset.ratio4x3,
-        CropAspectRatioPreset.original,
-      ],
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Crop Image',

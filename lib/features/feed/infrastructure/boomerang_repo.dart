@@ -49,4 +49,25 @@ class BoomerangRepo {
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
+
+  Future<void> toggleLike({
+    required String boomerangId,
+    required String userId,
+  }) async {
+    final ref = _fs.collection('boomerangs').doc(boomerangId);
+    await _fs.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data() as Map<String, dynamic>;
+      final List likedBy = (data['likedBy'] as List?) ?? <String>[];
+      final bool isLiked = likedBy.contains(userId);
+      tx.update(ref, {
+        'likedBy':
+            isLiked
+                ? FieldValue.arrayRemove([userId])
+                : FieldValue.arrayUnion([userId]),
+        'likes': FieldValue.increment(isLiked ? -1 : 1),
+      });
+    });
+  }
 }
