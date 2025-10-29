@@ -70,4 +70,24 @@ class BoomerangRepo {
       });
     });
   }
+
+  Future<String> createBoomerangPost({
+    required String userId,
+    required String userName,
+    String? userAvatar,
+    required String videoUrl,
+    String? imageUrl,
+  }) async {
+    final ref = await _fs.collection('boomerangs').add({
+      'userId': userId,
+      'userName': userName,
+      'userAvatar': userAvatar,
+      'videoUrl': videoUrl,
+      'imageUrl': imageUrl,
+      'likes': 0,
+      'likedBy': <String>[],
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  }
 }

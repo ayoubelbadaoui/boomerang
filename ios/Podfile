@@ -21,8 +21,8 @@ if flutter_root.nil? || flutter_root.empty?
   if flutter_executable.nil? || flutter_executable.empty?
     raise 'Unable to locate Flutter. Ensure Flutter is installed and in your PATH.'
   end
-  # flutter/bin/flutter -> go up 3 levels to Flutter SDK root
-  flutter_root = File.expand_path('../../..', flutter_executable)
+  # path/to/flutter/bin/flutter -> go up 1 level to Flutter SDK root
+  flutter_root = File.expand_path('..', File.dirname(flutter_executable))
 end
 load File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb')
 
