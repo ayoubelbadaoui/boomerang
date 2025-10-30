@@ -16,27 +16,105 @@ class HomeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stream = ref.watch(boomerangRepoProvider).watchBoomerangs();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final docs = snapshot.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(child: Text('No boomerangs yet'));
-        }
-        return ListView.separated(
-          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => SizedBox(height: 16.h),
-          itemBuilder: (context, i) {
-            final data = docs[i].data();
-            return _BoomerangCard(id: docs[i].id, data: data);
-          },
-        );
-      },
+    return const _PaginatedBoomerangList();
+  }
+}
+
+class _PaginatedBoomerangList extends ConsumerStatefulWidget {
+  const _PaginatedBoomerangList();
+  @override
+  ConsumerState<_PaginatedBoomerangList> createState() => _PaginatedBoomerangListState();
+}
+
+class _PaginatedBoomerangListState extends ConsumerState<_PaginatedBoomerangList> {
+  final _controller = ScrollController();
+  final _docs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+  DocumentSnapshot<Map<String, dynamic>>? _last;
+  bool _loading = false;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onScroll);
+    _fetchNext();
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onScroll);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_controller.hasClients) return;
+    final threshold = 300.0;
+    if (_controller.position.maxScrollExtent - _controller.position.pixels <= threshold) {
+      _fetchNext();
+    }
+  }
+
+  Future<void> _fetchNext() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      final snap = await ref.read(boomerangRepoProvider).fetchBoomerangsPage(
+            startAfter: _last,
+            limit: 20,
+          );
+      if (mounted) {
+        setState(() {
+          _docs.addAll(snap.docs);
+          if (snap.docs.isNotEmpty) {
+            _last = snap.docs.last;
+          }
+          if (snap.docs.length < 20) {
+            _hasMore = false;
+          }
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _docs.clear();
+      _last = null;
+      _hasMore = true;
+    });
+    await _fetchNext();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_docs.isEmpty && _loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_docs.isEmpty) {
+      return const Center(child: Text('No boomerangs yet'));
+    }
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView.separated(
+        controller: _controller,
+        padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
+        itemCount: _docs.length + (_hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => SizedBox(height: 16.h),
+        itemBuilder: (context, i) {
+          if (i >= _docs.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final d = _docs[i];
+          final data = d.data();
+          return _BoomerangCard(id: d.id, data: data);
+        },
+      ),
     );
   }
 }

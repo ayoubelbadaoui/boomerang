@@ -50,6 +50,27 @@ class BoomerangRepo {
         .snapshots();
   }
 
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchBoomerangsOnce() {
+    return _fs
+        .collection('boomerangs')
+        .orderBy('createdAt', descending: true)
+        .get();
+  }
+
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchBoomerangsPage({
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) {
+    Query<Map<String, dynamic>> q = _fs
+        .collection('boomerangs')
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    if (startAfter != null) {
+      q = q.startAfterDocument(startAfter);
+    }
+    return q.get();
+  }
+
   Future<void> toggleLike({
     required String boomerangId,
     required String userId,
