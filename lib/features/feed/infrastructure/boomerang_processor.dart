@@ -19,6 +19,8 @@ class BoomerangProcessor {
     String inputPath, {
     double segmentSeconds = 1.6,
     int fps = 30,
+    double totalDurationSeconds = 6.0,
+    double speed = 1.0,
   }) async {
     final input = File(inputPath);
     if (!await input.exists()) {
@@ -28,19 +30,24 @@ class BoomerangProcessor {
     final tempDir = await getTemporaryDirectory();
     final outPath =
         '${tempDir.path}/boomerang_${DateTime.now().millisecondsSinceEpoch}.mp4';
+    final singleCyclePath =
+        '${tempDir.path}/boomerang_cycle_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
     // Use a single-pass filter_complex to create forward + reverse and concat
     // Notes:
     //  - format=yuv420p improves compatibility with iOS/Android decoders
     //  - -an strips audio to avoid A/V concat issues and boomerang audio oddities
+    final speedStr = speed.toStringAsFixed(3);
+    final filterBase =
+        "[0:v]trim=start=0:end=${segmentSeconds.toStringAsFixed(2)},setpts=PTS-STARTPTS,split=2[fwd][tmp];[tmp]reverse[rev];[fwd][rev]concat=n=2:v=1:a=0,format=yuv420p";
     final filter =
-        "[0:v]trim=start=0:end=${segmentSeconds.toStringAsFixed(2)},setpts=PTS-STARTPTS,split=2[fwd][tmp];[tmp]reverse[rev];[fwd][rev]concat=n=2:v=1:a=0,format=yuv420p[v]";
+        speed == 1.0 ? "$filterBase[v]" : "$filterBase,setpts=PTS/$speedStr[v]";
 
     // Quote paths to handle spaces
     final cmd = [
       '-y',
       '-i',
-      '$inputPath',
+      '"$inputPath"',
       '-filter_complex',
       '"$filter"',
       '-map',
@@ -54,7 +61,7 @@ class BoomerangProcessor {
       'faster',
       '-movflags',
       '+faststart',
-      '$outPath',
+      '"$singleCyclePath"',
     ].join(' ');
 
     final session = await FFmpegKit.execute(cmd);
@@ -63,6 +70,60 @@ class BoomerangProcessor {
       final logs = await session.getAllLogsAsString();
       throw Exception('FFmpeg failed (code: ${rc?.getValue()})\n$logs');
     }
+
+    // If the user wants a longer clip, repeat the single boomerang cycle
+    final cycleDuration =
+        (2 * segmentSeconds) /
+        (speed <= 0 ? 1.0 : speed); // forward + reverse adjusted by speed
+    final cyclesNeeded = (totalDurationSeconds / cycleDuration).ceil().clamp(
+      1,
+      12,
+    );
+    if (cyclesNeeded <= 1) {
+      // Move singleCycle to final outPath
+      await File(singleCyclePath).copy(outPath);
+      return outPath;
+    }
+
+    // Prepare concat list file
+    final listFile = File(
+      '${tempDir.path}/boomerang_list_${DateTime.now().millisecondsSinceEpoch}.txt',
+    );
+    final buffer = StringBuffer();
+    for (int i = 0; i < cyclesNeeded; i++) {
+      buffer.writeln("file '$singleCyclePath'");
+    }
+    await listFile.writeAsString(buffer.toString());
+
+    final concatCmd = [
+      '-y',
+      '-f',
+      'concat',
+      '-safe',
+      '0',
+      '-i',
+      '"${listFile.path}"',
+      '-c',
+      'copy',
+      '-movflags',
+      '+faststart',
+      '"$outPath"',
+    ].join(' ');
+
+    final concatSession = await FFmpegKit.execute(concatCmd);
+    final concatRc = await concatSession.getReturnCode();
+    if (!ReturnCode.isSuccess(concatRc)) {
+      final logs = await concatSession.getAllLogsAsString();
+      throw Exception(
+        'FFmpeg concat failed (code: ${concatRc?.getValue()})\n$logs',
+      );
+    }
+
+    // Cleanup
+    try {
+      await listFile.delete();
+      await File(singleCyclePath).delete();
+    } catch (_) {}
 
     return outPath;
   }

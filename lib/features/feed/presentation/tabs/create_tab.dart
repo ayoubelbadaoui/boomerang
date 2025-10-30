@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
 
 class CreateTab extends ConsumerStatefulWidget {
   const CreateTab({super.key});
@@ -23,13 +23,7 @@ class _CreateTabState extends ConsumerState<CreateTab> {
     return File(file.path);
   }
 
-  Future<String> _uploadToStorage(File file) async {
-    final storage = ref.read(storageProvider);
-    final String path =
-        'boomerangs/${DateTime.now().millisecondsSinceEpoch}.mp4';
-    final task = await storage.ref(path).putFile(file);
-    return await task.ref.getDownloadURL();
-  }
+  // Upload moved to editor page
 
   Future<void> _onCreate(ImageSource source) async {
     if (_isProcessing) return;
@@ -38,34 +32,12 @@ class _CreateTabState extends ConsumerState<CreateTab> {
       final input = await _pickVideoFrom(source);
       if (input == null) return;
 
-      // iOS Simulator guard: FFmpeg can be problematic on some setups; try/catch
-      final processor = ref.read(boomerangProcessorProvider);
-      final String outPath = await processor.makeBoomerang(input.path);
-      final outFile = File(outPath);
-
-      final url = await _uploadToStorage(outFile);
-
-      final me = ref.read(currentUserProfileProvider).value;
-      if (me == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Please log in first.')));
-        return;
-      }
-      await ref
-          .read(boomerangRepoProvider)
-          .createBoomerangPost(
-            userId: me.uid,
-            userName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
-            userAvatar: me.avatarUrl,
-            videoUrl: url,
-            imageUrl: null,
-          );
-
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Boomerang created')));
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BoomerangEditorPage(inputFile: input),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
