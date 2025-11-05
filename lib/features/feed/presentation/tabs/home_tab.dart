@@ -23,10 +23,12 @@ class HomeTab extends ConsumerWidget {
 class _PaginatedBoomerangList extends ConsumerStatefulWidget {
   const _PaginatedBoomerangList();
   @override
-  ConsumerState<_PaginatedBoomerangList> createState() => _PaginatedBoomerangListState();
+  ConsumerState<_PaginatedBoomerangList> createState() =>
+      _PaginatedBoomerangListState();
 }
 
-class _PaginatedBoomerangListState extends ConsumerState<_PaginatedBoomerangList> {
+class _PaginatedBoomerangListState
+    extends ConsumerState<_PaginatedBoomerangList> {
   final _controller = ScrollController();
   final _docs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   DocumentSnapshot<Map<String, dynamic>>? _last;
@@ -50,7 +52,8 @@ class _PaginatedBoomerangListState extends ConsumerState<_PaginatedBoomerangList
   void _onScroll() {
     if (!_controller.hasClients) return;
     final threshold = 300.0;
-    if (_controller.position.maxScrollExtent - _controller.position.pixels <= threshold) {
+    if (_controller.position.maxScrollExtent - _controller.position.pixels <=
+        threshold) {
       _fetchNext();
     }
   }
@@ -59,10 +62,9 @@ class _PaginatedBoomerangListState extends ConsumerState<_PaginatedBoomerangList
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
     try {
-      final snap = await ref.read(boomerangRepoProvider).fetchBoomerangsPage(
-            startAfter: _last,
-            limit: 20,
-          );
+      final snap = await ref
+          .read(boomerangRepoProvider)
+          .fetchBoomerangsPage(startAfter: _last, limit: 20);
       if (mounted) {
         setState(() {
           _docs.addAll(snap.docs);
