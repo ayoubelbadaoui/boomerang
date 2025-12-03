@@ -12,6 +12,7 @@ import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/infrastructure/comments_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_service.dart';
+import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 // import 'package:path_provider/path_provider.dart';
 // import 'package:firebase_core/firebase_core.dart';
 
@@ -109,6 +110,12 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
 final commentsRepoProvider = Provider<CommentsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return CommentsRepo(fs);
+});
+
+final followRepoProvider = Provider<FollowRepo>((ref) {
+  final fs = ref.watch(firestoreProvider);
+  final auth = ref.watch(firebaseAuthProvider);
+  return FollowRepo(fs, auth);
 });
 
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
