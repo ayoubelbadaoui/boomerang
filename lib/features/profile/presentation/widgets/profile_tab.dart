@@ -163,11 +163,24 @@ class ProfileTab extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Stat(value: '247', label: 'Bmg.'),
                       Builder(
                         builder: (_) {
                           final uid = p?.uid ?? '';
-                          final followers = ref.watch(followersCountProvider(uid));
+                          final postsCount =
+                              ref.watch(userBoomerangsCountProvider(uid));
+                          final value = postsCount.maybeWhen(
+                            data: (v) => '$v',
+                            orElse: () => '0',
+                          );
+                          return Stat(value: value, label: 'Bmg.');
+                        },
+                      ),
+                      Builder(
+                        builder: (_) {
+                          final uid = p?.uid ?? '';
+                          final followers = ref.watch(
+                            followersCountProvider(uid),
+                          );
                           final followersText = followers.maybeWhen(
                             data: (v) => '$v',
                             orElse: () => '0',
@@ -175,29 +188,33 @@ class ProfileTab extends ConsumerWidget {
                           return Stat(
                             value: followersText,
                             label: 'Followers',
-                            onTap: () => showModalBottomSheet<void>(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.white,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(24),
+                            onTap:
+                                () => showModalBottomSheet<void>(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.white,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(24),
+                                    ),
+                                  ),
+                                  builder:
+                                      (_) => const SizedBox(
+                                        height: 500,
+                                        child: FollowListSheet(
+                                          mode: FollowMode.followers,
+                                        ),
+                                      ),
                                 ),
-                              ),
-                              builder: (_) => const SizedBox(
-                                height: 500,
-                                child: FollowListSheet(
-                                  mode: FollowMode.followers,
-                                ),
-                              ),
-                            ),
                           );
                         },
                       ),
                       Builder(
                         builder: (_) {
                           final uid = p?.uid ?? '';
-                          final following = ref.watch(followingCountProvider(uid));
+                          final following = ref.watch(
+                            followingCountProvider(uid),
+                          );
                           final followingText = following.maybeWhen(
                             data: (v) => '$v',
                             orElse: () => '0',
@@ -205,26 +222,39 @@ class ProfileTab extends ConsumerWidget {
                           return Stat(
                             value: followingText,
                             label: 'Following',
-                            onTap: () => showModalBottomSheet<void>(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.white,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(24),
+                            onTap:
+                                () => showModalBottomSheet<void>(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.white,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(24),
+                                    ),
+                                  ),
+                                  builder:
+                                      (_) => const SizedBox(
+                                        height: 500,
+                                        child: FollowListSheet(
+                                          mode: FollowMode.following,
+                                        ),
+                                      ),
                                 ),
-                              ),
-                              builder: (_) => const SizedBox(
-                                height: 500,
-                                child: FollowListSheet(
-                                  mode: FollowMode.following,
-                                ),
-                              ),
-                            ),
                           );
                         },
                       ),
-                      const Stat(value: '3.7M', label: 'Likes'),
+                      Builder(
+                        builder: (_) {
+                          final uid = p?.uid ?? '';
+                          final totalLikes =
+                              ref.watch(userTotalLikesProvider(uid));
+                          final value = totalLikes.maybeWhen(
+                            data: (v) => '$v',
+                            orElse: () => '0',
+                          );
+                          return Stat(value: value, label: 'Likes');
+                        },
+                      ),
                     ],
                   ),
                   SizedBox(height: 16.h),

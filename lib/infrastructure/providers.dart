@@ -139,6 +139,36 @@ final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
       .map((snap) => snap.size);
 });
 
+/// Number of boomerangs created by a user
+final userBoomerangsCountProvider =
+    StreamProvider.family<int, String>((ref, uid) {
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('boomerangs')
+      .where('userId', isEqualTo: uid)
+      .snapshots()
+      .map((snap) => snap.size);
+});
+
+/// Total likes across a user's boomerangs
+final userTotalLikesProvider =
+    StreamProvider.family<int, String>((ref, uid) {
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('boomerangs')
+      .where('userId', isEqualTo: uid)
+      .snapshots()
+      .map((snap) {
+    int total = 0;
+    for (final d in snap.docs) {
+      final data = d.data();
+      final likes = (data['likes'] ?? 0);
+      if (likes is int) total += likes;
+    }
+    return total;
+  });
+});
+
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
   return const BoomerangProcessor();
 });

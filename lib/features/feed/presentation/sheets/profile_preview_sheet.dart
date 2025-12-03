@@ -103,11 +103,22 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                const _Stat(value: '823', label: 'Bmg.'),
                 Consumer(
                   builder: (context, ref, _) {
-                    final followers =
-                        ref.watch(followersCountProvider(widget.userId));
+                    final posts =
+                        ref.watch(userBoomerangsCountProvider(widget.userId));
+                    final text = posts.maybeWhen(
+                      data: (v) => '$v',
+                      orElse: () => '0',
+                    );
+                    return _Stat(value: text, label: 'Bmg.');
+                  },
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final followers = ref.watch(
+                      followersCountProvider(widget.userId),
+                    );
                     final text = followers.maybeWhen(
                       data: (v) => '$v',
                       orElse: () => '0',
@@ -117,8 +128,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    final following =
-                        ref.watch(followingCountProvider(widget.userId));
+                    final following = ref.watch(
+                      followingCountProvider(widget.userId),
+                    );
                     final text = following.maybeWhen(
                       data: (v) => '$v',
                       orElse: () => '0',
@@ -126,7 +138,17 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     return _Stat(value: text, label: 'Following');
                   },
                 ),
-                const _Stat(value: '39M', label: 'Likes'),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final likes =
+                        ref.watch(userTotalLikesProvider(widget.userId));
+                    final text = likes.maybeWhen(
+                      data: (v) => '$v',
+                      orElse: () => '0',
+                    );
+                    return _Stat(value: text, label: 'Likes');
+                  },
+                ),
               ],
             ),
             SizedBox(height: 16.h),
