@@ -163,7 +163,7 @@ class _GridTileState extends State<_GridTile> {
     final String? imageUrl = widget.imageUrl;
     final String? videoUrl = widget.videoUrl;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18.r),
+      borderRadius: BorderRadius.circular(12.r),
       child: Stack(
         fit: StackFit.expand,
         children: [
