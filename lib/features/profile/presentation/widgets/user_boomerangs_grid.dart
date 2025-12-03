@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:developer' show log;
+import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 
 class UserBoomerangsGrid extends ConsumerStatefulWidget {
   const UserBoomerangsGrid({super.key});
@@ -59,10 +60,22 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                 childAspectRatio: 1,
               ),
               itemBuilder: (context, index) {
-                final data = s.docs[index].data();
+                final doc = s.docs[index];
+                final data = doc.data();
+                final id = doc.id;
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
-                return _GridTile(imageUrl: imageUrl, videoUrl: videoUrl);
+                return InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder:
+                            (_) => BoomerangViewerPage(id: id, data: data),
+                      ),
+                    );
+                  },
+                  child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),
+                );
               },
             ),
             SizedBox(height: 8.h),

@@ -8,6 +8,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/sheets/qa_sheet.dart';
+import 'package:boomerang/features/feed/presentation/sheets/viewers_sheet.dart';
+import 'package:boomerang/features/feed/presentation/sheets/ranking_sheet.dart';
+import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -101,6 +106,7 @@ class _PaginatedBoomerangListState
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView.separated(
+        primary: false,
         controller: _controller,
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
         itemCount: _docs.length + (_hasMore ? 1 : 0),
@@ -152,18 +158,27 @@ class _BoomerangCard extends StatelessWidget {
               top: 12.h,
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 14.r,
-                    backgroundImage:
-                        avatar != null ? NetworkImage(avatar) : null,
+                  InkWell(
+                    onTap: () => _showProfilePreview(context, handle, avatar),
+                    customBorder: const CircleBorder(),
+                    child: CircleAvatar(
+                      radius: 14.r,
+                      backgroundImage:
+                          avatar != null ? NetworkImage(avatar) : null,
+                      onBackgroundImageError:
+                          avatar != null ? (_, __) {} : null,
+                    ),
                   ),
                   SizedBox(width: 8.w),
-                  Text(
-                    handle,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14.sp,
+                  InkWell(
+                    onTap: () => _showProfilePreview(context, handle, avatar),
+                    child: Text(
+                      handle,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.sp,
+                      ),
                     ),
                   ),
                 ],
@@ -172,13 +187,37 @@ class _BoomerangCard extends StatelessWidget {
             Positioned(
               right: 12.w,
               top: 12.h,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                padding: EdgeInsets.all(8.r),
-                child: const Icon(Icons.bookmark_border, color: Colors.white),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () => _showQASheet(context),
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      padding: EdgeInsets.all(8.r),
+                      child: const Icon(
+                        Icons.forum_outlined,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  InkWell(
+                    onTap: () => _showRankingSheet(context),
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      padding: EdgeInsets.all(8.r),
+                      child: const Icon(Icons.leaderboard, color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
             ),
             Positioned(
@@ -304,10 +343,16 @@ class _DoubleTapLikeArea extends ConsumerStatefulWidget {
 class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
     with SingleTickerProviderStateMixin {
   bool _showHeart = false;
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 250),
-  );
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+  }
 
   @override
   void dispose() {
@@ -334,7 +379,16 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder:
+                (_) => BoomerangViewerPage(id: widget.postId, data: widget.data),
+          ),
+        );
+      },
       onDoubleTap: _onDoubleTap,
+      onLongPress: () => _showViewersSheet(context),
       behavior: HitTestBehavior.opaque,
       child: Stack(
         fit: StackFit.expand,
@@ -360,6 +414,59 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
       ),
     );
   }
+}
+
+void _showProfilePreview(BuildContext context, String handle, String? avatar) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder:
+        (_) => ProfilePreviewSheet(
+          handle: handle,
+          avatarUrl: avatar,
+          subtitle: 'Dancer & Singer',
+        ),
+  );
+}
+
+void _showQASheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => const QASheet(),
+  );
+}
+
+void _showRankingSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => const RankingSheet(),
+  );
+}
+
+void _showViewersSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => const ViewersSheet(),
+  );
 }
 
 void _showShareSheet(BuildContext context, Map<String, dynamic> data) {
@@ -499,6 +606,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                   return const Center(child: CircularProgressIndicator());
                 final docs = snapshot.data!.docs;
                 return ListView.builder(
+                  primary: false,
                   controller: widget.scrollController,
                   itemCount: docs.length,
                   itemBuilder: (context, i) {
@@ -615,6 +723,7 @@ class _CommentTile extends ConsumerWidget {
                 radius: 22.r,
                 backgroundImage:
                     userAvatar != null ? NetworkImage(userAvatar!) : null,
+                onBackgroundImageError: userAvatar != null ? (_, __) {} : null,
               ),
               SizedBox(width: 12.w),
               Expanded(
@@ -804,6 +913,10 @@ class _RepliesList extends ConsumerWidget {
                           backgroundImage:
                               (r['userAvatar'] as String?) != null
                                   ? NetworkImage(r['userAvatar'])
+                                  : null,
+                          onBackgroundImageError:
+                              (r['userAvatar'] as String?) != null
+                                  ? (_, __) {}
                                   : null,
                         ),
                         SizedBox(width: 8.w),
