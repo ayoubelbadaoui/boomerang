@@ -81,6 +81,7 @@ class UserProfileRepo {
     String? instagram,
     String? facebook,
     String? twitter,
+    DateTime? birthday,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
@@ -94,6 +95,7 @@ class UserProfileRepo {
       if (instagram != null) 'instagram': instagram,
       if (facebook != null) 'facebook': facebook,
       if (twitter != null) 'twitter': twitter,
+      if (birthday != null) 'birthday': birthday.toIso8601String(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (data.length == 1) return; // only updatedAt, nothing to do
@@ -101,5 +103,46 @@ class UserProfileRepo {
         .collection('users')
         .doc(uid)
         .set(data, SetOptions(merge: true));
+  }
+
+  Future<void> deleteAccount() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      // Delete user-created boomerangs
+      final booms =
+          await _firestore
+              .collection('boomerangs')
+              .where('userId', isEqualTo: uid)
+              .get();
+      for (final d in booms.docs) {
+        try {
+          await _firestore.collection('boomerangs').doc(d.id).delete();
+        } catch (_) {}
+      }
+      // Delete user settings/meta
+      try {
+        await _firestore
+            .collection('users')
+            .doc(uid)
+            .collection('meta')
+            .doc('settings')
+            .delete();
+      } catch (_) {}
+      // Delete user profile document
+      await _firestore.collection('users').doc(uid).delete();
+    } catch (_) {
+      // ignore
+    }
+    try {
+      await _auth.currentUser?.delete();
+    } catch (_) {
+      // Firebase might require re-auth; leave to UI to handle
+    }
+    try {
+      await _auth.signOut();
+    } catch (_) {
+      // ignore
+    }
   }
 }

@@ -146,7 +146,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
             top: topInset + 8.h,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close, color: Colors.white),
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
             ),
           ),
           // Bottom info row

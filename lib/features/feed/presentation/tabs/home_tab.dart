@@ -383,7 +383,8 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
         Navigator.of(context).push(
           MaterialPageRoute(
             builder:
-                (_) => BoomerangViewerPage(id: widget.postId, data: widget.data),
+                (_) =>
+                    BoomerangViewerPage(id: widget.postId, data: widget.data),
           ),
         );
       },

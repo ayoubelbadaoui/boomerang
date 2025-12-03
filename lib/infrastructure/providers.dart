@@ -51,7 +51,11 @@ final userProfileExistsProvider = FutureProvider<bool>((ref) async {
   if (user == null) return false;
   final firestore = ref.watch(firestoreProvider);
   final doc = await firestore.collection('users').doc(user.uid).get();
-  return doc.exists;
+  if (doc.exists) return true;
+  // Create a minimal profile document so setup flow can complete it
+  final repo = ref.read(userProfileRepoProvider);
+  await repo.ensureBasicProfileIfMissing();
+  return true;
 });
 
 /// Checks whether the user profile is fully completed with required fields
@@ -117,4 +121,17 @@ final boomerangServiceProvider = Provider<BoomerangService>((ref) {
   final processor = ref.watch(boomerangProcessorProvider);
   final repo = ref.watch(boomerangRepoProvider);
   return BoomerangService(fs, storage, processor, repo);
+});
+
+/// Guard: if a user is authenticated but their `users/{uid}` doc does not exist,
+/// log them out so the app shows onboarding. This runs globally once activated.
+final profileGuardProvider = Provider<void>((ref) {
+  ref.listen(currentUserProfileProvider, (prev, next) async {
+    final auth = ref.read(firebaseAuthProvider);
+    final user = auth.currentUser;
+    if (user != null && next.asData != null && next.asData!.value == null) {
+      // No profile document; force sign out
+      await ref.read(authControllerProvider.notifier).logout();
+    }
+  });
 });

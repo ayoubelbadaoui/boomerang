@@ -19,17 +19,7 @@ class ProfileTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(profileControllerProvider);
-    // return Scaffold(
-    //   body: Center(
-    //     child: ElevatedButton(
-    //       onPressed:
-    //           () => FirebaseAuth.instance.signOut().then((value) {
-    //             context.push(OnboardingPage.routeName);
-    //           }),
-    //       child: const Text('Sign Out'),
-    //     ),
-    //   ),
-    // );
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(

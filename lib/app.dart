@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'router.dart';
 
-class BoomerangApp extends StatelessWidget {
+class BoomerangApp extends ConsumerWidget {
   const BoomerangApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ScreenUtilInit(
       designSize: const Size(428, 926),
       minTextAdapt: true,

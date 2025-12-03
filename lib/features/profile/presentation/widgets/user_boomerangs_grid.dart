@@ -69,8 +69,7 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder:
-                            (_) => BoomerangViewerPage(id: id, data: data),
+                        builder: (_) => BoomerangViewerPage(id: id, data: data),
                       ),
                     );
                   },

@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 class BoomerangVideoPlayer extends StatefulWidget {
   final String videoUrl; // Or path to local asset
 
-  const BoomerangVideoPlayer({Key? key, required this.videoUrl})
-    : super(key: key);
+  const BoomerangVideoPlayer({super.key, required this.videoUrl});
 
   @override
+  // ignore: library_private_types_in_public_api
   _BoomerangVideoPlayerState createState() => _BoomerangVideoPlayerState();
 }
 

@@ -5,7 +5,7 @@ import 'tabs/home_tab.dart';
 import 'tabs/discover_tab.dart';
 import 'tabs/create_tab.dart';
 import 'tabs/inbox_tab.dart';
-import 'tabs/profile_tab.dart';
+import '../../profile/presentation/profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 

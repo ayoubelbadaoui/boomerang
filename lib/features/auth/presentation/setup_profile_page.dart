@@ -41,7 +41,13 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            24.w,
+            16.h,
+            24.w,
+            16.h + MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: Column(
             children: [
               SizedBox(height: 16.h),

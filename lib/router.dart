@@ -47,13 +47,15 @@ final router = GoRouter(
     final isLogin = state.fullPath == LoginPage.routeName;
     final isSignup = state.fullPath == SignupPage.routeName;
     final isOnboarding = state.fullPath == OnboardingPage.routeName;
+    final isSetupFlow = state.fullPath == SetupFlowPage.routeName;
 
     if (auth.asData == null) return null; // wait until first frame resolves
     final user = auth.asData!.value;
 
     if (user == null) {
-      // Allow auth flow routes; otherwise push to onboarding
-      final isAuthFlow = isOnboarding || isAuthChoice || isLogin || isSignup;
+      // Allow auth/setup flow routes; otherwise push to onboarding
+      final isAuthFlow =
+          isOnboarding || isAuthChoice || isLogin || isSignup || isSetupFlow;
       return isAuthFlow ? null : OnboardingPage.routeName;
     }
 

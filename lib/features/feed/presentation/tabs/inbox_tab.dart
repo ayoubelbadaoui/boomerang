@@ -98,7 +98,7 @@ class InboxTab extends StatelessWidget {
                 style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
               ),
               SizedBox(height: 12.h),
-              ...s.items.map((e) => _ActivityTile(item: e)).toList(),
+              ...s.items.map((e) => _ActivityTile(item: e)),
             ],
           );
         },
