@@ -107,6 +107,18 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
   }
 });
 
+/// Stream a user profile by arbitrary user id
+final userProfileByIdProvider =
+    StreamProvider.family<UserProfile?, String>((ref, uid) async* {
+  final fs = ref.watch(firestoreProvider);
+  await for (final snap in fs.collection('users').doc(uid).snapshots()) {
+    if (!snap.exists || snap.data() == null) {
+      yield null;
+    } else {
+      yield UserProfile.fromMap(snap.id, snap.data()!);
+    }
+  }
+});
 final commentsRepoProvider = Provider<CommentsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return CommentsRepo(fs);
@@ -140,8 +152,10 @@ final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
 });
 
 /// Number of boomerangs created by a user
-final userBoomerangsCountProvider =
-    StreamProvider.family<int, String>((ref, uid) {
+final userBoomerangsCountProvider = StreamProvider.family<int, String>((
+  ref,
+  uid,
+) {
   final fs = ref.watch(firestoreProvider);
   return fs
       .collection('boomerangs')
@@ -151,22 +165,21 @@ final userBoomerangsCountProvider =
 });
 
 /// Total likes across a user's boomerangs
-final userTotalLikesProvider =
-    StreamProvider.family<int, String>((ref, uid) {
+final userTotalLikesProvider = StreamProvider.family<int, String>((ref, uid) {
   final fs = ref.watch(firestoreProvider);
   return fs
       .collection('boomerangs')
       .where('userId', isEqualTo: uid)
       .snapshots()
       .map((snap) {
-    int total = 0;
-    for (final d in snap.docs) {
-      final data = d.data();
-      final likes = (data['likes'] ?? 0);
-      if (likes is int) total += likes;
-    }
-    return total;
-  });
+        int total = 0;
+        for (final d in snap.docs) {
+          final data = d.data();
+          final likes = (data['likes'] ?? 0);
+          if (likes is int) total += likes;
+        }
+        return total;
+      });
 });
 
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {

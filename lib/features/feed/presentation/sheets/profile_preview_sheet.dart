@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
+import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 
 class ProfilePreviewSheet extends ConsumerStatefulWidget {
   const ProfilePreviewSheet({
@@ -72,24 +73,45 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
-            CircleAvatar(
-              radius: 44.r,
-              backgroundImage:
-                  widget.avatarUrl != null
-                      ? ResizeImage.resizeIfNeeded(
-                        (88.r * MediaQuery.of(context).devicePixelRatio)
-                            .round(),
-                        (88.r * MediaQuery.of(context).devicePixelRatio)
-                            .round(),
-                        NetworkImage(widget.avatarUrl!),
-                      )
-                      : null,
-              backgroundColor: const Color(0xFFF2F2F2),
+            InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        OtherUserProfilePage(userId: widget.userId),
+                  ),
+                );
+              },
+              customBorder: const CircleBorder(),
+              child: CircleAvatar(
+                radius: 44.r,
+                backgroundImage:
+                    widget.avatarUrl != null
+                        ? ResizeImage.resizeIfNeeded(
+                          (88.r * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                          (88.r * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                          NetworkImage(widget.avatarUrl!),
+                        )
+                        : null,
+                backgroundColor: const Color(0xFFF2F2F2),
+              ),
             ),
             SizedBox(height: 12.h),
-            Text(
-              widget.handle,
-              style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
+            InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        OtherUserProfilePage(userId: widget.userId),
+                  ),
+                );
+              },
+              child: Text(
+                widget.handle,
+                style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
+              ),
             ),
             if (widget.subtitle != null && widget.subtitle!.isNotEmpty) ...[
               SizedBox(height: 6.h),
@@ -128,23 +150,25 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     return _Stat(
                       value: text,
                       label: 'Followers',
-                      onTap: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.white,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(24),
+                      onTap:
+                          () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.white,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(24),
+                              ),
+                            ),
+                            builder:
+                                (_) => SizedBox(
+                                  height: 500,
+                                  child: FollowListSheet(
+                                    mode: FollowMode.followers,
+                                    userId: widget.userId,
+                                  ),
+                                ),
                           ),
-                        ),
-                        builder: (_) => SizedBox(
-                          height: 500,
-                          child: FollowListSheet(
-                            mode: FollowMode.followers,
-                            userId: widget.userId,
-                          ),
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -160,23 +184,25 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     return _Stat(
                       value: text,
                       label: 'Following',
-                      onTap: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.white,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(24),
+                      onTap:
+                          () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.white,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(24),
+                              ),
+                            ),
+                            builder:
+                                (_) => SizedBox(
+                                  height: 500,
+                                  child: FollowListSheet(
+                                    mode: FollowMode.following,
+                                    userId: widget.userId,
+                                  ),
+                                ),
                           ),
-                        ),
-                        builder: (_) => SizedBox(
-                          height: 500,
-                          child: FollowListSheet(
-                            mode: FollowMode.following,
-                            userId: widget.userId,
-                          ),
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -269,7 +295,10 @@ class _Stat extends StatelessWidget {
               style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w800),
             ),
             SizedBox(height: 4.h),
-            Text(label, style: TextStyle(color: Colors.black54, fontSize: 12.sp)),
+            Text(
+              label,
+              style: TextStyle(color: Colors.black54, fontSize: 12.sp),
+            ),
           ],
         ),
       ),
