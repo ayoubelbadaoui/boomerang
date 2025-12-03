@@ -7,16 +7,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 enum FollowMode { following, followers }
 
 class FollowListSheet extends ConsumerWidget {
-  const FollowListSheet({super.key, required this.mode});
+  const FollowListSheet({super.key, required this.mode, required this.userId});
   final FollowMode mode;
+  final String userId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(currentUserProfileProvider).value;
-    final uid = me?.uid;
-    if (uid == null) {
-      return const SizedBox.shrink();
-    }
+    final uid = userId;
     final stream =
         mode == FollowMode.following
             ? ref.watch(followRepoProvider).watchFollowing(uid)
@@ -80,7 +77,12 @@ class FollowListSheet extends ConsumerWidget {
                       final userId = (d['userId'] ?? '') as String;
                       return ListTile(
                         onTap:
-                            () => _showProfilePreview(context, handle, avatar, userId),
+                            () => _showProfilePreview(
+                              context,
+                              handle,
+                              avatar,
+                              userId,
+                            ),
                         leading: CircleAvatar(
                           radius: 22.r,
                           backgroundImage:

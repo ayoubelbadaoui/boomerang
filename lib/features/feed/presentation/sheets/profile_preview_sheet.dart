@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 
 class ProfilePreviewSheet extends ConsumerStatefulWidget {
   const ProfilePreviewSheet({
@@ -105,8 +106,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
               children: [
                 Consumer(
                   builder: (context, ref, _) {
-                    final posts =
-                        ref.watch(userBoomerangsCountProvider(widget.userId));
+                    final posts = ref.watch(
+                      userBoomerangsCountProvider(widget.userId),
+                    );
                     final text = posts.maybeWhen(
                       data: (v) => '$v',
                       orElse: () => '0',
@@ -123,7 +125,27 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       data: (v) => '$v',
                       orElse: () => '0',
                     );
-                    return _Stat(value: text, label: 'Followers');
+                    return _Stat(
+                      value: text,
+                      label: 'Followers',
+                      onTap: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(24),
+                          ),
+                        ),
+                        builder: (_) => SizedBox(
+                          height: 500,
+                          child: FollowListSheet(
+                            mode: FollowMode.followers,
+                            userId: widget.userId,
+                          ),
+                        ),
+                      ),
+                    );
                   },
                 ),
                 Consumer(
@@ -135,13 +157,34 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       data: (v) => '$v',
                       orElse: () => '0',
                     );
-                    return _Stat(value: text, label: 'Following');
+                    return _Stat(
+                      value: text,
+                      label: 'Following',
+                      onTap: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(24),
+                          ),
+                        ),
+                        builder: (_) => SizedBox(
+                          height: 500,
+                          child: FollowListSheet(
+                            mode: FollowMode.following,
+                            userId: widget.userId,
+                          ),
+                        ),
+                      ),
+                    );
                   },
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    final likes =
-                        ref.watch(userTotalLikesProvider(widget.userId));
+                    final likes = ref.watch(
+                      userTotalLikesProvider(widget.userId),
+                    );
                     final text = likes.maybeWhen(
                       data: (v) => '$v',
                       orElse: () => '0',
@@ -208,20 +251,28 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.label});
+  const _Stat({required this.value, required this.label, this.onTap});
   final String value;
   final String label;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w800),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8.r),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w800),
+            ),
+            SizedBox(height: 4.h),
+            Text(label, style: TextStyle(color: Colors.black54, fontSize: 12.sp)),
+          ],
         ),
-        SizedBox(height: 4.h),
-        Text(label, style: TextStyle(color: Colors.black54, fontSize: 12.sp)),
-      ],
+      ),
     );
   }
 }

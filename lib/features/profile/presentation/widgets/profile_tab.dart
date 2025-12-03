@@ -166,8 +166,9 @@ class ProfileTab extends ConsumerWidget {
                       Builder(
                         builder: (_) {
                           final uid = p?.uid ?? '';
-                          final postsCount =
-                              ref.watch(userBoomerangsCountProvider(uid));
+                          final postsCount = ref.watch(
+                            userBoomerangsCountProvider(uid),
+                          );
                           final value = postsCount.maybeWhen(
                             data: (v) => '$v',
                             orElse: () => '0',
@@ -199,10 +200,11 @@ class ProfileTab extends ConsumerWidget {
                                     ),
                                   ),
                                   builder:
-                                      (_) => const SizedBox(
+                                      (_) => SizedBox(
                                         height: 500,
                                         child: FollowListSheet(
                                           mode: FollowMode.followers,
+                                          userId: uid,
                                         ),
                                       ),
                                 ),
@@ -233,10 +235,11 @@ class ProfileTab extends ConsumerWidget {
                                     ),
                                   ),
                                   builder:
-                                      (_) => const SizedBox(
+                                      (_) => SizedBox(
                                         height: 500,
                                         child: FollowListSheet(
                                           mode: FollowMode.following,
+                                          userId: uid,
                                         ),
                                       ),
                                 ),
@@ -246,8 +249,9 @@ class ProfileTab extends ConsumerWidget {
                       Builder(
                         builder: (_) {
                           final uid = p?.uid ?? '';
-                          final totalLikes =
-                              ref.watch(userTotalLikesProvider(uid));
+                          final totalLikes = ref.watch(
+                            userTotalLikesProvider(uid),
+                          );
                           final value = totalLikes.maybeWhen(
                             data: (v) => '$v',
                             orElse: () => '0',
