@@ -63,6 +63,8 @@ class UserProfileRepo {
     await _firestore.collection('users').doc(user.uid).set({
       'fullName': displayName,
       'nickname': nickname,
+      'fullNameLower': displayName.toLowerCase(),
+      'nicknameLower': nickname.toLowerCase(),
       'email': email,
       if (user.photoURL != null) 'avatarUrl': user.photoURL,
       'createdAt': FieldValue.serverTimestamp(),
@@ -87,7 +89,9 @@ class UserProfileRepo {
     if (uid == null) throw StateError('No authenticated user');
     final Map<String, dynamic> data = {
       if (fullName != null) 'fullName': fullName,
+      if (fullName != null) 'fullNameLower': fullName.toLowerCase(),
       if (nickname != null) 'nickname': nickname,
+      if (nickname != null) 'nicknameLower': nickname.toLowerCase(),
       if (avatarUrl != null) 'avatarUrl': avatarUrl,
       if (phone != null) 'phone': phone,
       if (address != null) 'address': address,

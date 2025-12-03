@@ -19,6 +19,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
   VideoPlayerController? _controller;
   Timer? _reverseTimer;
   bool _processing = false;
+  final _caption = TextEditingController();
 
   double _segmentSeconds = 1.6;
   double _totalSeconds = 6.0;
@@ -88,6 +89,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
     _controller?.removeListener(_tick);
     _disposePlaybackTimers();
     _controller?.dispose();
+    _caption.dispose();
     super.dispose();
   }
 
@@ -117,6 +119,15 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
         return;
       }
 
+      // Parse hashtags from caption
+      final caption = _caption.text.trim();
+      final tags = <String>{};
+      final re = RegExp(r'(?:#)([A-Za-z0-9_]{1,30})');
+      for (final m in re.allMatches(caption)) {
+        final t = m.group(1);
+        if (t != null && t.isNotEmpty) tags.add(t.toLowerCase());
+      }
+
       await ref
           .read(boomerangRepoProvider)
           .createBoomerangPost(
@@ -125,6 +136,8 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
             userAvatar: me.avatarUrl,
             videoUrl: url,
             imageUrl: null,
+            caption: caption.isEmpty ? null : caption,
+            hashtags: tags.isEmpty ? null : tags.toList(),
           );
 
       if (!mounted) return;
@@ -189,6 +202,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
             },
             onCreate: _processing ? null : _onCreate,
             processing: _processing,
+            caption: _caption,
           ),
         ],
       ),
@@ -206,6 +220,7 @@ class _Controls extends StatelessWidget {
     required this.onSpeedChanged,
     required this.onCreate,
     required this.processing,
+    required this.caption,
   });
 
   final double segmentSeconds;
@@ -216,6 +231,7 @@ class _Controls extends StatelessWidget {
   final ValueChanged<double> onSpeedChanged;
   final VoidCallback? onCreate;
   final bool processing;
+  final TextEditingController caption;
 
   @override
   Widget build(BuildContext context) {
@@ -233,6 +249,17 @@ class _Controls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('Caption', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 6),
+          TextField(
+            controller: caption,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              hintText: 'Write a caption… use #hashtags',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
           Text('Clip length', style: theme.textTheme.titleMedium),
           Row(
             children: [

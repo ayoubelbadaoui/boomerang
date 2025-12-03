@@ -14,6 +14,7 @@ import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart'
 import 'package:boomerang/features/feed/infrastructure/boomerang_service.dart';
 import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/notifications_repo.dart';
+import 'package:boomerang/features/profile/infrastructure/user_search_repo.dart';
 // import 'package:path_provider/path_provider.dart';
 // import 'package:firebase_core/firebase_core.dart';
 
@@ -109,8 +110,10 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
 });
 
 /// Stream a user profile by arbitrary user id
-final userProfileByIdProvider =
-    StreamProvider.family<UserProfile?, String>((ref, uid) async* {
+final userProfileByIdProvider = StreamProvider.family<UserProfile?, String>((
+  ref,
+  uid,
+) async* {
   final fs = ref.watch(firestoreProvider);
   await for (final snap in fs.collection('users').doc(uid).snapshots()) {
     if (!snap.exists || snap.data() == null) {
@@ -128,6 +131,11 @@ final commentsRepoProvider = Provider<CommentsRepo>((ref) {
 final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return NotificationsRepo(fs);
+});
+
+final userSearchRepoProvider = Provider<UserSearchRepo>((ref) {
+  final fs = ref.watch(firestoreProvider);
+  return UserSearchRepo(fs);
 });
 
 final followRepoProvider = Provider<FollowRepo>((ref) {

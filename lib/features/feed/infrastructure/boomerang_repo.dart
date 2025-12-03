@@ -124,14 +124,14 @@ class BoomerangRepo {
             .doc(ownerId)
             .collection('items')
             .add({
-          'type': 'like',
-          'boomerangId': boomerangId,
-          'boomerangImage': boomerangData!['imageUrl'],
-          'actorUserId': userId,
-          'actorName': actorName,
-          'actorAvatar': actorAvatar,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+              'type': 'like',
+              'boomerangId': boomerangId,
+              'boomerangImage': boomerangData!['imageUrl'],
+              'actorUserId': userId,
+              'actorName': actorName,
+              'actorAvatar': actorAvatar,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
       }
     }
   }
@@ -142,6 +142,8 @@ class BoomerangRepo {
     String? userAvatar,
     required String videoUrl,
     String? imageUrl,
+    String? caption,
+    List<String>? hashtags,
   }) async {
     final ref = await _fs.collection('boomerangs').add({
       'userId': userId,
@@ -149,10 +151,21 @@ class BoomerangRepo {
       'userAvatar': userAvatar,
       'videoUrl': videoUrl,
       'imageUrl': imageUrl,
+      if (caption != null) 'caption': caption,
+      if (hashtags != null) 'hashtags': hashtags,
       'likes': 0,
       'likedBy': <String>[],
       'createdAt': FieldValue.serverTimestamp(),
     });
     return ref.id;
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchByHashtag(String tag) {
+    final normalized = tag.toLowerCase();
+    return _fs
+        .collection('boomerangs')
+        .where('hashtags', arrayContains: normalized)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
   }
 }
