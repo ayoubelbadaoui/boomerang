@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:developer' show log;
 import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
+import 'package:boomerang/features/profile/presentation/widgets/boomerang_preview.dart';
 
 class UserBoomerangsGrid extends ConsumerStatefulWidget {
   const UserBoomerangsGrid({super.key});
@@ -66,6 +67,11 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
                 return InkWell(
+                  onLongPress: () => showBoomerangPreview(
+                    context,
+                    videoUrl: videoUrl,
+                    posterUrl: imageUrl,
+                  ),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
