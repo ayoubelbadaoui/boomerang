@@ -1,65 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:boomerang/infrastructure/providers.dart';
 
-class InboxTab extends StatelessWidget {
+class InboxTab extends ConsumerWidget {
   const InboxTab({super.key});
 
   static const String routeName = '/inbox_tab';
 
   @override
-  Widget build(BuildContext context) {
-    final sections = [
-      _Section('Today', [
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=12',
-          title: 'Charolette Hanlin',
-          subtitle: 'Leave a comment on your video',
-          trailingThumb: 'https://picsum.photos/seed/t1/100/100',
-          actionLabel: null,
-        ),
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=22',
-          title: 'Annabel Rohan',
-          subtitle: 'Started following you',
-          actionLabel: 'Follow Back',
-        ),
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=32',
-          title: 'Sanjuanita Ordonez',
-          subtitle: 'Liked your video',
-          trailingThumb: 'https://picsum.photos/seed/t2/100/100',
-        ),
-      ]),
-      _Section('Yesterday', [
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=45',
-          title: 'Clinton Mcclure',
-          subtitle: 'Started following you',
-          actionLabel: 'Follow Back',
-        ),
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=55',
-          title: 'Thad Eddings',
-          subtitle: 'Leave a comment on your video',
-          trailingThumb: 'https://picsum.photos/seed/t3/100/100',
-        ),
-      ]),
-      _Section('This Week', [
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=66',
-          title: 'Rayford Chenail',
-          subtitle: 'Started following you',
-          actionLabel: 'Follow Back',
-        ),
-        _Item(
-          avatar: 'https://i.pravatar.cc/100?img=76',
-          title: 'Rochel Foose',
-          subtitle: 'Liked your video',
-          trailingThumb: 'https://picsum.photos/seed/t4/100/100',
-        ),
-      ]),
-    ];
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentUserProfileProvider).value;
+    final uid = me?.uid;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -84,33 +36,54 @@ class InboxTab extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-        itemCount: sections.length,
-        itemBuilder: (context, i) {
-          final s = sections[i];
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: 12.h),
-              Text(
-                s.label,
-                style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
-              ),
-              SizedBox(height: 12.h),
-              ...s.items.map((e) => _ActivityTile(item: e)),
-            ],
-          );
-        },
-      ),
+      body: uid == null
+          ? const Center(child: Text('Sign in to see notifications'))
+          : StreamBuilder(
+              stream: ref.watch(notificationsRepoProvider).watch(uid),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
+                  return const Center(child: Text('No notifications yet'));
+                }
+                return ListView.separated(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => SizedBox(height: 8.h),
+                  itemBuilder: (context, i) {
+                    final d = docs[i].data();
+                    final type = (d['type'] ?? '') as String;
+                    final title = (d['actorName'] ?? 'User') as String;
+                    final avatar = d['actorAvatar'] as String?;
+                    String subtitle = '';
+                    String? thumb;
+                    String? action;
+                    if (type == 'follow') {
+                      subtitle = 'Started following you';
+                      action = 'Follow Back';
+                    } else if (type == 'like') {
+                      subtitle = 'Liked your video';
+                      thumb = d['boomerangImage'] as String?;
+                    } else {
+                      subtitle = 'Activity';
+                    }
+                    final item = _Item(
+                      avatar: avatar ??
+                          'https://picsum.photos/seed/a${i % 100}/100/100',
+                      title: title,
+                      subtitle: subtitle,
+                      trailingThumb: thumb,
+                      actionLabel: action,
+                    );
+                    return _ActivityTile(item: item);
+                  },
+                );
+              },
+            ),
     );
   }
-}
-
-class _Section {
-  _Section(this.label, this.items);
-  final String label;
-  final List<_Item> items;
 }
 
 class _Item {

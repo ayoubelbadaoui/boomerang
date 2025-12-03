@@ -91,12 +91,17 @@ class BoomerangRepo {
   Future<void> toggleLike({
     required String boomerangId,
     required String userId,
+    String? actorName,
+    String? actorAvatar,
   }) async {
     final ref = _fs.collection('boomerangs').doc(boomerangId);
+    bool addedLike = false;
+    Map<String, dynamic>? boomerangData;
     await _fs.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) return;
       final data = snap.data() as Map<String, dynamic>;
+      boomerangData = data;
       final List likedBy = (data['likedBy'] as List?) ?? <String>[];
       final bool isLiked = likedBy.contains(userId);
       tx.update(ref, {
@@ -106,7 +111,29 @@ class BoomerangRepo {
                 : FieldValue.arrayUnion([userId]),
         'likes': FieldValue.increment(isLiked ? -1 : 1),
       });
+      if (!isLiked) {
+        addedLike = true;
+      }
     });
+    // Add notification outside transaction on like add
+    if (addedLike && boomerangData != null) {
+      final ownerId = (boomerangData!['userId'] ?? '') as String;
+      if (ownerId.isNotEmpty && ownerId != userId) {
+        await _fs
+            .collection('notifications')
+            .doc(ownerId)
+            .collection('items')
+            .add({
+          'type': 'like',
+          'boomerangId': boomerangId,
+          'boomerangImage': boomerangData!['imageUrl'],
+          'actorUserId': userId,
+          'actorName': actorName,
+          'actorAvatar': actorAvatar,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
   }
 
   Future<String> createBoomerangPost({

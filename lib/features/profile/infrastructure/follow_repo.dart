@@ -23,8 +23,11 @@ class FollowRepo {
 
     final batch = _fs.batch();
 
-    final followingRef =
-        _fs.collection('following').doc(me).collection('users').doc(targetUserId);
+    final followingRef = _fs
+        .collection('following')
+        .doc(me)
+        .collection('users')
+        .doc(targetUserId);
     batch.set(followingRef, {
       'userId': targetUserId,
       'userName':
@@ -53,6 +56,24 @@ class FollowRepo {
     }, SetOptions(merge: true));
 
     await batch.commit();
+
+    // Add a notification for the target user
+    final actorName =
+        (meData['nickname']?.toString().isNotEmpty == true
+            ? meData['nickname']
+            : meData['fullName']) ??
+        'User';
+    await _fs
+        .collection('notifications')
+        .doc(targetUserId)
+        .collection('items')
+        .add({
+      'type': 'follow',
+      'actorUserId': me,
+      'actorName': actorName,
+      'actorAvatar': meData['avatarUrl'],
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Stop following a user. Removes relationship documents.
@@ -60,8 +81,11 @@ class FollowRepo {
     final me = _uid;
     if (me == null || me == targetUserId) return;
     final batch = _fs.batch();
-    final followingRef =
-        _fs.collection('following').doc(me).collection('users').doc(targetUserId);
+    final followingRef = _fs
+        .collection('following')
+        .doc(me)
+        .collection('users')
+        .doc(targetUserId);
     batch.delete(followingRef);
     final followersRef = _fs
         .collection('followers')
@@ -76,12 +100,13 @@ class FollowRepo {
   Future<bool> isFollowing(String targetUserId) async {
     final me = _uid;
     if (me == null || me == targetUserId) return false;
-    final doc = await _fs
-        .collection('following')
-        .doc(me)
-        .collection('users')
-        .doc(targetUserId)
-        .get();
+    final doc =
+        await _fs
+            .collection('following')
+            .doc(me)
+            .collection('users')
+            .doc(targetUserId)
+            .get();
     return doc.exists;
   }
 
@@ -105,5 +130,3 @@ class FollowRepo {
         .snapshots();
   }
 }
-
-
