@@ -118,6 +118,27 @@ final followRepoProvider = Provider<FollowRepo>((ref) {
   return FollowRepo(fs, auth);
 });
 
+/// Live count providers for followers/following
+final followersCountProvider = StreamProvider.family<int, String>((ref, uid) {
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('followers')
+      .doc(uid)
+      .collection('users')
+      .snapshots()
+      .map((snap) => snap.size);
+});
+
+final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('following')
+      .doc(uid)
+      .collection('users')
+      .snapshots()
+      .map((snap) => snap.size);
+});
+
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
   return const BoomerangProcessor();
 });

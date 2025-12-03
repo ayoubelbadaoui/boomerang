@@ -73,13 +73,16 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
             ),
             CircleAvatar(
               radius: 44.r,
-              backgroundImage: widget.avatarUrl != null
-                  ? ResizeImage.resizeIfNeeded(
-                      (88.r * MediaQuery.of(context).devicePixelRatio).round(),
-                      (88.r * MediaQuery.of(context).devicePixelRatio).round(),
-                      NetworkImage(widget.avatarUrl!),
-                    )
-                  : null,
+              backgroundImage:
+                  widget.avatarUrl != null
+                      ? ResizeImage.resizeIfNeeded(
+                        (88.r * MediaQuery.of(context).devicePixelRatio)
+                            .round(),
+                        (88.r * MediaQuery.of(context).devicePixelRatio)
+                            .round(),
+                        NetworkImage(widget.avatarUrl!),
+                      )
+                      : null,
               backgroundColor: const Color(0xFFF2F2F2),
             ),
             SizedBox(height: 12.h),
@@ -99,11 +102,31 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
             SizedBox(height: 12.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: const [
-                _Stat(value: '823', label: 'Bmg.'),
-                _Stat(value: '3.7M', label: 'Followers'),
-                _Stat(value: '925', label: 'Following'),
-                _Stat(value: '39M', label: 'Likes'),
+              children: [
+                const _Stat(value: '823', label: 'Bmg.'),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final followers =
+                        ref.watch(followersCountProvider(widget.userId));
+                    final text = followers.maybeWhen(
+                      data: (v) => '$v',
+                      orElse: () => '0',
+                    );
+                    return _Stat(value: text, label: 'Followers');
+                  },
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final following =
+                        ref.watch(followingCountProvider(widget.userId));
+                    final text = following.maybeWhen(
+                      data: (v) => '$v',
+                      orElse: () => '0',
+                    );
+                    return _Stat(value: text, label: 'Following');
+                  },
+                ),
+                const _Stat(value: '39M', label: 'Likes'),
               ],
             ),
             SizedBox(height: 16.h),
@@ -113,21 +136,29 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed:
-                          (_isFollowing == null || _loading) ? null : _toggleFollow,
+                          (_isFollowing == null || _loading)
+                              ? null
+                              : _toggleFollow,
                       icon: Icon(
                         _isFollowing == true
                             ? Icons.check
                             : Icons.person_add_alt_1,
                       ),
-                      label: Text(_isFollowing == true ? 'Following' : 'Follow'),
+                      label: Text(
+                        _isFollowing == true ? 'Following' : 'Follow',
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
                             _isFollowing == true ? Colors.white : Colors.black,
                         foregroundColor:
                             _isFollowing == true ? Colors.black : Colors.white,
-                        side: _isFollowing == true
-                            ? const BorderSide(color: Colors.black, width: 1)
-                            : BorderSide.none,
+                        side:
+                            _isFollowing == true
+                                ? const BorderSide(
+                                  color: Colors.black,
+                                  width: 1,
+                                )
+                                : BorderSide.none,
                         shape: const StadiumBorder(),
                         padding: EdgeInsets.symmetric(vertical: 14.h),
                       ),

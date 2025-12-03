@@ -5,6 +5,7 @@ import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_
 import 'package:boomerang/features/profile/presentation/widgets/stat.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/settings/settings_page.dart';
+import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -88,10 +89,18 @@ class ProfileTab extends ConsumerWidget {
                           backgroundImage:
                               p?.avatarUrl != null
                                   ? ResizeImage.resizeIfNeeded(
-                                      (96.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                      (96.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                      NetworkImage(p!.avatarUrl!),
-                                    )
+                                    (96.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    (96.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    NetworkImage(p!.avatarUrl!),
+                                  )
                                   : null,
                           onBackgroundImageError:
                               p?.avatarUrl != null
@@ -155,11 +164,18 @@ class ProfileTab extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Stat(value: '247', label: 'Bmg.'),
-                      Stat(
-                        value: '368K',
-                        label: 'Followers',
-                        onTap:
-                            () => showModalBottomSheet<void>(
+                      Builder(
+                        builder: (_) {
+                          final uid = p?.uid ?? '';
+                          final followers = ref.watch(followersCountProvider(uid));
+                          final followersText = followers.maybeWhen(
+                            data: (v) => '$v',
+                            orElse: () => '0',
+                          );
+                          return Stat(
+                            value: followersText,
+                            label: 'Followers',
+                            onTap: () => showModalBottomSheet<void>(
                               context: context,
                               isScrollControlled: true,
                               backgroundColor: Colors.white,
@@ -168,20 +184,28 @@ class ProfileTab extends ConsumerWidget {
                                   top: Radius.circular(24),
                                 ),
                               ),
-                              builder:
-                                  (_) => const SizedBox(
-                                    height: 500,
-                                    child: FollowListSheet(
-                                      mode: FollowMode.followers,
-                                    ),
-                                  ),
+                              builder: (_) => const SizedBox(
+                                height: 500,
+                                child: FollowListSheet(
+                                  mode: FollowMode.followers,
+                                ),
+                              ),
                             ),
+                          );
+                        },
                       ),
-                      Stat(
-                        value: '374',
-                        label: 'Following',
-                        onTap:
-                            () => showModalBottomSheet<void>(
+                      Builder(
+                        builder: (_) {
+                          final uid = p?.uid ?? '';
+                          final following = ref.watch(followingCountProvider(uid));
+                          final followingText = following.maybeWhen(
+                            data: (v) => '$v',
+                            orElse: () => '0',
+                          );
+                          return Stat(
+                            value: followingText,
+                            label: 'Following',
+                            onTap: () => showModalBottomSheet<void>(
                               context: context,
                               isScrollControlled: true,
                               backgroundColor: Colors.white,
@@ -190,14 +214,15 @@ class ProfileTab extends ConsumerWidget {
                                   top: Radius.circular(24),
                                 ),
                               ),
-                              builder:
-                                  (_) => const SizedBox(
-                                    height: 500,
-                                    child: FollowListSheet(
-                                      mode: FollowMode.following,
-                                    ),
-                                  ),
+                              builder: (_) => const SizedBox(
+                                height: 500,
+                                child: FollowListSheet(
+                                  mode: FollowMode.following,
+                                ),
+                              ),
                             ),
+                          );
+                        },
                       ),
                       const Stat(value: '3.7M', label: 'Likes'),
                     ],
