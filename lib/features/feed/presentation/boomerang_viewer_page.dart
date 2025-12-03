@@ -71,7 +71,11 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     if (mounted) setState(() => _showHeart = false);
   }
 
-  void _showProfilePreview(BuildContext context, String handle, String? avatar) {
+  void _showProfilePreview(
+    BuildContext context,
+    String handle,
+    String? avatar,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -97,6 +101,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     final image = data['imageUrl'] as String?;
     final video = data['videoUrl'] as String?;
     final likes = (data['likes'] ?? 0) as int;
+    final double topInset = MediaQuery.of(context).viewPadding.top;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -138,7 +143,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
           // Top bar
           Positioned(
             left: 8.w,
-            top: 8.h,
+            top: topInset + 8.h,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.close, color: Colors.white),
@@ -158,8 +163,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                     radius: 14.r,
                     backgroundImage:
                         avatar != null ? NetworkImage(avatar) : null,
-                    onBackgroundImageError:
-                        avatar != null ? (_, __) {} : null,
+                    onBackgroundImageError: avatar != null ? (_, __) {} : null,
                   ),
                 ),
                 SizedBox(width: 8.w),
