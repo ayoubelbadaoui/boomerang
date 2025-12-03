@@ -71,6 +71,23 @@ class BoomerangRepo {
     return q.get();
   }
 
+  /// Paginated fetch for a specific user's posts
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchUserBoomerangsPage({
+    required String userId,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) {
+    Query<Map<String, dynamic>> q = _fs
+        .collection('boomerangs')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    if (startAfter != null) {
+      q = q.startAfterDocument(startAfter);
+    }
+    return q.get();
+  }
+
   Future<void> toggleLike({
     required String boomerangId,
     required String userId,
