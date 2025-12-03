@@ -32,7 +32,13 @@ class ProfilePreviewSheet extends StatelessWidget {
             CircleAvatar(
               radius: 44.r,
               backgroundImage:
-                  avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+                  avatarUrl != null
+                      ? ResizeImage.resizeIfNeeded(
+                          (88.r * MediaQuery.of(context).devicePixelRatio).round(),
+                          (88.r * MediaQuery.of(context).devicePixelRatio).round(),
+                          NetworkImage(avatarUrl!),
+                        )
+                      : null,
               backgroundColor: const Color(0xFFF2F2F2),
             ),
             SizedBox(height: 12.h),

@@ -87,7 +87,11 @@ class ProfileTab extends ConsumerWidget {
                           radius: 48.r,
                           backgroundImage:
                               p?.avatarUrl != null
-                                  ? NetworkImage(p!.avatarUrl!)
+                                  ? ResizeImage.resizeIfNeeded(
+                                      (96.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                      (96.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                      NetworkImage(p!.avatarUrl!),
+                                    )
                                   : null,
                           onBackgroundImageError:
                               p?.avatarUrl != null
@@ -154,38 +158,46 @@ class ProfileTab extends ConsumerWidget {
                       Stat(
                         value: '368K',
                         label: 'Followers',
-                        onTap: () => showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(24),
+                        onTap:
+                            () => showModalBottomSheet<void>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(24),
+                                ),
+                              ),
+                              builder:
+                                  (_) => const SizedBox(
+                                    height: 500,
+                                    child: FollowListSheet(
+                                      mode: FollowMode.followers,
+                                    ),
+                                  ),
                             ),
-                          ),
-                          builder: (_) => const SizedBox(
-                            height: 500,
-                            child: FollowListSheet(mode: FollowMode.followers),
-                          ),
-                        ),
                       ),
                       Stat(
                         value: '374',
                         label: 'Following',
-                        onTap: () => showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(24),
+                        onTap:
+                            () => showModalBottomSheet<void>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(24),
+                                ),
+                              ),
+                              builder:
+                                  (_) => const SizedBox(
+                                    height: 500,
+                                    child: FollowListSheet(
+                                      mode: FollowMode.following,
+                                    ),
+                                  ),
                             ),
-                          ),
-                          builder: (_) => const SizedBox(
-                            height: 500,
-                            child: FollowListSheet(mode: FollowMode.following),
-                          ),
-                        ),
                       ),
                       const Stat(value: '3.7M', label: 'Likes'),
                     ],

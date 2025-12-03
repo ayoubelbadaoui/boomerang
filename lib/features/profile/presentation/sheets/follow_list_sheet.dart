@@ -17,9 +17,10 @@ class FollowListSheet extends ConsumerWidget {
     if (uid == null) {
       return const SizedBox.shrink();
     }
-    final stream = mode == FollowMode.following
-        ? ref.watch(followRepoProvider).watchFollowing(uid)
-        : ref.watch(followRepoProvider).watchFollowers(uid);
+    final stream =
+        mode == FollowMode.following
+            ? ref.watch(followRepoProvider).watchFollowing(uid)
+            : ref.watch(followRepoProvider).watchFollowers(uid);
 
     return SafeArea(
       child: Padding(
@@ -60,7 +61,10 @@ class FollowListSheet extends ConsumerWidget {
                         mode == FollowMode.following
                             ? 'No following yet'
                             : 'No followers yet',
-                        style: TextStyle(color: Colors.black54, fontSize: 14.sp),
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 14.sp,
+                        ),
                       ),
                     );
                   }
@@ -71,13 +75,21 @@ class FollowListSheet extends ConsumerWidget {
                       final d = docs[i].data();
                       final name = (d['userName'] ?? 'User') as String;
                       final avatar = d['userAvatar'] as String?;
-                      final handle = '@${name.replaceAll(' ', '_').toLowerCase()}';
+                      final handle =
+                          '@${name.replaceAll(' ', '_').toLowerCase()}';
                       return ListTile(
-                        onTap: () => _showProfilePreview(context, handle, avatar),
+                        onTap:
+                            () => _showProfilePreview(context, handle, avatar),
                         leading: CircleAvatar(
                           radius: 22.r,
                           backgroundImage:
-                              avatar != null ? NetworkImage(avatar) : null,
+                              avatar != null
+                                  ? ResizeImage.resizeIfNeeded(
+                                      (44.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                      (44.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                      NetworkImage(avatar),
+                                    )
+                                  : null,
                           onBackgroundImageError:
                               avatar != null ? (_, __) {} : null,
                         ),
@@ -112,8 +124,10 @@ void _showProfilePreview(BuildContext context, String handle, String? avatar) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder:
-        (_) => ProfilePreviewSheet(handle: handle, avatarUrl: avatar, subtitle: ''),
+        (_) => ProfilePreviewSheet(
+          handle: handle,
+          avatarUrl: avatar,
+          subtitle: '',
+        ),
   );
 }
-
-

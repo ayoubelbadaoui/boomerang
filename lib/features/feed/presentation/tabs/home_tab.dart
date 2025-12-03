@@ -164,7 +164,13 @@ class _BoomerangCard extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 14.r,
                       backgroundImage:
-                          avatar != null ? NetworkImage(avatar) : null,
+                          avatar != null
+                              ? ResizeImage.resizeIfNeeded(
+                                  (28.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                  (28.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                  NetworkImage(avatar),
+                                )
+                              : null,
                       onBackgroundImageError:
                           avatar != null ? (_, __) {} : null,
                     ),
@@ -720,10 +726,16 @@ class _CommentTile extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
+                            CircleAvatar(
                 radius: 22.r,
-                backgroundImage:
-                    userAvatar != null ? NetworkImage(userAvatar!) : null,
+                              backgroundImage:
+                                  userAvatar != null
+                                      ? ResizeImage.resizeIfNeeded(
+                                          (44.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                          (44.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                          NetworkImage(userAvatar!),
+                                        )
+                                      : null,
                 onBackgroundImageError: userAvatar != null ? (_, __) {} : null,
               ),
               SizedBox(width: 12.w),
@@ -913,7 +925,11 @@ class _RepliesList extends ConsumerWidget {
                           radius: 16.r,
                           backgroundImage:
                               (r['userAvatar'] as String?) != null
-                                  ? NetworkImage(r['userAvatar'])
+                                  ? ResizeImage.resizeIfNeeded(
+                                      (32.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                      (32.r * MediaQuery.of(context).devicePixelRatio).round(),
+                                      NetworkImage(r['userAvatar']),
+                                    )
                                   : null,
                           onBackgroundImageError:
                               (r['userAvatar'] as String?) != null
