@@ -159,17 +159,20 @@ class _BoomerangCard extends StatelessWidget {
               child: Row(
                 children: [
                   InkWell(
-                    onTap: () => _showProfilePreview(context, handle, avatar),
+                  onTap: () =>
+                      _showProfilePreview(context, handle, avatar, data['userId'] as String),
                     customBorder: const CircleBorder(),
                     child: CircleAvatar(
                       radius: 14.r,
                       backgroundImage:
                           avatar != null
                               ? ResizeImage.resizeIfNeeded(
-                                  (28.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                  (28.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                  NetworkImage(avatar),
-                                )
+                                (28.r * MediaQuery.of(context).devicePixelRatio)
+                                    .round(),
+                                (28.r * MediaQuery.of(context).devicePixelRatio)
+                                    .round(),
+                                NetworkImage(avatar),
+                              )
                               : null,
                       onBackgroundImageError:
                           avatar != null ? (_, __) {} : null,
@@ -177,7 +180,8 @@ class _BoomerangCard extends StatelessWidget {
                   ),
                   SizedBox(width: 8.w),
                   InkWell(
-                    onTap: () => _showProfilePreview(context, handle, avatar),
+                  onTap: () =>
+                      _showProfilePreview(context, handle, avatar, data['userId'] as String),
                     child: Text(
                       handle,
                       style: TextStyle(
@@ -423,7 +427,12 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
   }
 }
 
-void _showProfilePreview(BuildContext context, String handle, String? avatar) {
+void _showProfilePreview(
+  BuildContext context,
+  String handle,
+  String? avatar,
+  String userId,
+) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -433,6 +442,7 @@ void _showProfilePreview(BuildContext context, String handle, String? avatar) {
     ),
     builder:
         (_) => ProfilePreviewSheet(
+          userId: userId,
           handle: handle,
           avatarUrl: avatar,
           subtitle: 'Dancer & Singer',
@@ -726,16 +736,18 @@ class _CommentTile extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-                            CircleAvatar(
+              CircleAvatar(
                 radius: 22.r,
-                              backgroundImage:
-                                  userAvatar != null
-                                      ? ResizeImage.resizeIfNeeded(
-                                          (44.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                          (44.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                          NetworkImage(userAvatar!),
-                                        )
-                                      : null,
+                backgroundImage:
+                    userAvatar != null
+                        ? ResizeImage.resizeIfNeeded(
+                          (44.r * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                          (44.r * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                          NetworkImage(userAvatar!),
+                        )
+                        : null,
                 onBackgroundImageError: userAvatar != null ? (_, __) {} : null,
               ),
               SizedBox(width: 12.w),
@@ -926,10 +938,18 @@ class _RepliesList extends ConsumerWidget {
                           backgroundImage:
                               (r['userAvatar'] as String?) != null
                                   ? ResizeImage.resizeIfNeeded(
-                                      (32.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                      (32.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                      NetworkImage(r['userAvatar']),
-                                    )
+                                    (32.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    (32.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    NetworkImage(r['userAvatar']),
+                                  )
                                   : null,
                           onBackgroundImageError:
                               (r['userAvatar'] as String?) != null

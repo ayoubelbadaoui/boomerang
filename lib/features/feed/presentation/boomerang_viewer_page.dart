@@ -75,6 +75,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     BuildContext context,
     String handle,
     String? avatar,
+    String userId,
   ) {
     showModalBottomSheet<void>(
       context: context,
@@ -85,6 +86,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
       ),
       builder:
           (_) => ProfilePreviewSheet(
+            userId: userId,
             handle: handle,
             avatarUrl: avatar,
             subtitle: 'Dancer & Singer',
@@ -101,6 +103,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     final image = data['imageUrl'] as String?;
     final video = data['videoUrl'] as String?;
     final likes = (data['likes'] ?? 0) as int;
+    final userId = (data['userId'] ?? '') as String;
     final double topInset = MediaQuery.of(context).viewPadding.top;
 
     return Scaffold(
@@ -157,17 +160,19 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
             child: Row(
               children: [
                 InkWell(
-                  onTap: () => _showProfilePreview(context, handle, avatar),
+                  onTap: () => _showProfilePreview(context, handle, avatar, userId),
                   customBorder: const CircleBorder(),
                   child: CircleAvatar(
                     radius: 14.r,
                     backgroundImage:
                         avatar != null
                             ? ResizeImage.resizeIfNeeded(
-                                (28.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                (28.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                NetworkImage(avatar),
-                              )
+                              (28.r * MediaQuery.of(context).devicePixelRatio)
+                                  .round(),
+                              (28.r * MediaQuery.of(context).devicePixelRatio)
+                                  .round(),
+                              NetworkImage(avatar),
+                            )
                             : null,
                     onBackgroundImageError: avatar != null ? (_, __) {} : null,
                   ),
@@ -175,7 +180,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                 SizedBox(width: 8.w),
                 Expanded(
                   child: InkWell(
-                    onTap: () => _showProfilePreview(context, handle, avatar),
+                  onTap: () => _showProfilePreview(context, handle, avatar, userId),
                     child: Text(
                       handle,
                       maxLines: 1,
@@ -579,10 +584,12 @@ class _CommentTile extends ConsumerWidget {
                 backgroundImage:
                     userAvatar != null
                         ? ResizeImage.resizeIfNeeded(
-                            (44.r * MediaQuery.of(context).devicePixelRatio).round(),
-                            (44.r * MediaQuery.of(context).devicePixelRatio).round(),
-                            NetworkImage(userAvatar!),
-                          )
+                          (44.r * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                          (44.r * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                          NetworkImage(userAvatar!),
+                        )
                         : null,
                 onBackgroundImageError: userAvatar != null ? (_, __) {} : null,
               ),

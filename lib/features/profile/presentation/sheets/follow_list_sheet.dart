@@ -77,18 +77,27 @@ class FollowListSheet extends ConsumerWidget {
                       final avatar = d['userAvatar'] as String?;
                       final handle =
                           '@${name.replaceAll(' ', '_').toLowerCase()}';
+                      final userId = (d['userId'] ?? '') as String;
                       return ListTile(
                         onTap:
-                            () => _showProfilePreview(context, handle, avatar),
+                            () => _showProfilePreview(context, handle, avatar, userId),
                         leading: CircleAvatar(
                           radius: 22.r,
                           backgroundImage:
                               avatar != null
                                   ? ResizeImage.resizeIfNeeded(
-                                      (44.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                      (44.r * MediaQuery.of(context).devicePixelRatio).round(),
-                                      NetworkImage(avatar),
-                                    )
+                                    (44.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    (44.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    NetworkImage(avatar),
+                                  )
                                   : null,
                           onBackgroundImageError:
                               avatar != null ? (_, __) {} : null,
@@ -115,7 +124,12 @@ class FollowListSheet extends ConsumerWidget {
   }
 }
 
-void _showProfilePreview(BuildContext context, String handle, String? avatar) {
+void _showProfilePreview(
+  BuildContext context,
+  String handle,
+  String? avatar,
+  String userId,
+) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -125,6 +139,7 @@ void _showProfilePreview(BuildContext context, String handle, String? avatar) {
     ),
     builder:
         (_) => ProfilePreviewSheet(
+          userId: userId,
           handle: handle,
           avatarUrl: avatar,
           subtitle: '',

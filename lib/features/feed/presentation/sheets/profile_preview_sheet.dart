@@ -1,19 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:boomerang/infrastructure/providers.dart';
 
-class ProfilePreviewSheet extends StatelessWidget {
+class ProfilePreviewSheet extends ConsumerStatefulWidget {
   const ProfilePreviewSheet({
     super.key,
+    required this.userId,
     required this.handle,
     required this.avatarUrl,
     this.subtitle,
   });
+  final String userId;
   final String handle;
   final String? avatarUrl;
   final String? subtitle;
 
   @override
+  ConsumerState<ProfilePreviewSheet> createState() =>
+      _ProfilePreviewSheetState();
+}
+
+class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
+  bool _loading = false;
+  bool? _isFollowing;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final repo = ref.read(followRepoProvider);
+      final v = await repo.isFollowing(widget.userId);
+      if (mounted) setState(() => _isFollowing = v);
+    });
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_loading || _isFollowing == null) return;
+    setState(() => _loading = true);
+    final repo = ref.read(followRepoProvider);
+    try {
+      if (_isFollowing == true) {
+        await repo.unfollow(widget.userId);
+        if (mounted) setState(() => _isFollowing = false);
+      } else {
+        await repo.follow(widget.userId);
+        if (mounted) setState(() => _isFollowing = true);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final me = ref.watch(currentUserProfileProvider).value;
+    final isSelf = me?.uid == widget.userId;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
@@ -31,25 +73,24 @@ class ProfilePreviewSheet extends StatelessWidget {
             ),
             CircleAvatar(
               radius: 44.r,
-              backgroundImage:
-                  avatarUrl != null
-                      ? ResizeImage.resizeIfNeeded(
-                          (88.r * MediaQuery.of(context).devicePixelRatio).round(),
-                          (88.r * MediaQuery.of(context).devicePixelRatio).round(),
-                          NetworkImage(avatarUrl!),
-                        )
-                      : null,
+              backgroundImage: widget.avatarUrl != null
+                  ? ResizeImage.resizeIfNeeded(
+                      (88.r * MediaQuery.of(context).devicePixelRatio).round(),
+                      (88.r * MediaQuery.of(context).devicePixelRatio).round(),
+                      NetworkImage(widget.avatarUrl!),
+                    )
+                  : null,
               backgroundColor: const Color(0xFFF2F2F2),
             ),
             SizedBox(height: 12.h),
             Text(
-              handle,
+              widget.handle,
               style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
             ),
-            if (subtitle != null && subtitle!.isNotEmpty) ...[
+            if (widget.subtitle != null && widget.subtitle!.isNotEmpty) ...[
               SizedBox(height: 6.h),
               Text(
-                subtitle!,
+                widget.subtitle!,
                 style: TextStyle(color: Colors.black54, fontSize: 14.sp),
               ),
             ],
@@ -58,7 +99,7 @@ class ProfilePreviewSheet extends StatelessWidget {
             SizedBox(height: 12.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
+              children: const [
                 _Stat(value: '823', label: 'Bmg.'),
                 _Stat(value: '3.7M', label: 'Followers'),
                 _Stat(value: '925', label: 'Following'),
@@ -68,20 +109,31 @@ class ProfilePreviewSheet extends StatelessWidget {
             SizedBox(height: 16.h),
             Row(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.person_add_alt_1),
-                    label: const Text('Follow'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      shape: const StadiumBorder(),
-                      padding: EdgeInsets.symmetric(vertical: 14.h),
+                if (!isSelf)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          (_isFollowing == null || _loading) ? null : _toggleFollow,
+                      icon: Icon(
+                        _isFollowing == true
+                            ? Icons.check
+                            : Icons.person_add_alt_1,
+                      ),
+                      label: Text(_isFollowing == true ? 'Following' : 'Follow'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            _isFollowing == true ? Colors.white : Colors.black,
+                        foregroundColor:
+                            _isFollowing == true ? Colors.black : Colors.white,
+                        side: _isFollowing == true
+                            ? const BorderSide(color: Colors.black, width: 1)
+                            : BorderSide.none,
+                        shape: const StadiumBorder(),
+                        padding: EdgeInsets.symmetric(vertical: 14.h),
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(width: 12.w),
+                if (!isSelf) SizedBox(width: 12.w),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {},
@@ -120,5 +172,3 @@ class _Stat extends StatelessWidget {
     );
   }
 }
-
-
