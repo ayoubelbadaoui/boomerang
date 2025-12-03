@@ -5,13 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
+import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 
 class BoomerangViewerPage extends ConsumerStatefulWidget {
-  const BoomerangViewerPage({
-    super.key,
-    required this.id,
-    required this.data,
-  });
+  const BoomerangViewerPage({super.key, required this.id, required this.data});
   final String id;
   final Map<String, dynamic> data;
 
@@ -20,8 +17,11 @@ class BoomerangViewerPage extends ConsumerStatefulWidget {
       _BoomerangViewerPageState();
 }
 
-class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage> {
+class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
+    with SingleTickerProviderStateMixin {
   VideoPlayerController? _controller;
+  bool _showHeart = false;
+  late final AnimationController _anim;
 
   @override
   void initState() {
@@ -37,15 +37,55 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage> {
           _controller?.play();
         });
     }
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   }
 
   @override
   void dispose() {
     _controller?.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    _anim.dispose();
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     super.dispose();
+  }
+
+  Future<void> _like() async {
+    final me = ref.read(currentUserProfileProvider).value;
+    if (me == null) return;
+    await ref
+        .read(boomerangRepoProvider)
+        .toggleLike(boomerangId: widget.id, userId: me.uid);
+  }
+
+  void _onDoubleTap() async {
+    setState(() => _showHeart = true);
+    _anim.forward(from: 0);
+    await _like();
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) setState(() => _showHeart = false);
+  }
+
+  void _showProfilePreview(BuildContext context, String handle, String? avatar) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder:
+          (_) => ProfilePreviewSheet(
+            handle: handle,
+            avatarUrl: avatar,
+            subtitle: 'Dancer & Singer',
+          ),
+    );
   }
 
   @override
@@ -63,20 +103,38 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: _controller != null && _controller!.value.isInitialized
-                ? FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      width: _controller!.value.size.width,
-                      height: _controller!.value.size.height,
-                      child: VideoPlayer(_controller!),
-                    ),
-                  )
-                : (image != null && image.isNotEmpty
-                    ? Image.network(image, fit: BoxFit.cover)
-                    : Container(color: Colors.black)),
+            child: GestureDetector(
+              onDoubleTap: _onDoubleTap,
+              behavior: HitTestBehavior.opaque,
+              child:
+                  _controller != null && _controller!.value.isInitialized
+                      ? FittedBox(
+                        fit: BoxFit.cover,
+                        clipBehavior: Clip.hardEdge,
+                        child: SizedBox(
+                          width: _controller!.value.size.width,
+                          height: _controller!.value.size.height,
+                          child: VideoPlayer(_controller!),
+                        ),
+                      )
+                      : (image != null && image.isNotEmpty
+                          ? Image.network(image, fit: BoxFit.cover)
+                          : Container(color: Colors.black)),
+            ),
           ),
+          if (_showHeart)
+            Center(
+              child: ScaleTransition(
+                scale: Tween(begin: 0.6, end: 1.2).animate(
+                  CurvedAnimation(parent: _anim, curve: Curves.easeOutBack),
+                ),
+                child: Icon(
+                  Icons.favorite,
+                  color: Colors.white.withOpacity(0.9),
+                  size: 100.r,
+                ),
+              ),
+            ),
           // Top bar
           Positioned(
             left: 8.w,
@@ -93,21 +151,30 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage> {
             right: 88.w,
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 14.r,
-                  backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                  onBackgroundImageError: avatar != null ? (_, __) {} : null,
+                InkWell(
+                  onTap: () => _showProfilePreview(context, handle, avatar),
+                  customBorder: const CircleBorder(),
+                  child: CircleAvatar(
+                    radius: 14.r,
+                    backgroundImage:
+                        avatar != null ? NetworkImage(avatar) : null,
+                    onBackgroundImageError:
+                        avatar != null ? (_, __) {} : null,
+                  ),
                 ),
                 SizedBox(width: 8.w),
                 Expanded(
-                  child: Text(
-                    handle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14.sp,
+                  child: InkWell(
+                    onTap: () => _showProfilePreview(context, handle, avatar),
+                    child: Text(
+                      handle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.sp,
+                      ),
                     ),
                   ),
                 ),
@@ -178,11 +245,12 @@ class _ViewerLikeButton extends ConsumerWidget {
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final isLiked = me != null && likedBy.contains(me.uid);
     return InkWell(
-      onTap: me == null
-          ? null
-          : () => ref
-              .read(boomerangRepoProvider)
-              .toggleLike(boomerangId: postId, userId: me.uid),
+      onTap:
+          me == null
+              ? null
+              : () => ref
+                  .read(boomerangRepoProvider)
+                  .toggleLike(boomerangId: postId, userId: me.uid),
       customBorder: const CircleBorder(),
       child: AnimatedScale(
         scale: isLiked ? 1.1 : 1.0,
@@ -222,11 +290,7 @@ void _showCommentsSheet(BuildContext context, String boomerangId) {
   );
 }
 
-void _showShareSheet(
-  BuildContext context,
-  String? videoUrl,
-  String handle,
-) {
+void _showShareSheet(BuildContext context, String? videoUrl, String handle) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -272,7 +336,10 @@ void _showShareSheet(
                     avatar: const CircleAvatar(
                       backgroundImage: AssetImage('assets/logo.png'),
                     ),
-                    label: handle.length > 10 ? '${handle.substring(0, 10)}…' : handle,
+                    label:
+                        handle.length > 10
+                            ? '${handle.substring(0, 10)}…'
+                            : handle,
                     onTap: () => Share.share(videoUrl ?? handle),
                   ),
                   _QuickItem(
@@ -392,7 +459,8 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                     final c = docs[i].data();
                     final commentId = docs[i].id;
                     final likedBy =
-                        (c['likedBy'] as List?)?.cast<String>() ?? const <String>[];
+                        (c['likedBy'] as List?)?.cast<String>() ??
+                        const <String>[];
                     final likes = (c['likes'] ?? 0) as int;
                     return _CommentTile(
                       boomerangId: widget.boomerangId,
@@ -439,11 +507,15 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                     final user = profileAsync.value;
                     _text.clear();
                     FocusScope.of(context).unfocus();
-                    await ref.read(commentsRepoProvider).add(
+                    await ref
+                        .read(commentsRepoProvider)
+                        .add(
                           boomerangId: widget.boomerangId,
                           userId: user?.uid ?? 'anon',
                           userName:
-                              user?.nickname.isNotEmpty == true ? user!.nickname : (user?.fullName ?? 'User'),
+                              user?.nickname.isNotEmpty == true
+                                  ? user!.nickname
+                                  : (user?.fullName ?? 'User'),
                           userAvatar: user?.avatarUrl,
                           text: text,
                         );
@@ -525,13 +597,16 @@ class _CommentTile extends ConsumerWidget {
                     Row(
                       children: [
                         InkWell(
-                          onTap: me == null
-                              ? null
-                              : () => ref.read(commentsRepoProvider).toggleLike(
-                                    boomerangId: boomerangId,
-                                    commentId: commentId,
-                                    userId: me.uid,
-                                  ),
+                          onTap:
+                              me == null
+                                  ? null
+                                  : () => ref
+                                      .read(commentsRepoProvider)
+                                      .toggleLike(
+                                        boomerangId: boomerangId,
+                                        commentId: commentId,
+                                        userId: me.uid,
+                                      ),
                           customBorder: const CircleBorder(),
                           child: Row(
                             children: [
@@ -559,5 +634,3 @@ class _CommentTile extends ConsumerWidget {
     );
   }
 }
-
-
