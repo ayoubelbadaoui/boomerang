@@ -55,7 +55,7 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
               shrinkWrap: true,
               itemCount: s.docs.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
+                crossAxisCount: 3,
                 mainAxisSpacing: 16.h,
                 crossAxisSpacing: 16.w,
                 childAspectRatio: 3 / 4,
