@@ -197,8 +197,11 @@ class _GridTileState extends State<_GridTile> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.play_circle_filled,
-                      size: 14, color: Colors.white70),
+                  const Icon(
+                    Icons.play_circle_filled,
+                    size: 14,
+                    color: Colors.white70,
+                  ),
                   SizedBox(width: 4.w),
                   Text(
                     videoUrl != null ? 'Preview' : 'Post',
