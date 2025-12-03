@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:developer' show log;
 import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:boomerang/features/profile/presentation/widgets/boomerang_preview.dart';
+import 'package:video_player/video_player.dart';
 
 class UserBoomerangsGrid extends ConsumerStatefulWidget {
   const UserBoomerangsGrid({super.key});
@@ -47,7 +48,6 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
         if (s.docs.isEmpty) {
           return const Center(child: Text('No posts yet'));
         }
-        final spacing = 4.w;
         return Column(
           children: [
             GridView.builder(
@@ -55,10 +55,10 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
               shrinkWrap: true,
               itemCount: s.docs.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: spacing,
-                mainAxisSpacing: spacing,
-                childAspectRatio: 1,
+                crossAxisCount: 2,
+                mainAxisSpacing: 16.h,
+                crossAxisSpacing: 16.w,
+                childAspectRatio: 3 / 4,
               ),
               itemBuilder: (context, index) {
                 final doc = s.docs[index];
@@ -67,11 +67,12 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
                 return InkWell(
-                  onLongPress: () => showBoomerangPreview(
-                    context,
-                    videoUrl: videoUrl,
-                    posterUrl: imageUrl,
-                  ),
+                  onLongPress:
+                      () => showBoomerangPreview(
+                        context,
+                        videoUrl: videoUrl,
+                        posterUrl: imageUrl,
+                      ),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -122,52 +123,93 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
   }
 }
 
-class _GridTile extends StatelessWidget {
+class _GridTile extends StatefulWidget {
   const _GridTile({required this.imageUrl, required this.videoUrl});
   final String? imageUrl;
   final String? videoUrl;
 
   @override
+  State<_GridTile> createState() => _GridTileState();
+}
+
+class _GridTileState extends State<_GridTile> {
+  VideoPlayerController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
+      _controller = VideoPlayerController.networkUrl(
+          Uri.parse(widget.videoUrl!),
+        )
+        ..initialize().then((_) {
+          if (!mounted) return;
+          setState(() {});
+          _controller?.setLooping(true);
+          _controller?.setVolume(0.0);
+          _controller?.play();
+        });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (imageUrl != null && imageUrl!.isNotEmpty)
-          Image.network(
-            imageUrl!,
-            fit: BoxFit.cover,
-            errorBuilder:
-                (_, __, ___) => Container(color: const Color(0xFFF2F2F2)),
-          )
-        else
-          Container(color: const Color(0xFFF2F2F2)),
-        Positioned(
-          right: 6.w,
-          bottom: 6.h,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.55),
-              borderRadius: BorderRadius.circular(8.r),
-            ),
-            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 16,
-                ),
-                SizedBox(width: 2.w),
-                Text(
-                  videoUrl != null ? 'Video' : 'Post',
-                  style: TextStyle(color: Colors.white, fontSize: 11.sp),
-                ),
-              ],
+    final String? imageUrl = widget.imageUrl;
+    final String? videoUrl = widget.videoUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18.r),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_controller != null && _controller!.value.isInitialized)
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _controller!.value.size.width,
+                height: _controller!.value.size.height,
+                child: VideoPlayer(_controller!),
+              ),
+            )
+          else if (imageUrl != null && imageUrl.isNotEmpty)
+            Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder:
+                  (_, __, ___) => Container(color: const Color(0xFFF2F2F2)),
+            )
+          else
+            Container(color: const Color(0xFFF2F2F2)),
+          Positioned(
+            left: 8.w,
+            bottom: 8.h,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.play_circle_filled,
+                      size: 14, color: Colors.white70),
+                  SizedBox(width: 4.w),
+                  Text(
+                    videoUrl != null ? 'Preview' : 'Post',
+                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
