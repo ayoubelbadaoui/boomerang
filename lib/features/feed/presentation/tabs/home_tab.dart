@@ -159,8 +159,13 @@ class _BoomerangCard extends StatelessWidget {
               child: Row(
                 children: [
                   InkWell(
-                  onTap: () =>
-                      _showProfilePreview(context, handle, avatar, data['userId'] as String),
+                    onTap:
+                        () => _showProfilePreview(
+                          context,
+                          handle,
+                          avatar,
+                          data['userId'] as String,
+                        ),
                     customBorder: const CircleBorder(),
                     child: CircleAvatar(
                       radius: 14.r,
@@ -180,8 +185,13 @@ class _BoomerangCard extends StatelessWidget {
                   ),
                   SizedBox(width: 8.w),
                   InkWell(
-                  onTap: () =>
-                      _showProfilePreview(context, handle, avatar, data['userId'] as String),
+                    onTap:
+                        () => _showProfilePreview(
+                          context,
+                          handle,
+                          avatar,
+                          data['userId'] as String,
+                        ),
                     child: Text(
                       handle,
                       style: TextStyle(
@@ -318,7 +328,13 @@ class _LikeButton extends ConsumerWidget {
               ? null
               : () => ref
                   .read(boomerangRepoProvider)
-                  .toggleLike(boomerangId: postId, userId: me.uid),
+                  .toggleLike(
+                    boomerangId: postId,
+                    userId: me.uid,
+                    actorName:
+                        me.nickname.isNotEmpty ? me.nickname : me.fullName,
+                    actorAvatar: me.avatarUrl,
+                  ),
       customBorder: const CircleBorder(),
       child: AnimatedScale(
         scale: isLiked ? 1.1 : 1.0,
@@ -375,7 +391,12 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
     if (me == null) return;
     await ref
         .read(boomerangRepoProvider)
-        .toggleLike(boomerangId: widget.postId, userId: me.uid);
+        .toggleLike(
+          boomerangId: widget.postId,
+          userId: me.uid,
+          actorName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
+          actorAvatar: me.avatarUrl,
+        );
   }
 
   void _onDoubleTap() async {

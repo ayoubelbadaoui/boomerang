@@ -77,8 +77,7 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        OtherUserProfilePage(userId: widget.userId),
+                    builder: (_) => OtherUserProfilePage(userId: widget.userId),
                   ),
                 );
               },
@@ -103,8 +102,7 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        OtherUserProfilePage(userId: widget.userId),
+                    builder: (_) => OtherUserProfilePage(userId: widget.userId),
                   ),
                 );
               },

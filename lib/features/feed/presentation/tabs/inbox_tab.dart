@@ -36,52 +36,57 @@ class InboxTab extends ConsumerWidget {
           ),
         ],
       ),
-      body: uid == null
-          ? const Center(child: Text('Sign in to see notifications'))
-          : StreamBuilder(
-              stream: ref.watch(notificationsRepoProvider).watch(uid),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final docs = snapshot.data!.docs;
-                if (docs.isEmpty) {
-                  return const Center(child: Text('No notifications yet'));
-                }
-                return ListView.separated(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => SizedBox(height: 8.h),
-                  itemBuilder: (context, i) {
-                    final d = docs[i].data();
-                    final type = (d['type'] ?? '') as String;
-                    final title = (d['actorName'] ?? 'User') as String;
-                    final avatar = d['actorAvatar'] as String?;
-                    String subtitle = '';
-                    String? thumb;
-                    String? action;
-                    if (type == 'follow') {
-                      subtitle = 'Started following you';
-                      action = 'Follow Back';
-                    } else if (type == 'like') {
-                      subtitle = 'Liked your video';
-                      thumb = d['boomerangImage'] as String?;
-                    } else {
-                      subtitle = 'Activity';
-                    }
-                    final item = _Item(
-                      avatar: avatar ??
-                          'https://picsum.photos/seed/a${i % 100}/100/100',
-                      title: title,
-                      subtitle: subtitle,
-                      trailingThumb: thumb,
-                      actionLabel: action,
-                    );
-                    return _ActivityTile(item: item);
-                  },
-                );
-              },
-            ),
+      body:
+          uid == null
+              ? const Center(child: Text('Sign in to see notifications'))
+              : StreamBuilder(
+                stream: ref.watch(notificationsRepoProvider).watch(uid),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = snapshot.data!.docs;
+                  if (docs.isEmpty) {
+                    return const Center(child: Text('No notifications yet'));
+                  }
+                  return ListView.separated(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 8.h,
+                    ),
+                    itemCount: docs.length,
+                    separatorBuilder: (_, __) => SizedBox(height: 8.h),
+                    itemBuilder: (context, i) {
+                      final d = docs[i].data();
+                      final type = (d['type'] ?? '') as String;
+                      final title = (d['actorName'] ?? 'User') as String;
+                      final avatar = d['actorAvatar'] as String?;
+                      String subtitle = '';
+                      String? thumb;
+                      String? action;
+                      if (type == 'follow') {
+                        subtitle = 'Started following you';
+                        action = 'Follow Back';
+                      } else if (type == 'like') {
+                        subtitle = 'Liked your video';
+                        thumb = d['boomerangImage'] as String?;
+                      } else {
+                        subtitle = 'Activity';
+                      }
+                      final item = _Item(
+                        avatar:
+                            avatar ??
+                            'https://picsum.photos/seed/a${i % 100}/100/100',
+                        title: title,
+                        subtitle: subtitle,
+                        trailingThumb: thumb,
+                        actionLabel: action,
+                      );
+                      return _ActivityTile(item: item);
+                    },
+                  );
+                },
+              ),
     );
   }
 }

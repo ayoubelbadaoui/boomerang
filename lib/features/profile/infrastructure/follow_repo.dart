@@ -68,12 +68,12 @@ class FollowRepo {
         .doc(targetUserId)
         .collection('items')
         .add({
-      'type': 'follow',
-      'actorUserId': me,
-      'actorName': actorName,
-      'actorAvatar': meData['avatarUrl'],
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+          'type': 'follow',
+          'actorUserId': me,
+          'actorName': actorName,
+          'actorAvatar': meData['avatarUrl'],
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 
   /// Stop following a user. Removes relationship documents.

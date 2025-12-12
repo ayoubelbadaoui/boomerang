@@ -29,9 +29,10 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
     final query = _search.text.trim();
     final isHashtag = query.startsWith('#') && query.length > 1;
     final tag = isHashtag ? query.substring(1).toLowerCase() : '';
-    final stream = isHashtag
-        ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
-        : ref.watch(boomerangRepoProvider).watchBoomerangs();
+    final stream =
+        isHashtag
+            ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
+            : ref.watch(boomerangRepoProvider).watchBoomerangs();
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
@@ -103,114 +104,122 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
           ),
           SizedBox(height: 8.h),
           Expanded(
-            child: _tabIndex == 1
-                ? _UsersSearchList(query: query)
-                : StreamBuilder(
-                    stream: stream,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final docs = snapshot.data!.docs;
-                      return GridView.builder(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16.w,
-                          vertical: 8.h,
-                        ),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16.h,
-                          crossAxisSpacing: 16.w,
-                          childAspectRatio: 3 / 4,
-                        ),
-                        itemCount: docs.length,
-                        itemBuilder: (context, i) {
-                          final d = docs[i].data();
-                          final name = (d['userName'] ?? '') as String;
-                          final poster = (d['imageUrl'] ?? '') as String;
-                          final views = (d['likes'] ?? 0) as int; // proxy as views
-                          final avatar = (d['userAvatar'] as String?);
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(18.r),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Image.network(
-                                        poster,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (_, __, ___) =>
-                                                Container(color: Colors.black12),
-                                      ),
-                                      Positioned(
-                                        left: 8.w,
-                                        bottom: 8.h,
-                                        child: Container(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 8.w,
-                                            vertical: 4.h,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withValues(
-                                              alpha: 0.6,
+            child:
+                _tabIndex == 1
+                    ? _UsersSearchList(query: query)
+                    : StreamBuilder(
+                      stream: stream,
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        final docs = snapshot.data!.docs;
+                        return GridView.builder(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 8.h,
+                          ),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 16.h,
+                                crossAxisSpacing: 16.w,
+                                childAspectRatio: 3 / 4,
+                              ),
+                          itemCount: docs.length,
+                          itemBuilder: (context, i) {
+                            final d = docs[i].data();
+                            final name = (d['userName'] ?? '') as String;
+                            final poster = (d['imageUrl'] ?? '') as String;
+                            final views =
+                                (d['likes'] ?? 0) as int; // proxy as views
+                            final avatar = (d['userAvatar'] as String?);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(18.r),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Image.network(
+                                          poster,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (_, __, ___) => Container(
+                                                color: Colors.black12,
+                                              ),
+                                        ),
+                                        Positioned(
+                                          left: 8.w,
+                                          bottom: 8.h,
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 8.w,
+                                              vertical: 4.h,
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.r),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.play_circle_filled,
-                                                size: 14,
-                                                color: Colors.white70,
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.6,
                                               ),
-                                              SizedBox(width: 4.w),
-                                              Text(
-                                                '${(views / 1000).toStringAsFixed(1)}K',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(12.r),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.play_circle_filled,
+                                                  size: 14,
+                                                  color: Colors.white70,
                                                 ),
-                                              ),
-                                            ],
+                                                SizedBox(width: 4.w),
+                                                Text(
+                                                  '${(views / 1000).toStringAsFixed(1)}K',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 8.h),
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 12.r,
-                                    backgroundImage:
-                                        avatar != null ? NetworkImage(avatar) : null,
-                                  ),
-                                  SizedBox(width: 8.w),
-                                  Expanded(
-                                    child: Text(
-                                      name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14.sp,
-                                      ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  ),
+                                ),
+                                SizedBox(height: 8.h),
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 12.r,
+                                      backgroundImage:
+                                          avatar != null
+                                              ? NetworkImage(avatar)
+                                              : null,
+                                    ),
+                                    SizedBox(width: 8.w),
+                                    Expanded(
+                                      child: Text(
+                                        name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14.sp,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
           ),
         ],
       ),
@@ -253,9 +262,9 @@ class _UsersSearchList extends ConsumerWidget {
       return const Center(child: Text('Search users by name or @handle'));
     }
     return FutureBuilder(
-      future: ref.read(userSearchRepoProvider).searchUsers(
-            q.startsWith('@') ? q.substring(1) : q,
-          ),
+      future: ref
+          .read(userSearchRepoProvider)
+          .searchUsers(q.startsWith('@') ? q.substring(1) : q),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
