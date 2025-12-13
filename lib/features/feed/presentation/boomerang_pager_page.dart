@@ -194,7 +194,8 @@ class _PostPageState extends ConsumerState<_PostPage> {
           child: Row(
             children: [
               InkWell(
-                onTap: () => _showProfilePreview(context, handle, avatar, userId),
+                onTap:
+                    () => _showProfilePreview(context, handle, avatar, userId),
                 customBorder: const CircleBorder(),
                 child: CircleAvatar(
                   radius: 14.r,
@@ -205,7 +206,9 @@ class _PostPageState extends ConsumerState<_PostPage> {
               SizedBox(width: 8.w),
               Expanded(
                 child: InkWell(
-                  onTap: () => _showProfilePreview(context, handle, avatar, userId),
+                  onTap:
+                      () =>
+                          _showProfilePreview(context, handle, avatar, userId),
                   child: Text(
                     handle,
                     maxLines: 1,
@@ -242,6 +245,20 @@ class _PostPageState extends ConsumerState<_PostPage> {
                 onTap: () => _showCommentsSheet(context, widget.id),
               ),
               SizedBox(height: 12.h),
+              Consumer(
+                builder: (context, ref, _) {
+                  final cnt = ref.watch(commentsCountProvider(widget.id));
+                  final txt = cnt.maybeWhen(
+                    data: (v) => '$v',
+                    orElse: () => '0',
+                  );
+                  return Text(
+                    txt,
+                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                  );
+                },
+              ),
+              SizedBox(height: 4.h),
               Text(
                 '$likes',
                 style: TextStyle(color: Colors.white, fontSize: 12.sp),
@@ -392,9 +409,14 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundImage:
-                            userAvatar != null ? NetworkImage(userAvatar) : null,
+                            userAvatar != null
+                                ? NetworkImage(userAvatar)
+                                : null,
                       ),
-                      title: Text(userName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      title: Text(
+                        userName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                       subtitle: Text(text),
                     );
                   },
@@ -432,12 +454,15 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                     final user = ref.read(currentUserProfileProvider).value;
                     _text.clear();
                     FocusScope.of(context).unfocus();
-                    await ref.read(commentsRepoProvider).add(
+                    await ref
+                        .read(commentsRepoProvider)
+                        .add(
                           boomerangId: widget.boomerangId,
                           userId: user?.uid ?? 'anon',
-                          userName: user?.nickname.isNotEmpty == true
-                              ? user!.nickname
-                              : (user?.fullName ?? 'User'),
+                          userName:
+                              user?.nickname.isNotEmpty == true
+                                  ? user!.nickname
+                                  : (user?.fullName ?? 'User'),
                           userAvatar: user?.avatarUrl,
                           text: text,
                         );

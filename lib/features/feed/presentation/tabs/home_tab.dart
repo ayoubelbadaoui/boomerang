@@ -246,9 +246,31 @@ class _BoomerangCard extends StatelessWidget {
               bottom: 12.h,
               child: Row(
                 children: [
-                  _CircleBtn(
-                    icon: Icons.chat_bubble_rounded,
-                    onTap: () => _showCommentsSheet(context, id, data),
+                  Column(
+                    children: [
+                      _CircleBtn(
+                        icon: Icons.chat_bubble_rounded,
+                        onTap: () => _showCommentsSheet(context, id, data),
+                      ),
+                      SizedBox(height: 4.h),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final cnt = ref.watch(commentsCountProvider(id));
+                          final txt = cnt.maybeWhen(
+                            data: (v) => '$v',
+                            orElse: () => '0',
+                          );
+                          return Text(
+                            txt,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                   SizedBox(width: 8.w),
                   _CircleBtn(
@@ -414,10 +436,11 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => BoomerangPagerPage(
-              initialId: widget.postId,
-              initialData: widget.data,
-            ),
+            builder:
+                (_) => BoomerangPagerPage(
+                  initialId: widget.postId,
+                  initialData: widget.data,
+                ),
           ),
         );
       },
@@ -1199,18 +1222,9 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   @override
   void initState() {
     super.initState();
-    if (widget.videoUrl != null) {
-      _controller = VideoPlayerController.networkUrl(
-          Uri.parse(widget.videoUrl!),
-        )
-        ..initialize().then((_) {
-          if (!mounted) return;
-          setState(() {});
-          _controller?.setLooping(true);
-          _controller?.setVolume(0.0);
-          _controller?.play();
-        });
-    }
+    // Performance: avoid initializing inline video players in the scrolling feed.
+    // Videos play in the full-screen pager/viewer instead. This dramatically
+    // reduces jank and memory pressure while scrolling the feed.
   }
 
   @override
@@ -1221,19 +1235,19 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
   @override
   Widget build(BuildContext context) {
-    if (_controller != null && _controller!.value.isInitialized) {
-      return FittedBox(
-        fit: BoxFit.cover,
-        clipBehavior: Clip.hardEdge,
-        child: SizedBox(
-          width: _controller!.value.size.width,
-          height: _controller!.value.size.height,
-          child: VideoPlayer(_controller!),
+    // Show poster only in the feed; tap opens full-screen viewer/pager.
+    if (widget.posterUrl != null && widget.posterUrl!.isNotEmpty) {
+      final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+      final targetWidth = (MediaQuery.of(context).size.width - 32.w);
+      final cacheW = (targetWidth * devicePixelRatio).round();
+      return Image(
+        image: ResizeImage.resizeIfNeeded(
+          cacheW,
+          null,
+          NetworkImage(widget.posterUrl!),
         ),
+        fit: BoxFit.cover,
       );
-    }
-    if (widget.posterUrl != null) {
-      return Image.network(widget.posterUrl!, fit: BoxFit.cover);
     }
     return Container(color: Colors.black12);
   }

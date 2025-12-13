@@ -196,6 +196,18 @@ final userTotalLikesProvider = StreamProvider.family<int, String>((ref, uid) {
       });
 });
 
+/// Live count of comments for a boomerang (parent comments only)
+final commentsCountProvider =
+    StreamProvider.family<int, String>((ref, boomerangId) {
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('boomerangs')
+      .doc(boomerangId)
+      .collection('comments')
+      .snapshots()
+      .map((snap) => snap.size);
+});
+
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
   return const BoomerangProcessor();
 });
