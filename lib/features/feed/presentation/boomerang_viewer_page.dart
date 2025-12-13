@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 
 class BoomerangViewerPage extends ConsumerStatefulWidget {
   const BoomerangViewerPage({super.key, required this.id, required this.data});
@@ -105,6 +106,8 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     final likes = (data['likes'] ?? 0) as int;
     final userId = (data['userId'] ?? '') as String;
     final double topInset = MediaQuery.of(context).viewPadding.top;
+    final tags =
+        ((data['hashtags'] as List?)?.cast<String>() ?? const <String>[]);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -204,6 +207,38 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
               ],
             ),
           ),
+          if (tags.isNotEmpty)
+            Positioned(
+              left: 12.w,
+              bottom: 58.h,
+              right: 88.w,
+              child: Wrap(
+                spacing: 8.w,
+                runSpacing: 6.h,
+                children: tags.take(4).map((t) {
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => HashtagFeedPage(tag: t),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      child: Text(
+                        '#$t',
+                        style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           // Right side actions
           Positioned(
             right: 12.w,
