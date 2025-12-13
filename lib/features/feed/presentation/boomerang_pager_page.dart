@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
+import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 
 class BoomerangPagerPage extends ConsumerStatefulWidget {
   const BoomerangPagerPage({
@@ -53,10 +54,11 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
       final snap = await ref
           .read(boomerangRepoProvider)
           .fetchBoomerangsPage(startAfter: _last, limit: 10);
-      final items = snap.docs
-          .where((d) => d.id != widget.initialId) // avoid duplicate
-          .map((d) => (id: d.id, data: d.data()))
-          .toList();
+      final items =
+          snap.docs
+              .where((d) => d.id != widget.initialId) // avoid duplicate
+              .map((d) => (id: d.id, data: d.data()))
+              .toList();
       setState(() {
         _docs.addAll(items);
         if (snap.docs.isNotEmpty) _last = snap.docs.last;
@@ -139,7 +141,9 @@ class _PostPageState extends ConsumerState<_PostPage> {
   Future<void> _like() async {
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) return;
-    await ref.read(boomerangRepoProvider).toggleLike(
+    await ref
+        .read(boomerangRepoProvider)
+        .toggleLike(
           boomerangId: widget.id,
           userId: me.uid,
           actorName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
@@ -154,6 +158,7 @@ class _PostPageState extends ConsumerState<_PostPage> {
         '@${(data['userName'] ?? 'user').toString().replaceAll(' ', '_').toLowerCase()}';
     final avatar = data['userAvatar'] as String?;
     final image = data['imageUrl'] as String?;
+    final userId = (data['userId'] ?? '') as String;
     final likes = (data['likes'] ?? 0) as int;
     final me = ref.watch(currentUserProfileProvider).value;
     final likedBy =
@@ -166,19 +171,20 @@ class _PostPageState extends ConsumerState<_PostPage> {
           child: GestureDetector(
             onDoubleTap: _like,
             behavior: HitTestBehavior.opaque,
-            child: _controller != null && _controller!.value.isInitialized
-                ? FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      width: _controller!.value.size.width,
-                      height: _controller!.value.size.height,
-                      child: VideoPlayer(_controller!),
-                    ),
-                  )
-                : (image != null && image.isNotEmpty
-                    ? Image.network(image, fit: BoxFit.cover)
-                    : Container(color: Colors.black)),
+            child:
+                _controller != null && _controller!.value.isInitialized
+                    ? FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: SizedBox(
+                        width: _controller!.value.size.width,
+                        height: _controller!.value.size.height,
+                        child: VideoPlayer(_controller!),
+                      ),
+                    )
+                    : (image != null && image.isNotEmpty
+                        ? Image.network(image, fit: BoxFit.cover)
+                        : Container(color: Colors.black)),
           ),
         ),
         Positioned(
@@ -187,21 +193,28 @@ class _PostPageState extends ConsumerState<_PostPage> {
           right: 88.w,
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 14.r,
-                backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                onBackgroundImageError: avatar != null ? (_, __) {} : null,
+              InkWell(
+                onTap: () => _showProfilePreview(context, handle, avatar, userId),
+                customBorder: const CircleBorder(),
+                child: CircleAvatar(
+                  radius: 14.r,
+                  backgroundImage: avatar != null ? NetworkImage(avatar) : null,
+                  onBackgroundImageError: avatar != null ? (_, __) {} : null,
+                ),
               ),
               SizedBox(width: 8.w),
               Expanded(
-                child: Text(
-                  handle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14.sp,
+                child: InkWell(
+                  onTap: () => _showProfilePreview(context, handle, avatar, userId),
+                  child: Text(
+                    handle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14.sp,
+                    ),
                   ),
                 ),
               ),
@@ -224,6 +237,11 @@ class _PostPageState extends ConsumerState<_PostPage> {
                 ),
               ),
               SizedBox(height: 12.h),
+              _ActionCircle(
+                icon: Icons.chat_bubble_rounded,
+                onTap: () => _showCommentsSheet(context, widget.id),
+              ),
+              SizedBox(height: 12.h),
               Text(
                 '$likes',
                 style: TextStyle(color: Colors.white, fontSize: 12.sp),
@@ -236,4 +254,205 @@ class _PostPageState extends ConsumerState<_PostPage> {
   }
 }
 
+class _ActionCircle extends StatelessWidget {
+  const _ActionCircle({required this.icon, this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black54,
+          shape: BoxShape.circle,
+        ),
+        padding: EdgeInsets.all(10.r),
+        child: Icon(icon, color: Colors.white),
+      ),
+    );
+  }
+}
 
+void _showProfilePreview(
+  BuildContext context,
+  String handle,
+  String? avatar,
+  String userId,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder:
+        (_) => ProfilePreviewSheet(
+          userId: userId,
+          handle: handle,
+          avatarUrl: avatar,
+          subtitle: '',
+        ),
+  );
+}
+
+void _showCommentsSheet(BuildContext context, String boomerangId) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) {
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.9,
+        maxChildSize: 0.98,
+        minChildSize: 0.5,
+        builder: (context, controller) {
+          return _CommentsSheet(
+            boomerangId: boomerangId,
+            scrollController: controller,
+          );
+        },
+      );
+    },
+  );
+}
+
+class _CommentsSheet extends ConsumerStatefulWidget {
+  const _CommentsSheet({
+    required this.boomerangId,
+    required this.scrollController,
+  });
+  final String boomerangId;
+  final ScrollController scrollController;
+
+  @override
+  ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
+}
+
+class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
+  final _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = ref.watch(commentsRepoProvider).watch(widget.boomerangId);
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        children: [
+          SizedBox(height: 8.h),
+          Container(
+            width: 44,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Comments',
+                style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder(
+              stream: stream,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final docs = snapshot.data!.docs;
+                return ListView.builder(
+                  primary: false,
+                  controller: widget.scrollController,
+                  itemCount: docs.length,
+                  itemBuilder: (context, i) {
+                    final c = docs[i].data();
+                    final userName = (c['userName'] ?? 'User') as String;
+                    final userAvatar = c['userAvatar'] as String?;
+                    final text = (c['text'] ?? '') as String;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage:
+                            userAvatar != null ? NetworkImage(userAvatar) : null,
+                      ),
+                      title: Text(userName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(text),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _text,
+                    decoration: InputDecoration(
+                      hintText: 'Add comment...',
+                      filled: true,
+                      fillColor: const Color(0xFFF6F6F6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24.r),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16.w,
+                        vertical: 14.h,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12.w),
+                InkWell(
+                  onTap: () async {
+                    final text = _text.text.trim();
+                    if (text.isEmpty) return;
+                    final user = ref.read(currentUserProfileProvider).value;
+                    _text.clear();
+                    FocusScope.of(context).unfocus();
+                    await ref.read(commentsRepoProvider).add(
+                          boomerangId: widget.boomerangId,
+                          userId: user?.uid ?? 'anon',
+                          userName: user?.nickname.isNotEmpty == true
+                              ? user!.nickname
+                              : (user?.fullName ?? 'User'),
+                          userAvatar: user?.avatarUrl,
+                          text: text,
+                        );
+                  },
+                  child: CircleAvatar(
+                    radius: 24.r,
+                    backgroundColor: Colors.black,
+                    child: const Icon(Icons.send, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
