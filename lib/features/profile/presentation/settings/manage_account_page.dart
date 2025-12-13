@@ -2,6 +2,8 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
+import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 
 class ManageAccountPage extends ConsumerWidget {
   const ManageAccountPage({super.key});
@@ -100,7 +102,7 @@ class ManageAccountPage extends ConsumerWidget {
               await ref.read(userProfileRepoProvider).deleteAccount();
               // Ensure app session is cleared
               await ref.read(authControllerProvider.notifier).logout();
-              if (context.mounted) Navigator.of(context).pop();
+              if (context.mounted) context.go(OnboardingPage.routeName);
             },
           ),
         ],

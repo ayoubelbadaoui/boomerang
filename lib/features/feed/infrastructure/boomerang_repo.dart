@@ -178,10 +178,11 @@ class BoomerangRepo {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchByHashtag(String tag) {
     final normalized = tag.toLowerCase();
+    // Avoid composite index requirement by not ordering; client can sort if needed.
     return _fs
         .collection('boomerangs')
         .where('hashtags', arrayContains: normalized)
-        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots();
   }
 }

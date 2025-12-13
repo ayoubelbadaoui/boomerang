@@ -301,27 +301,33 @@ class ProfileTab extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       GestureDetector(
-                        onTap: () => ref
-                            .read(profileSectionIndexProvider.notifier)
-                            .state = 0,
+                        onTap:
+                            () =>
+                                ref
+                                    .read(profileSectionIndexProvider.notifier)
+                                    .state = 0,
                         child: ModeIcon(
                           icon: Icons.grid_on_rounded,
                           active: ref.watch(profileSectionIndexProvider) == 0,
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => ref
-                            .read(profileSectionIndexProvider.notifier)
-                            .state = 1,
+                        onTap:
+                            () =>
+                                ref
+                                    .read(profileSectionIndexProvider.notifier)
+                                    .state = 1,
                         child: ModeIcon(
                           icon: Icons.bookmark_border_rounded,
                           active: ref.watch(profileSectionIndexProvider) == 1,
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => ref
-                            .read(profileSectionIndexProvider.notifier)
-                            .state = 2,
+                        onTap:
+                            () =>
+                                ref
+                                    .read(profileSectionIndexProvider.notifier)
+                                    .state = 2,
                         child: ModeIcon(
                           icon: Icons.favorite_border_rounded,
                           active: ref.watch(profileSectionIndexProvider) == 2,

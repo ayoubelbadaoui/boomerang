@@ -30,5 +30,13 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> logout() async => _repo.signOut();
+  Future<void> logout() async {
+    try {
+      state = const AuthState(loading: true);
+      await _repo.signOut();
+      state = const AuthState(success: 'Logged out');
+    } catch (e) {
+      state = AuthState(error: AuthErrorMapper.map(e));
+    }
+  }
 }

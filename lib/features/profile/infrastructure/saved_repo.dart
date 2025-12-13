@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
- 
 
 class SavedRepo {
   SavedRepo(this._fs);
@@ -49,10 +48,7 @@ class SavedRepo {
     await ref.set(data);
   }
 
-  Future<void> remove({
-    required String userId,
-    required String boomerangId,
-  }) {
+  Future<void> remove({required String userId, required String boomerangId}) {
     return _col(userId).doc(boomerangId).delete();
   }
 
@@ -60,5 +56,3 @@ class SavedRepo {
     return _col(userId).orderBy('savedAt', descending: true).snapshots();
   }
 }
-
-

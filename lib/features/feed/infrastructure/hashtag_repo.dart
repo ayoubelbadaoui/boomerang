@@ -22,5 +22,3 @@ class HashtagRepo {
     return q.get();
   }
 }
-
-

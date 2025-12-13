@@ -1,4 +1,3 @@
-import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 
 class BoomerangViewerPage extends ConsumerStatefulWidget {
@@ -108,6 +108,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     final double topInset = MediaQuery.of(context).viewPadding.top;
     final tags =
         ((data['hashtags'] as List?)?.cast<String>() ?? const <String>[]);
+    final me = ref.watch(currentUserProfileProvider).value;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -259,6 +260,45 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                   icon: Icons.chat_bubble_rounded,
                   onTap: () => _showCommentsSheet(context, widget.id),
                 ),
+                SizedBox(height: 12.h),
+                if (me != null)
+                  StreamBuilder<bool>(
+                    stream: ref
+                        .watch(savedRepoProvider)
+                        .watchIsSaved(userId: me.uid, boomerangId: widget.id),
+                    initialData: false,
+                    builder: (context, snapshot) {
+                      final saved = snapshot.data ?? false;
+                      return InkWell(
+                        onTap: () async {
+                          await ref
+                              .read(savedRepoProvider)
+                              .toggleSave(
+                                userId: me.uid,
+                                boomerangId: widget.id,
+                                boomerangData: widget.data,
+                              );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  saved
+                                      ? 'Removed from saved'
+                                      : 'Saved to your profile',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        customBorder: const CircleBorder(),
+                        child: Icon(
+                          saved ? Icons.bookmark : Icons.bookmark_outline,
+                          color: Colors.white,
+                          size: 26.r,
+                        ),
+                      );
+                    },
+                  ),
                 SizedBox(height: 12.h),
                 _ActionCircle(
                   icon: Icons.reply_outlined,

@@ -45,18 +45,14 @@ class SavedBoomerangsGrid extends ConsumerWidget {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => BoomerangViewerPage(
-                      id: id,
-                      data: data,
-                    ),
+                    builder: (_) => BoomerangViewerPage(id: id, data: data),
                   ),
                 );
               },
               onLongPress: () async {
-                await ref.read(savedRepoProvider).remove(
-                  userId: me.uid,
-                  boomerangId: id,
-                );
+                await ref
+                    .read(savedRepoProvider)
+                    .remove(userId: me.uid, boomerangId: id);
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Removed from saved')),
@@ -71,15 +67,19 @@ class SavedBoomerangsGrid extends ConsumerWidget {
                       Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            Container(color: const Color(0xFFF2F2F2)),
+                        errorBuilder:
+                            (_, __, ___) =>
+                                Container(color: const Color(0xFFF2F2F2)),
                       )
                     else
                       Container(color: const Color(0xFFF2F2F2)),
                     if (videoUrl.isNotEmpty && imageUrl.isEmpty)
                       Center(
-                        child: Icon(Icons.play_circle_filled,
-                            size: 24, color: Colors.white70),
+                        child: Icon(
+                          Icons.play_circle_filled,
+                          size: 24,
+                          color: Colors.white70,
+                        ),
                       ),
                   ],
                 ),
@@ -91,5 +91,3 @@ class SavedBoomerangsGrid extends ConsumerWidget {
     );
   }
 }
-
-

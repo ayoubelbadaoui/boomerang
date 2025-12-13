@@ -5,6 +5,7 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
+import 'dart:async';
 
 class DiscoverTab extends ConsumerStatefulWidget {
   const DiscoverTab({super.key});
@@ -19,12 +20,28 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
     with SingleTickerProviderStateMixin {
   final TextEditingController _search = TextEditingController();
   int _tabIndex = 0;
+  late final TabController _tabController;
   final _usersController = ScrollController();
   final _tagsController = ScrollController();
   final _bmgController = ScrollController();
+  Timer? _searchDebounce;
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted && _tabController.index != _tabIndex) {
+        setState(() {
+          _tabIndex = _tabController.index;
+        });
+      }
+    });
+    _search.addListener(() {
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) setState(() {});
+      });
+    });
   }
 
   @override
@@ -33,18 +50,15 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
     _usersController.dispose();
     _tagsController.dispose();
     _bmgController.dispose();
+    _searchDebounce?.cancel();
+    _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim();
-    final isHashtag = query.startsWith('#') && query.length > 1;
-    final tag = isHashtag ? query.substring(1).toLowerCase() : '';
-    final stream =
-        isHashtag
-            ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
-            : ref.watch(boomerangRepoProvider).watchBoomerangs();
+    // no-op here; children decide based on query
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
@@ -87,153 +101,34 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20.w),
-            child: Row(
-              children: [
-                _TabChip(
-                  label: 'Bmg.',
-                  active: _tabIndex == 0,
-                  onTap: () => setState(() => _tabIndex = 0),
-                ),
-                SizedBox(width: 24.w),
-                _TabChip(
-                  label: 'Users',
-                  active: _tabIndex == 1,
-                  onTap: () => setState(() => _tabIndex = 1),
-                ),
-                SizedBox(width: 24.w),
-                _TabChip(
-                  label: 'Hashtag',
-                  active: _tabIndex == 2,
-                  onTap: () => setState(() => _tabIndex = 2),
-                ),
+            padding: EdgeInsets.symmetric(horizontal: 8.w),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.black,
+              indicatorWeight: 3,
+              labelColor: Colors.black,
+              unselectedLabelColor: Colors.black45,
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18.sp,
+              ),
+              tabs: const [
+                Tab(text: 'Bmg.'),
+                Tab(text: 'Users'),
+                Tab(text: 'Hashtag'),
               ],
             ),
           ),
-          Padding(
-            padding: EdgeInsets.only(left: 20.w, right: 20.w, top: 6.h),
-            child: Container(height: 3, width: 60.w, color: Colors.black),
-          ),
           SizedBox(height: 8.h),
           Expanded(
-            child:
-                _tabIndex == 1
-                    ? _UsersSearchList(query: query)
-                    : _tabIndex == 2
-                        ? _TagsSearchList(query: query)
-                        : StreamBuilder(
-                      stream: stream,
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        final docs = snapshot.data!.docs;
-                        return GridView.builder(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 8.h,
-                          ),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                mainAxisSpacing: 16.h,
-                                crossAxisSpacing: 16.w,
-                                childAspectRatio: 3 / 4,
-                              ),
-                          itemCount: docs.length,
-                          itemBuilder: (context, i) {
-                            final d = docs[i].data();
-                            final name = (d['userName'] ?? '') as String;
-                            final poster = (d['imageUrl'] ?? '') as String;
-                            final views =
-                                (d['likes'] ?? 0) as int; // proxy as views
-                            final avatar = (d['userAvatar'] as String?);
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(18.r),
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        Image.network(
-                                          poster,
-                                          fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (_, __, ___) => Container(
-                                                color: Colors.black12,
-                                              ),
-                                        ),
-                                        Positioned(
-                                          left: 8.w,
-                                          bottom: 8.h,
-                                          child: Container(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 8.w,
-                                              vertical: 4.h,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withValues(
-                                                alpha: 0.6,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(12.r),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.play_circle_filled,
-                                                  size: 14,
-                                                  color: Colors.white70,
-                                                ),
-                                                SizedBox(width: 4.w),
-                                                Text(
-                                                  '${(views / 1000).toStringAsFixed(1)}K',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 8.h),
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 12.r,
-                                      backgroundImage:
-                                          avatar != null
-                                              ? NetworkImage(avatar)
-                                              : null,
-                                    ),
-                                    SizedBox(width: 8.w),
-                                    Expanded(
-                                      child: Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14.sp,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                    ),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _BmgGrid(query: query),
+                _UsersSearchList(query: query),
+                _TagsSearchList(query: query),
+              ],
+            ),
           ),
         ],
       ),
@@ -241,30 +136,7 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
   }
 }
 
-class _TabChip extends StatelessWidget {
-  const _TabChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 18.sp,
-          color: active ? Colors.black : Colors.black45,
-        ),
-      ),
-    );
-  }
-}
+// _TabChip no longer used (replaced by TabBar)
 
 class _UsersSearchList extends ConsumerWidget {
   const _UsersSearchList({required this.query});
@@ -329,6 +201,117 @@ class _UsersSearchList extends ConsumerWidget {
   }
 }
 
+class _BmgGrid extends ConsumerWidget {
+  const _BmgGrid({required this.query});
+  final String query;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isHashtag = query.startsWith('#') && query.length > 1;
+    final tag = isHashtag ? query.substring(1).toLowerCase() : '';
+    final stream =
+        isHashtag
+            ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
+            : ref.watch(boomerangRepoProvider).watchBoomerangs();
+    return StreamBuilder(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final docs = snapshot.data!.docs;
+        return GridView.builder(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 16.h,
+            crossAxisSpacing: 16.w,
+            childAspectRatio: 3 / 4,
+          ),
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final d = docs[i].data();
+            final name = (d['userName'] ?? '') as String;
+            final poster = (d['imageUrl'] ?? '') as String;
+            final views = (d['likes'] ?? 0) as int;
+            final avatar = (d['userAvatar'] as String?);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18.r),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          poster,
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (_, __, ___) => Container(color: Colors.black12),
+                        ),
+                        Positioned(
+                          left: 8.w,
+                          bottom: 8.h,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8.w,
+                              vertical: 4.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(12.r),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.play_circle_filled,
+                                  size: 14,
+                                  color: Colors.white70,
+                                ),
+                                SizedBox(width: 4.w),
+                                Text(
+                                  '${(views / 1000).toStringAsFixed(1)}K',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: 8.h),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12.r,
+                      backgroundImage:
+                          avatar != null ? NetworkImage(avatar) : null,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14.sp,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class _TagsSearchList extends ConsumerStatefulWidget {
   const _TagsSearchList({required this.query});
   final String query;
@@ -364,9 +347,10 @@ class _TagsSearchListState extends ConsumerState<_TagsSearchList> {
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
     try {
-      final q = widget.query.startsWith('#')
-          ? widget.query.substring(1)
-          : widget.query;
+      final q =
+          widget.query.startsWith('#')
+              ? widget.query.substring(1)
+              : widget.query;
       final pref = q.trim().toLowerCase();
       if (pref.isEmpty) {
         setState(() {
@@ -376,11 +360,9 @@ class _TagsSearchListState extends ConsumerState<_TagsSearchList> {
         });
         return;
       }
-      final snap = await ref.read(hashtagRepoProvider).searchPrefixPage(
-            prefix: pref,
-            startAfter: _last,
-            limit: 30,
-          );
+      final snap = await ref
+          .read(hashtagRepoProvider)
+          .searchPrefixPage(prefix: pref, startAfter: _last, limit: 30);
       setState(() {
         _items.addAll(snap.docs.map((d) => d.id));
         if (snap.docs.isNotEmpty) _last = snap.docs.last;
@@ -425,7 +407,10 @@ class _TagsSearchListState extends ConsumerState<_TagsSearchList> {
           final t = _items[i];
           return ListTile(
             leading: const Icon(Icons.tag),
-            title: Text('#$t', style: const TextStyle(fontWeight: FontWeight.w700)),
+            title: Text(
+              '#$t',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

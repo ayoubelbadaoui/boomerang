@@ -9,6 +9,8 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
+import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -114,7 +116,8 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   onTap: () async {
                     await ref.read(authControllerProvider.notifier).logout();
-                    if (context.mounted) Navigator.of(context).pop();
+                    if (!context.mounted) return;
+                    context.go(OnboardingPage.routeName);
                   },
                 ),
               ],
@@ -149,9 +152,3 @@ class _Section extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
