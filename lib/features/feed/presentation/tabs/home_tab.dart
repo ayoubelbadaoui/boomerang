@@ -246,31 +246,9 @@ class _BoomerangCard extends StatelessWidget {
               bottom: 12.h,
               child: Row(
                 children: [
-                  Column(
-                    children: [
-                      _CircleBtn(
-                        icon: Icons.chat_bubble_rounded,
-                        onTap: () => _showCommentsSheet(context, id, data),
-                      ),
-                      SizedBox(height: 4.h),
-                      Consumer(
-                        builder: (context, ref, _) {
-                          final cnt = ref.watch(commentsCountProvider(id));
-                          final txt = cnt.maybeWhen(
-                            data: (v) => '$v',
-                            orElse: () => '0',
-                          );
-                          return Text(
-                            txt,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                  _CircleBtn(
+                    icon: Icons.chat_bubble_rounded,
+                    onTap: () => _showCommentsSheet(context, id, data),
                   ),
                   SizedBox(width: 8.w),
                   _CircleBtn(

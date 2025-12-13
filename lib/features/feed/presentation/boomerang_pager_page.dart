@@ -245,20 +245,6 @@ class _PostPageState extends ConsumerState<_PostPage> {
                 onTap: () => _showCommentsSheet(context, widget.id),
               ),
               SizedBox(height: 12.h),
-              Consumer(
-                builder: (context, ref, _) {
-                  final cnt = ref.watch(commentsCountProvider(widget.id));
-                  final txt = cnt.maybeWhen(
-                    data: (v) => '$v',
-                    orElse: () => '0',
-                  );
-                  return Text(
-                    txt,
-                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
-                  );
-                },
-              ),
-              SizedBox(height: 4.h),
               Text(
                 '$likes',
                 style: TextStyle(color: Colors.white, fontSize: 12.sp),
