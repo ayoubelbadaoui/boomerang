@@ -16,6 +16,7 @@ import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/notifications_repo.dart';
 import 'package:boomerang/features/profile/infrastructure/user_search_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/hashtag_repo.dart';
+import 'package:boomerang/features/profile/infrastructure/saved_repo.dart';
 // import 'package:path_provider/path_provider.dart';
 // import 'package:firebase_core/firebase_core.dart';
 
@@ -132,6 +133,11 @@ final commentsRepoProvider = Provider<CommentsRepo>((ref) {
 final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return NotificationsRepo(fs);
+});
+
+final savedRepoProvider = Provider<SavedRepo>((ref) {
+  final fs = ref.watch(firestoreProvider);
+  return SavedRepo(fs);
 });
 
 final userSearchRepoProvider = Provider<UserSearchRepo>((ref) {

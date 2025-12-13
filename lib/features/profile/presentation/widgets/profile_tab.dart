@@ -5,6 +5,7 @@ import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_
 import 'package:boomerang/features/profile/presentation/widgets/stat.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/settings/settings_page.dart';
+import 'package:boomerang/features/profile/presentation/widgets/saved_boomerangs_grid.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'dart:developer' show log;
+
+final profileSectionIndexProvider = StateProvider<int>((ref) => 0);
 
 class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
@@ -296,16 +299,53 @@ class ProfileTab extends ConsumerWidget {
                   SizedBox(height: 16.h),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: const [
-                      ModeIcon(icon: Icons.grid_on_rounded, active: true),
-                      ModeIcon(icon: Icons.bookmark_border_rounded),
-                      ModeIcon(icon: Icons.favorite_border_rounded),
+                    children: [
+                      GestureDetector(
+                        onTap: () => ref
+                            .read(profileSectionIndexProvider.notifier)
+                            .state = 0,
+                        child: ModeIcon(
+                          icon: Icons.grid_on_rounded,
+                          active: ref.watch(profileSectionIndexProvider) == 0,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => ref
+                            .read(profileSectionIndexProvider.notifier)
+                            .state = 1,
+                        child: ModeIcon(
+                          icon: Icons.bookmark_border_rounded,
+                          active: ref.watch(profileSectionIndexProvider) == 1,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => ref
+                            .read(profileSectionIndexProvider.notifier)
+                            .state = 2,
+                        child: ModeIcon(
+                          icon: Icons.favorite_border_rounded,
+                          active: ref.watch(profileSectionIndexProvider) == 2,
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: 12.h),
                   Divider(height: 1.h, color: Colors.black12),
                   SizedBox(height: 12.h),
-                  const UserBoomerangsGrid(),
+                  Builder(
+                    builder: (_) {
+                      final section = ref.watch(profileSectionIndexProvider);
+                      if (section == 0) return const UserBoomerangsGrid();
+                      if (section == 1) return const SavedBoomerangsGrid();
+                      return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'Likes coming soon',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      );
+                    },
+                  ),
                   SizedBox(height: 80.h),
                 ],
               ),

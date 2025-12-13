@@ -160,7 +160,7 @@ class _PostPageState extends ConsumerState<_PostPage> {
     final image = data['imageUrl'] as String?;
     final userId = (data['userId'] ?? '') as String;
     final likes = (data['likes'] ?? 0) as int;
-    final me = ref.watch(currentUserProfileProvider).value;
+    final me = ref.read(currentUserProfileProvider).value;
     final likedBy =
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final isLiked = me != null && likedBy.contains(me.uid);
@@ -244,6 +244,50 @@ class _PostPageState extends ConsumerState<_PostPage> {
                 icon: Icons.chat_bubble_rounded,
                 onTap: () => _showCommentsSheet(context, widget.id),
               ),
+              SizedBox(height: 12.h),
+              if (me != null)
+                Builder(
+                  builder: (context) {
+                    final uid = me.uid;
+                    return StreamBuilder<bool>(
+                      stream: ref
+                          .watch(savedRepoProvider)
+                          .watchIsSaved(userId: uid, boomerangId: widget.id),
+                      initialData: false,
+                      builder: (context, snapshot) {
+                        final saved = snapshot.data ?? false;
+                        return InkWell(
+                          onTap: () async {
+                            await ref
+                                .read(savedRepoProvider)
+                                .toggleSave(
+                                  userId: uid,
+                                  boomerangId: widget.id,
+                                  boomerangData: widget.data,
+                                );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    saved
+                                        ? 'Removed from saved'
+                                        : 'Saved to your profile',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          customBorder: const CircleBorder(),
+                          child: Icon(
+                            saved ? Icons.bookmark : Icons.bookmark_outline,
+                            color: Colors.white,
+                            size: 26.r,
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               SizedBox(height: 12.h),
               Text(
                 '$likes',
