@@ -12,7 +12,8 @@ import 'package:boomerang/features/feed/presentation/sheets/profile_preview_shee
 import 'package:boomerang/features/feed/presentation/sheets/qa_sheet.dart';
 import 'package:boomerang/features/feed/presentation/sheets/viewers_sheet.dart';
 import 'package:boomerang/features/feed/presentation/sheets/ranking_sheet.dart';
-import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
+// import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
+import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -413,9 +414,10 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder:
-                (_) =>
-                    BoomerangViewerPage(id: widget.postId, data: widget.data),
+            builder: (_) => BoomerangPagerPage(
+              initialId: widget.postId,
+              initialData: widget.data,
+            ),
           ),
         );
       },
