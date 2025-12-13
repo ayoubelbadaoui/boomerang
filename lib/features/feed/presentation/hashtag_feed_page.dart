@@ -16,7 +16,10 @@ class HashtagFeedPage extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: Text('#$tag', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20.sp)),
+        title: Text(
+          '#$tag',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20.sp),
+        ),
       ),
       body: StreamBuilder(
         stream: stream,
@@ -42,9 +45,10 @@ class HashtagFeedPage extends ConsumerWidget {
               final poster = (d['imageUrl'] ?? '') as String?;
               return ClipRRect(
                 borderRadius: BorderRadius.circular(18.r),
-                child: poster != null && poster.isNotEmpty
-                    ? Image.network(poster, fit: BoxFit.cover)
-                    : Container(color: const Color(0xFFF2F2F2)),
+                child:
+                    poster != null && poster.isNotEmpty
+                        ? Image.network(poster, fit: BoxFit.cover)
+                        : Container(color: const Color(0xFFF2F2F2)),
               );
             },
           );
@@ -53,5 +57,3 @@ class HashtagFeedPage extends ConsumerWidget {
     );
   }
 }
-
-

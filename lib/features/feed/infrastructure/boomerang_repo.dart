@@ -157,6 +157,22 @@ class BoomerangRepo {
       'likedBy': <String>[],
       'createdAt': FieldValue.serverTimestamp(),
     });
+    // Increment hashtags usage counters (best-effort)
+    if (hashtags != null && hashtags.isNotEmpty) {
+      final batch = _fs.batch();
+      for (final tag in hashtags.toSet()) {
+        final doc = _fs.collection('hashtags').doc(tag);
+        batch.set(doc, {
+          'count': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      try {
+        await batch.commit();
+      } catch (_) {
+        // ignore counter failure
+      }
+    }
     return ref.id;
   }
 

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 
 class DiscoverTab extends ConsumerStatefulWidget {
   const DiscoverTab({super.key});
@@ -17,10 +19,20 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
     with SingleTickerProviderStateMixin {
   final TextEditingController _search = TextEditingController();
   int _tabIndex = 0;
+  final _usersController = ScrollController();
+  final _tagsController = ScrollController();
+  final _bmgController = ScrollController();
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
     _search.dispose();
+    _usersController.dispose();
+    _tagsController.dispose();
+    _bmgController.dispose();
     super.dispose();
   }
 
@@ -107,7 +119,9 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
             child:
                 _tabIndex == 1
                     ? _UsersSearchList(query: query)
-                    : StreamBuilder(
+                    : _tabIndex == 2
+                        ? _TagsSearchList(query: query)
+                        : StreamBuilder(
                       stream: stream,
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) {
@@ -311,6 +325,116 @@ class _UsersSearchList extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _TagsSearchList extends ConsumerStatefulWidget {
+  const _TagsSearchList({required this.query});
+  final String query;
+  @override
+  ConsumerState<_TagsSearchList> createState() => _TagsSearchListState();
+}
+
+class _TagsSearchListState extends ConsumerState<_TagsSearchList> {
+  final _items = <String>[];
+  DocumentSnapshot<Map<String, dynamic>>? _last;
+  bool _loading = false;
+  bool _hasMore = true;
+  @override
+  void didUpdateWidget(covariant _TagsSearchList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.query != widget.query) {
+      _items.clear();
+      _last = null;
+      _hasMore = true;
+      _loading = false;
+      setState(() {});
+      _fetch();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      final q = widget.query.startsWith('#')
+          ? widget.query.substring(1)
+          : widget.query;
+      final pref = q.trim().toLowerCase();
+      if (pref.isEmpty) {
+        setState(() {
+          _items.clear();
+          _loading = false;
+          _hasMore = false;
+        });
+        return;
+      }
+      final snap = await ref.read(hashtagRepoProvider).searchPrefixPage(
+            prefix: pref,
+            startAfter: _last,
+            limit: 30,
+          );
+      setState(() {
+        _items.addAll(snap.docs.map((d) => d.id));
+        if (snap.docs.isNotEmpty) _last = snap.docs.last;
+        if (snap.docs.length < 30) _hasMore = false;
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.query.trim().isEmpty) {
+      return const Center(child: Text('Search hashtags by typing #tag'));
+    }
+    if (_items.isEmpty && _loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_items.isEmpty) {
+      return const Center(child: Text('No hashtags found'));
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200 &&
+            !_loading &&
+            _hasMore) {
+          _fetch();
+        }
+        return false;
+      },
+      child: ListView.separated(
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+        itemCount: _items.length + (_hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => SizedBox(height: 8.h),
+        itemBuilder: (context, i) {
+          if (i >= _items.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final t = _items[i];
+          return ListTile(
+            leading: const Icon(Icons.tag),
+            title: Text('#$t', style: const TextStyle(fontWeight: FontWeight.w700)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => HashtagFeedPage(tag: t)),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

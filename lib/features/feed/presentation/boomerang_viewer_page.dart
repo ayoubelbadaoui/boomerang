@@ -215,28 +215,35 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
               child: Wrap(
                 spacing: 8.w,
                 runSpacing: 6.h,
-                children: tags.take(4).map((t) {
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => HashtagFeedPage(tag: t),
+                children:
+                    tags.take(4).map((t) {
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => HashtagFeedPage(tag: t),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8.w,
+                            vertical: 4.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Text(
+                            '#$t',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.sp,
+                            ),
+                          ),
                         ),
                       );
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
-                      child: Text(
-                        '#$t',
-                        style: TextStyle(color: Colors.white, fontSize: 12.sp),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                    }).toList(),
               ),
             ),
           // Right side actions
