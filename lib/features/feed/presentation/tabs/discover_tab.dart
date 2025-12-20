@@ -219,6 +219,19 @@ class _BmgGrid extends ConsumerWidget {
           return const Center(child: CircularProgressIndicator());
         }
         final docs = snapshot.data!.docs;
+        // Warm-cache first page posters to avoid black flashes when opening tiles.
+        try {
+          final toWarm =
+              docs
+                  .take(24)
+                  .map((d) => d.data()['imageUrl'])
+                  .whereType<String>();
+          // Kick off without blocking build.
+          for (final u in toWarm) {
+            // ignore: discarded_futures
+            precacheImage(NetworkImage(u), context);
+          }
+        } catch (_) {}
         return GridView.builder(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -243,12 +256,47 @@ class _BmgGrid extends ConsumerWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(
-                          poster,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (_, __, ___) => Container(color: Colors.black12),
-                        ),
+                        if (poster.isNotEmpty)
+                          Builder(
+                            builder: (context) {
+                              final dpr =
+                                  MediaQuery.of(context).devicePixelRatio;
+                              final gridW =
+                                  (MediaQuery.of(context).size.width -
+                                      (16.w * 3)) /
+                                  2;
+                              final cacheW = (gridW * dpr).round();
+                              return Image(
+                                image: ResizeImage.resizeIfNeeded(
+                                  cacheW,
+                                  null,
+                                  NetworkImage(poster),
+                                ),
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (_, __, ___) => Container(
+                                      color: const Color(0xFFF2F2F2),
+                                    ),
+                              );
+                            },
+                          )
+                        else
+                          Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.play_circle_fill,
+                                color: Colors.black38,
+                                size: 36,
+                              ),
+                            ),
+                          ),
                         Positioned(
                           left: 8.w,
                           bottom: 8.h,

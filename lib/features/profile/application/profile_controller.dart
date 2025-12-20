@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:boomerang/features/profile/domain/user_profile.dart';
-import 'package:boomerang/features/profile/infrastructure/user_profile_repo.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

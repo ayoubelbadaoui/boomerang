@@ -51,4 +51,9 @@ class FirebaseAuthRepo implements AuthRepo {
 
   @override
   Future<void> signOut() => _auth.signOut();
+
+  @override
+  Future<void> resetPassword(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
 }

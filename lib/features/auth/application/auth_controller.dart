@@ -39,4 +39,16 @@ class AuthController extends StateNotifier<AuthState> {
       state = AuthState(error: AuthErrorMapper.map(e));
     }
   }
+
+  Future<void> resetPassword(String email) async {
+    try {
+      state = const AuthState(loading: true);
+      await _repo.resetPassword(email);
+      state = const AuthState(
+        success: 'Password reset email sent. Check your inbox.',
+      );
+    } catch (e) {
+      state = AuthState(error: AuthErrorMapper.map(e));
+    }
+  }
 }

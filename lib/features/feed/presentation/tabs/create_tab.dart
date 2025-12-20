@@ -50,31 +50,84 @@ class _CreateTabState extends ConsumerState<CreateTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ElevatedButton.icon(
-                onPressed:
-                    _isProcessing ? null : () => _onCreate(ImageSource.camera),
-                icon: const Icon(Icons.videocam_outlined),
-                label: Text(_isProcessing ? 'Processing…' : 'Record video'),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 72,
+              width: 72,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed:
-                    _isProcessing ? null : () => _onCreate(ImageSource.gallery),
-                icon: const Icon(Icons.video_library_outlined),
-                label: Text(_isProcessing ? 'Processing…' : 'Import video'),
+              child: const Icon(
+                Icons.bolt_rounded,
+                color: Colors.white,
+                size: 40,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text('Pick a video, create forward+reverse, upload & post'),
-        ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Create',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Record a quick clip or import from your gallery.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black54, fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _isProcessing
+                            ? null
+                            : () => _onCreate(ImageSource.camera),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.videocam_outlined),
+                    label: Text(_isProcessing ? 'Processing…' : 'Record video'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _isProcessing
+                            ? null
+                            : () => _onCreate(ImageSource.gallery),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.black, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.video_library_outlined),
+                    label: Text(_isProcessing ? 'Processing…' : 'Import video'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -19,7 +19,30 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    // Warm up first-page previews; do not block navigation.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _warmPreviews());
     // Defer to build to avoid ref.listen restriction
+  }
+
+  Future<void> _warmPreviews() async {
+    try {
+      final repo = ref.read(boomerangRepoProvider);
+      final snap = await repo.fetchBoomerangsPage(limit: 24);
+      final urls = <String>[];
+      for (final d in snap.docs) {
+        final data = d.data();
+        final u = data['imageUrl'];
+        if (u is String && u.isNotEmpty) urls.add(u);
+      }
+      if (!mounted || urls.isEmpty) return;
+      // Kick off precache; don't await all.
+      for (final u in urls) {
+        // ignore: discarded_futures
+        precacheImage(NetworkImage(u), context);
+      }
+    } catch (_) {
+      // Ignore warmup failures
+    }
   }
 
   @override

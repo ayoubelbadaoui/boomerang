@@ -10,6 +10,48 @@ import 'package:path_provider/path_provider.dart';
 class BoomerangProcessor {
   const BoomerangProcessor();
 
+  /// Extract a lightweight poster image from the input video for use as a preview.
+  ///
+  /// - Uses FFmpeg 'thumbnail' filter to pick a representative frame
+  /// - Scales down to [targetWidth] while preserving aspect ratio
+  /// - Outputs a small JPEG to a temporary file and returns its path
+  Future<String> generatePoster(
+    String inputPath, {
+    int targetWidth = 360,
+  }) async {
+    final input = File(inputPath);
+    if (!await input.exists()) {
+      throw Exception('Input file does not exist: $inputPath');
+    }
+    final tempDir = await getTemporaryDirectory();
+    final outPath =
+        '${tempDir.path}/poster_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+    // Pick a thumbnail frame and scale down to reduce bytes. Use mjpeg encoder for speed.
+    final cmd = [
+      '-y',
+      '-i',
+      '"$inputPath"',
+      '-vf',
+      '"thumbnail,scale=${targetWidth}:-1"',
+      '-frames:v',
+      '1',
+      '-q:v',
+      '6',
+      '"$outPath"',
+    ].join(' ');
+
+    final session = await FFmpegKit.execute(cmd);
+    final rc = await session.getReturnCode();
+    if (!ReturnCode.isSuccess(rc)) {
+      final logs = await session.getAllLogsAsString();
+      throw Exception(
+        'FFmpeg poster gen failed (code: ${rc?.getValue()})\n$logs',
+      );
+    }
+    return outPath;
+  }
+
   /// Build a real "boomerang" clip by concatenating a forward segment with its reversed copy.
   ///
   /// - Trims to the first [segmentSeconds] seconds to keep the loop snappy

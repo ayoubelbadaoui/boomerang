@@ -116,6 +116,7 @@ class _PostPage extends ConsumerStatefulWidget {
 
 class _PostPageState extends ConsumerState<_PostPage> {
   VideoPlayerController? _controller;
+  bool _showPosterOverlay = true;
   @override
   void initState() {
     super.initState();
@@ -128,14 +129,29 @@ class _PostPageState extends ConsumerState<_PostPage> {
           _controller?.setLooping(true);
           _controller?.setVolume(0.0);
           _controller?.play();
+          _controller?.addListener(_onVideoTickForPoster);
         });
     }
   }
 
   @override
   void dispose() {
+    _controller?.removeListener(_onVideoTickForPoster);
     _controller?.dispose();
     super.dispose();
+  }
+
+  void _onVideoTickForPoster() {
+    final c = _controller;
+    if (c == null) return;
+    final v = c.value;
+    if (!v.isInitialized) return;
+    final readyToReveal =
+        !v.isBuffering && (v.isPlaying || v.position > Duration.zero);
+    if (readyToReveal && _showPosterOverlay) {
+      setState(() => _showPosterOverlay = false);
+      c.removeListener(_onVideoTickForPoster);
+    }
   }
 
   Future<void> _like() async {
@@ -171,20 +187,30 @@ class _PostPageState extends ConsumerState<_PostPage> {
           child: GestureDetector(
             onDoubleTap: _like,
             behavior: HitTestBehavior.opaque,
-            child:
-                _controller != null && _controller!.value.isInitialized
-                    ? FittedBox(
-                      fit: BoxFit.cover,
-                      clipBehavior: Clip.hardEdge,
-                      child: SizedBox(
-                        width: _controller!.value.size.width,
-                        height: _controller!.value.size.height,
-                        child: VideoPlayer(_controller!),
-                      ),
-                    )
-                    : (image != null && image.isNotEmpty
-                        ? Image.network(image, fit: BoxFit.cover)
-                        : Container(color: Colors.black)),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_controller != null && _controller!.value.isInitialized)
+                  FittedBox(
+                    fit: BoxFit.cover,
+                    clipBehavior: Clip.hardEdge,
+                    child: SizedBox(
+                      width: _controller!.value.size.width,
+                      height: _controller!.value.size.height,
+                      child: VideoPlayer(_controller!),
+                    ),
+                  )
+                else
+                  // Keep background non-black if we have no poster
+                  Container(color: Colors.black),
+                if (image != null && image.isNotEmpty && _showPosterOverlay)
+                  AnimatedOpacity(
+                    opacity: _showPosterOverlay ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Image.network(image, fit: BoxFit.cover),
+                  ),
+              ],
+            ),
           ),
         ),
         Positioned(

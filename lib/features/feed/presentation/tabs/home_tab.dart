@@ -143,7 +143,10 @@ class _BoomerangCard extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24.r),
       child: Container(
-        color: Colors.black,
+        color:
+            (image != null && image.isNotEmpty)
+                ? Colors.black
+                : const Color(0xFFF2F2F2),
         child: Stack(
           children: [
             AspectRatio(
@@ -1227,6 +1230,18 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
         fit: BoxFit.cover,
       );
     }
-    return Container(color: Colors.black12);
+    // Lightweight non-black placeholder with play hint to avoid jarring black screens.
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: const Center(
+        child: Icon(Icons.play_circle_fill, color: Colors.black38, size: 42),
+      ),
+    );
   }
 }

@@ -5,4 +5,5 @@ abstract class AuthRepo {
   Future<AuthUser> signIn(String email, String password);
   Future<AuthUser> signUp(String email, String password, String name);
   Future<void> signOut();
+  Future<void> resetPassword(String email);
 }

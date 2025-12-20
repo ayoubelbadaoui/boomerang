@@ -24,6 +24,8 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
   double _segmentSeconds = 1.6;
   double _totalSeconds = 6.0;
   double _speed = 1.0;
+  String? _posterPath;
+  bool _showPosterOverlay = true;
 
   @override
   void initState() {
@@ -35,12 +37,43 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
         _controller?.setLooping(false);
         _controller?.setVolume(0.0);
         _playForward();
+        // Hide poster once the first frames are safely renderable
+        _controller?.addListener(_onVideoTickForPoster);
       });
+    _generateLocalPoster();
   }
 
   void _disposePlaybackTimers() {
     _reverseTimer?.cancel();
     _reverseTimer = null;
+  }
+
+  Future<void> _generateLocalPoster() async {
+    try {
+      final processor = ref.read(boomerangProcessorProvider);
+      final path = await processor.generatePoster(
+        widget.inputFile.path,
+        targetWidth: 480,
+      );
+      if (!mounted) return;
+      setState(() => _posterPath = path);
+    } catch (_) {
+      // If poster fails, we simply fall back to gradient placeholder
+    }
+  }
+
+  void _onVideoTickForPoster() {
+    final c = _controller;
+    if (c == null) return;
+    final v = c.value;
+    if (!v.isInitialized) return;
+    // Consider the video "ready to show" when not buffering and either playing or has a first frame
+    final readyToReveal =
+        !v.isBuffering && (v.isPlaying || v.position > Duration.zero);
+    if (readyToReveal && _showPosterOverlay) {
+      setState(() => _showPosterOverlay = false);
+      c.removeListener(_onVideoTickForPoster);
+    }
   }
 
   void _playForward() {
@@ -87,6 +120,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
   @override
   void dispose() {
     _controller?.removeListener(_tick);
+    _controller?.removeListener(_onVideoTickForPoster);
     _disposePlaybackTimers();
     _controller?.dispose();
     _caption.dispose();
@@ -109,6 +143,22 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
       final path = 'boomerangs/${DateTime.now().millisecondsSinceEpoch}.mp4';
       final task = await storage.ref(path).putFile(File(outPath));
       final url = await task.ref.getDownloadURL();
+
+      // Generate and upload a tiny poster for instant previews (non-blocking if it fails)
+      String? posterUrl;
+      try {
+        final posterPath = await processor.generatePoster(
+          widget.inputFile.path,
+          targetWidth: 360,
+        );
+        final posterRef = storage.ref(
+          'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
+        final posterTask = await posterRef.putFile(File(posterPath));
+        posterUrl = await posterTask.ref.getDownloadURL();
+      } catch (_) {
+        // Ignore poster failures; fall back to placeholders in UI
+      }
 
       final me = ref.read(currentUserProfileProvider).value;
       if (me == null) {
@@ -135,7 +185,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
             userName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
             userAvatar: me.avatarUrl,
             videoUrl: url,
-            imageUrl: null,
+            imageUrl: posterUrl,
             caption: caption.isEmpty ? null : caption,
             hashtags: tags.isEmpty ? null : tags.toList(),
           );
@@ -169,18 +219,48 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
         children: [
           Expanded(
             child: Center(
-              child:
-                  ready
-                      ? FittedBox(
-                        fit: BoxFit.cover,
-                        clipBehavior: Clip.hardEdge,
-                        child: SizedBox(
-                          width: _controller!.value.size.width,
-                          height: _controller!.value.size.height,
-                          child: VideoPlayer(_controller!),
-                        ),
-                      )
-                      : const CircularProgressIndicator(color: Colors.white),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Video at the back when initialized
+                  if (ready)
+                    FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: SizedBox(
+                        width: _controller!.value.size.width,
+                        height: _controller!.value.size.height,
+                        child: VideoPlayer(_controller!),
+                      ),
+                    ),
+                  // Poster overlay while loading/first frames
+                  if (_showPosterOverlay)
+                    Positioned.fill(
+                      child:
+                          _posterPath != null
+                              ? Image.file(
+                                File(_posterPath!),
+                                fit: BoxFit.cover,
+                              )
+                              : Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Color(0xFFEDEDED),
+                                      Color(0xFFF7F7F7),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
+                              ),
+                    ),
+                  if (!ready && _posterPath == null)
+                    const Positioned(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                ],
+              ),
             ),
           ),
           _Controls(
@@ -254,9 +334,16 @@ class _Controls extends StatelessWidget {
           TextField(
             controller: caption,
             maxLines: 2,
-            decoration: const InputDecoration(
+            cursorColor: Colors.black,
+            decoration: InputDecoration(
               hintText: 'Write a caption… use #hashtags',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.black, width: 2),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.15)),
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -264,13 +351,25 @@ class _Controls extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Slider(
-                  value: segmentSeconds.clamp(0.8, 3.0),
-                  min: 0.8,
-                  max: 3.0,
-                  divisions: 11,
-                  label: '${segmentSeconds.toStringAsFixed(1)}s',
-                  onChanged: onSegmentChanged,
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: Colors.black,
+                    inactiveTrackColor: Colors.black26,
+                    thumbColor: Colors.black,
+                    overlayColor: Colors.black12,
+                    valueIndicatorColor: Colors.black,
+                    valueIndicatorTextStyle: const TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                  child: Slider(
+                    value: segmentSeconds.clamp(0.8, 3.0),
+                    min: 0.8,
+                    max: 3.0,
+                    divisions: 11,
+                    label: '${segmentSeconds.toStringAsFixed(1)}s',
+                    onChanged: onSegmentChanged,
+                  ),
                 ),
               ),
               SizedBox(
@@ -288,15 +387,28 @@ class _Controls extends StatelessWidget {
           Wrap(
             spacing: 8,
             children:
-                chipTimes
-                    .map(
-                      (t) => ChoiceChip(
-                        label: Text('${t.toStringAsFixed(0)}s'),
-                        selected: totalSeconds.round() == t.round(),
-                        onSelected: (_) => onTotalChanged(t),
+                chipTimes.map((t) {
+                  final sel = totalSeconds.round() == t.round();
+                  return ChoiceChip(
+                    label: Text(
+                      '${t.toStringAsFixed(0)}s',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w600,
                       ),
-                    )
-                    .toList(),
+                    ),
+                    selected: sel,
+                    showCheckmark: true,
+                    checkmarkColor: Colors.black,
+                    selectedColor: Colors.white,
+                    backgroundColor: Colors.black12,
+                    side: BorderSide(
+                      color: sel ? Colors.black : Colors.black26,
+                      width: 1.5,
+                    ),
+                    onSelected: (_) => onTotalChanged(t),
+                  );
+                }).toList(),
           ),
           const SizedBox(height: 12),
           Text('Speed', style: theme.textTheme.titleMedium),
@@ -304,21 +416,42 @@ class _Controls extends StatelessWidget {
           Wrap(
             spacing: 8,
             children:
-                speedOptions
-                    .map(
-                      (s) => ChoiceChip(
-                        label: Text('${s}x'),
-                        selected: (speed - s).abs() < 0.01,
-                        onSelected: (_) => onSpeedChanged(s),
+                speedOptions.map((s) {
+                  final sel = (speed - s).abs() < 0.01;
+                  return ChoiceChip(
+                    label: Text(
+                      '${s}x',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w600,
                       ),
-                    )
-                    .toList(),
+                    ),
+                    selected: sel,
+                    showCheckmark: true,
+                    checkmarkColor: Colors.black,
+                    selectedColor: Colors.white,
+                    backgroundColor: Colors.black12,
+                    side: BorderSide(
+                      color: sel ? Colors.black : Colors.black26,
+                      width: 1.5,
+                    ),
+                    onSelected: (_) => onSpeedChanged(s),
+                  );
+                }).toList(),
           ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: onCreate,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
               child: Text(processing ? 'Processing…' : 'Create Boomerang'),
             ),
           ),

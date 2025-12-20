@@ -34,6 +34,57 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    final emailController = TextEditingController(text: _email.text.trim());
+    final localFormKey = GlobalKey<FormState>();
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Reset password'),
+          content: Form(
+            key: localFormKey,
+            child: TextFormField(
+              controller: emailController,
+              decoration: const InputDecoration(
+                hintText: 'Email',
+                prefixIcon: Icon(Icons.email_rounded),
+              ),
+              keyboardType: TextInputType.emailAddress,
+              validator: Validators.email,
+              autofillHints: const [AutofillHints.email],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!localFormKey.currentState!.validate()) return;
+                final email = emailController.text.trim();
+                await ref
+                    .read(authControllerProvider.notifier)
+                    .resetPassword(email);
+                if (!mounted) return;
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'If an account exists, a reset email has been sent.',
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Send'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
@@ -129,7 +180,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 SizedBox(height: 12.h),
                 Center(
                   child: TextButton(
-                    onPressed: () {},
+                    onPressed: _showForgotPasswordDialog,
                     child: const Text('Forgot the password?'),
                   ),
                 ),
