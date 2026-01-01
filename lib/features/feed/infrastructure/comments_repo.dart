@@ -33,6 +33,33 @@ class CommentsRepo {
           'likes': 0,
           'likedBy': <String>[],
         });
+    // Notify owner of the boomerang about the new comment
+    try {
+      final postSnap =
+          await _fs.collection('boomerangs').doc(boomerangId).get();
+      if (postSnap.exists) {
+        final data = postSnap.data() as Map<String, dynamic>;
+        final ownerId = (data['userId'] ?? '') as String;
+        if (ownerId.isNotEmpty && ownerId != userId) {
+          await _fs
+              .collection('notifications')
+              .doc(ownerId)
+              .collection('items')
+              .add({
+                'type': 'comment',
+                'boomerangId': boomerangId,
+                'boomerangImage': data['imageUrl'],
+                'actorUserId': userId,
+                'actorName': userName,
+                'actorAvatar': userAvatar,
+                'text': text,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+        }
+      }
+    } catch (_) {
+      // ignore notification failure
+    }
   }
 
   Future<void> addReply({
