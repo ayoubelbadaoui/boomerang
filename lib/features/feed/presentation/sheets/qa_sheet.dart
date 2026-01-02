@@ -64,7 +64,7 @@ class QASheet extends StatelessWidget {
               style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
             ),
             SizedBox(height: 8.h),
-            ...items.map((e) => _QAListTile(item: e)).toList(),
+            ...items.map((e) => _QAListTile(item: e)),
             SizedBox(height: 12.h),
             _AskBar(),
           ],
@@ -158,14 +158,3 @@ class _QAListTile extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-

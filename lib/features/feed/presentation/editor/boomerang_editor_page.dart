@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -342,7 +343,7 @@ class _Controls extends StatelessWidget {
                 borderSide: BorderSide(color: Colors.black, width: 2),
               ),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.black.withOpacity(0.15)),
+                borderSide: BorderSide(color: Colors.black.fade(0.15)),
               ),
             ),
           ),

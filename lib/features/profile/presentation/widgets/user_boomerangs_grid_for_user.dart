@@ -1,3 +1,4 @@
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_by_user_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,12 +21,15 @@ class _UserBoomerangsGridForUserState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final value = ref
-          .read(userBoomerangsByUserControllerProvider(widget.userId))
-          .valueOrNull;
+      final value =
+          ref
+              .read(userBoomerangsByUserControllerProvider(widget.userId))
+              .valueOrNull;
       if (value == null || value.docs.isEmpty) {
         ref
-            .read(userBoomerangsByUserControllerProvider(widget.userId).notifier)
+            .read(
+              userBoomerangsByUserControllerProvider(widget.userId).notifier,
+            )
             .fetchNext();
       }
     });
@@ -33,8 +37,9 @@ class _UserBoomerangsGridForUserState
 
   @override
   Widget build(BuildContext context) {
-    final asyncState =
-        ref.watch(userBoomerangsByUserControllerProvider(widget.userId));
+    final asyncState = ref.watch(
+      userBoomerangsByUserControllerProvider(widget.userId),
+    );
     return asyncState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Failed to load posts: $e')),
@@ -67,8 +72,7 @@ class _UserBoomerangsGridForUserState
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder:
-                            (_) => BoomerangViewerPage(id: id, data: data),
+                        builder: (_) => BoomerangViewerPage(id: id, data: data),
                       ),
                     );
                   },
@@ -86,10 +90,15 @@ class _UserBoomerangsGridForUserState
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => ref
-                      .read(userBoomerangsByUserControllerProvider(widget.userId)
-                          .notifier)
-                      .fetchNext(),
+                  onPressed:
+                      () =>
+                          ref
+                              .read(
+                                userBoomerangsByUserControllerProvider(
+                                  widget.userId,
+                                ).notifier,
+                              )
+                              .fetchNext(),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.black, width: 1),
                     padding: EdgeInsets.symmetric(vertical: 12.h),
@@ -131,8 +140,8 @@ class _GridTileState extends State<_GridTile> {
     super.initState();
     if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
       _controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.videoUrl!),
-      )
+          Uri.parse(widget.videoUrl!),
+        )
         ..initialize().then((_) {
           if (!mounted) return;
           setState(() {});
@@ -181,15 +190,18 @@ class _GridTileState extends State<_GridTile> {
             bottom: 8.h,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.fade(0.55),
                 borderRadius: BorderRadius.circular(12.r),
               ),
               padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.play_circle_filled,
-                      size: 14, color: Colors.white70),
+                  const Icon(
+                    Icons.play_circle_filled,
+                    size: 14,
+                    color: Colors.white70,
+                  ),
                   SizedBox(width: 4.w),
                   Text(
                     videoUrl != null ? 'Preview' : 'Post',
@@ -204,9 +216,3 @@ class _GridTileState extends State<_GridTile> {
     );
   }
 }
-
-
-
-
-
-

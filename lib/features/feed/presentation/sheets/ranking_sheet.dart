@@ -24,7 +24,7 @@ class _RankingSheetState extends State<RankingSheet>
       (i) => _Rank(
         i + 1,
         'User ${i + 1}',
-        (90 - i).toStringAsFixed(2) + 'M',
+        '${(90 - i).toStringAsFixed(2)}M',
         'https://i.pravatar.cc/100?img=${i + 20}',
       ),
     );
@@ -33,7 +33,7 @@ class _RankingSheetState extends State<RankingSheet>
       (i) => _Rank(
         i + 1,
         'Rising ${i + 1}',
-        (20 + i * 3).toStringAsFixed(2) + 'M',
+        '${(20 + i * 3).toStringAsFixed(2)}M',
         'https://i.pravatar.cc/100?img=${i + 30}',
       ),
     );
@@ -131,14 +131,3 @@ class _RankList extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-

@@ -1,0 +1,24 @@
+[debug] [2026-01-01T23:52:55.660Z] ----------------------------------------------------------------------
+[debug] [2026-01-01T23:52:55.662Z] Command:       /opt/homebrew/Cellar/node/24.2.0/bin/node /opt/homebrew/bin/firebase apps:create android boomerang (android) --package-name=com.ayoubhassan.boomerang --json --project=boomerang-fec61
+[debug] [2026-01-01T23:52:55.662Z] CLI Version:   15.1.0
+[debug] [2026-01-01T23:52:55.662Z] Platform:      darwin
+[debug] [2026-01-01T23:52:55.662Z] Node Version:  v24.2.0
+[debug] [2026-01-01T23:52:55.662Z] Time:          Fri Jan 02 2026 00:52:55 GMT+0100 (GMT+01:00)
+[debug] [2026-01-01T23:52:55.662Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-01-01T23:52:55.758Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-01-01T23:52:55.758Z] > authorizing via signed-in user (ayoub.flutter.dev@gmail.com)
+[info] Create your ANDROID app in project boomerang-fec61:
+[debug] [2026-01-01T23:52:55.760Z] Checked if tokens are valid: true, expires at: 1767314764894
+[debug] [2026-01-01T23:52:55.760Z] Checked if tokens are valid: true, expires at: 1767314764894
+[debug] [2026-01-01T23:52:55.760Z] >>> [apiv2][query] POST https://firebase.googleapis.com/v1beta1/projects/boomerang-fec61/androidApps [none]
+[debug] [2026-01-01T23:52:55.760Z] >>> [apiv2][body] POST https://firebase.googleapis.com/v1beta1/projects/boomerang-fec61/androidApps {"displayName":"boomerang (android)","packageName":"com.ayoubhassan.boomerang"}
+[debug] [2026-01-01T23:52:56.341Z] <<< [apiv2][status] POST https://firebase.googleapis.com/v1beta1/projects/boomerang-fec61/androidApps 409
+[debug] [2026-01-01T23:52:56.342Z] <<< [apiv2][body] POST https://firebase.googleapis.com/v1beta1/projects/boomerang-fec61/androidApps {"error":{"code":409,"message":"Requested entity already exists","status":"ALREADY_EXISTS"}}
+[debug] [2026-01-01T23:52:56.342Z] Request to https://firebase.googleapis.com/v1beta1/projects/boomerang-fec61/androidApps had HTTP Error: 409, Requested entity already exists
+[debug] [2026-01-01T23:52:56.492Z] FirebaseError: Request to https://firebase.googleapis.com/v1beta1/projects/boomerang-fec61/androidApps had HTTP Error: 409, Requested entity already exists
+    at responseToError (/opt/homebrew/lib/node_modules/firebase-tools/lib/responseToError.js:53:12)
+    at RetryOperation._fn (/opt/homebrew/lib/node_modules/firebase-tools/lib/apiv2.js:322:77)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[error] 
+[error] Error: Failed to create Android app for project boomerang-fec61. See firebase-debug.log for more info.

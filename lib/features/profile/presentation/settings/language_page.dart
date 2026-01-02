@@ -24,47 +24,34 @@ class LanguagePage extends ConsumerWidget {
         error: (_, __) => const Center(child: Text('Failed to load settings')),
         data: (s) {
           final value = s.languageCode;
-          return ListView(
-            padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 32.h),
-            children: [
-              Text(
-                'Suggested',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18.sp),
-              ),
-              _LangTile(
-                title: 'English (US)',
-                value: 'en_US',
-                group: value,
-                onChanged: (v) {
-                  ref.read(settingsControllerProvider.notifier).setLanguage(v!);
-                },
-              ),
-              _LangTile(
-                title: 'English (UK)',
-                value: 'en_GB',
-                group: value,
-                onChanged: (v) {
-                  ref.read(settingsControllerProvider.notifier).setLanguage(v!);
-                },
-              ),
-              const Divider(),
-              Text(
-                'Language',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18.sp),
-              ),
-              ..._others.map(
-                (e) => _LangTile(
-                  title: e,
-                  value: e,
-                  group: value,
-                  onChanged: (v) {
-                    ref
-                        .read(settingsControllerProvider.notifier)
-                        .setLanguage(v!);
-                  },
+          return RadioGroup<String>(
+            groupValue: value,
+            onChanged: (v) {
+              ref.read(settingsControllerProvider.notifier).setLanguage(v!);
+            },
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 32.h),
+              children: [
+                Text(
+                  'Suggested',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18.sp,
+                  ),
                 ),
-              ),
-            ],
+                _LangTile(title: 'English (US)', value: 'en_US'),
+                _LangTile(title: 'English (UK)', value: 'en_GB'),
+                const Divider(),
+                Text(
+                  'Language',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18.sp,
+                  ),
+                ),
+                ..._others.map((e) => _LangTile(title: e, value: e)),
+              ],
+            ),
           );
         },
       ),
@@ -73,24 +60,15 @@ class LanguagePage extends ConsumerWidget {
 }
 
 class _LangTile extends StatelessWidget {
-  const _LangTile({
-    required this.title,
-    required this.value,
-    required this.group,
-    required this.onChanged,
-  });
+  const _LangTile({required this.title, required this.value});
   final String title;
   final String value;
-  final String group;
-  final ValueChanged<String?> onChanged;
   @override
   Widget build(BuildContext context) {
     return RadioListTile<String>(
       contentPadding: EdgeInsets.zero,
       title: Text(title),
       value: value,
-      groupValue: group,
-      onChanged: onChanged,
       activeColor: Colors.black,
     );
   }
@@ -106,14 +84,3 @@ const _others = <String>[
   'Russian',
   'Indonesia',
 ];
-
-
-
-
-
-
-
-
-
-
-

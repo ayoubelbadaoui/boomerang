@@ -1,3 +1,4 @@
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
@@ -11,7 +12,7 @@ Future<void> showBoomerangPreview(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Preview',
-    barrierColor: Colors.black.withOpacity(0.85),
+    barrierColor: Colors.black.fade(0.85),
     pageBuilder: (context, _, __) {
       return _PreviewContent(videoUrl: videoUrl, posterUrl: posterUrl);
     },
@@ -39,8 +40,8 @@ class _PreviewContentState extends State<_PreviewContent> {
     super.initState();
     if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
       _controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.videoUrl!),
-      )
+          Uri.parse(widget.videoUrl!),
+        )
         ..initialize().then((_) {
           if (!mounted) return;
           setState(() {});
@@ -69,18 +70,22 @@ class _PreviewContentState extends State<_PreviewContent> {
               aspectRatio: 3 / 4,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16.r),
-                child: _controller != null && _controller!.value.isInitialized
-                    ? FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: _controller!.value.size.width,
-                          height: _controller!.value.size.height,
-                          child: VideoPlayer(_controller!),
-                        ),
-                      )
-                    : (widget.posterUrl != null
-                        ? Image.network(widget.posterUrl!, fit: BoxFit.cover)
-                        : Container(color: Colors.black)),
+                child:
+                    _controller != null && _controller!.value.isInitialized
+                        ? FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _controller!.value.size.width,
+                            height: _controller!.value.size.height,
+                            child: VideoPlayer(_controller!),
+                          ),
+                        )
+                        : (widget.posterUrl != null
+                            ? Image.network(
+                              widget.posterUrl!,
+                              fit: BoxFit.cover,
+                            )
+                            : Container(color: Colors.black)),
               ),
             ),
           ),
@@ -97,5 +102,3 @@ class _PreviewContentState extends State<_PreviewContent> {
     );
   }
 }
-
-

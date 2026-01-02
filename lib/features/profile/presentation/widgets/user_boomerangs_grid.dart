@@ -1,3 +1,4 @@
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -190,7 +191,7 @@ class _GridTileState extends State<_GridTile> {
             bottom: 8.h,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.fade(0.55),
                 borderRadius: BorderRadius.circular(12.r),
               ),
               padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),

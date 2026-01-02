@@ -10,8 +10,6 @@ final profileControllerProvider =
     );
 
 class ProfileController extends AsyncNotifier<UserProfile?> {
-  StreamSubscription<UserProfile?>? _subscription;
-
   @override
   Future<UserProfile?> build() async {
     // Ensure there is always at least a minimal profile document
@@ -19,17 +17,13 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     await repo.ensureBasicProfileIfMissing();
 
     // Keep state in sync with the Firestore stream
-    _subscription = ref
-        .read(currentUserProfileProvider.stream)
-        .listen(
-          (value) {
-            state = AsyncData(value);
-          },
-          onError: (error, stackTrace) {
-            state = AsyncError(error, stackTrace);
-          },
-        );
-    ref.onDispose(() => _subscription?.cancel());
+    ref.listen(currentUserProfileProvider, (previous, next) {
+      next.when(
+        data: (value) => state = AsyncData(value),
+        loading: () => state = const AsyncLoading(),
+        error: (error, stackTrace) => state = AsyncError(error, stackTrace),
+      );
+    });
 
     // Resolve initial value
     return await ref.read(currentUserProfileProvider.future);

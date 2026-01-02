@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDfc96JIPb4TvxSsu_KybLuqYhhUCo9rGw',
-    appId: '1:778677827043:android:c7b58f7efae06589619cd6',
+    appId: '1:778677827043:android:b4f932125777fd46619cd6',
     messagingSenderId: '778677827043',
     projectId: 'boomerang-fec61',
     storageBucket: 'boomerang-fec61.firebasestorage.app',
@@ -66,11 +66,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC9liCjizoUljMixTkXG2m1zTA_TaGFkK8',
-    appId: '1:778677827043:ios:58a93d023c28d84c619cd6',
+    appId: '1:778677827043:ios:b58a92e09d32c72b619cd6',
     messagingSenderId: '778677827043',
     projectId: 'boomerang-fec61',
     storageBucket: 'boomerang-fec61.firebasestorage.app',
-    iosBundleId: 'com.alwa.bg',
+    iosBundleId: 'com.ayoubhassan.boomerang',
   );
-
 }

@@ -62,7 +62,12 @@ class _PushNotificationsBootstrap {
         provisional: false,
       );
       if (kDebugMode) {
-        debugPrint('APNs permission status: ${settings.authorizationStatus}');
+        debugPrint(
+          '📱 APNs permission status: ${settings.authorizationStatus}',
+        );
+        debugPrint('   - Alert: ${settings.alert}');
+        debugPrint('   - Badge: ${settings.badge}');
+        debugPrint('   - Sound: ${settings.sound}');
       }
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true,
@@ -74,8 +79,19 @@ class _PushNotificationsBootstrap {
 
   Future<void> _saveCurrentTokenForUser(String uid) async {
     final token = await _messaging.getToken();
-    if (token == null || token.isEmpty) return;
+    if (kDebugMode) {
+      debugPrint('📱 FCM Token: ${token ?? "NULL"}');
+    }
+    if (token == null || token.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('⚠️ FCM token is null or empty');
+      }
+      return;
+    }
     await _saveToken(uid, token);
+    if (kDebugMode) {
+      debugPrint('✅ FCM token saved for user: $uid');
+    }
   }
 
   Future<void> _saveToken(String uid, String token) async {
@@ -109,6 +125,3 @@ class _PushNotificationsBootstrap {
     }
   }
 }
-
-
-

@@ -1,3 +1,6 @@
+// ignore_for_file: deprecated_member_use
+
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -142,7 +145,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                 ),
                 child: Icon(
                   Icons.favorite,
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.fade(0.9),
                   size: 100.r,
                 ),
               ),

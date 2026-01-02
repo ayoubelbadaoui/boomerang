@@ -1,3 +1,4 @@
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -149,7 +150,7 @@ class _FaqItemState extends State<_FaqItem> {
         borderRadius: BorderRadius.circular(14.r),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.fade(0.06),
             blurRadius: 24,
             spreadRadius: 2,
           ),
@@ -203,7 +204,7 @@ class _ContactTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16.r),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Colors.black.fade(0.06),
                         blurRadius: 24,
                         spreadRadius: 2,
                       ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -443,7 +444,7 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
                 ),
                 child: Icon(
                   Icons.favorite,
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.fade(0.9),
                   size: 100.r,
                 ),
               ),
@@ -646,8 +647,9 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
             child: StreamBuilder(
               stream: stream,
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
                 final docs = snapshot.data!.docs;
                 return ListView.builder(
                   primary: false,
@@ -1026,6 +1028,7 @@ class _QuickRow extends StatelessWidget {
         _QuickItem(
           icon: Icons.upload_rounded,
           label: 'Repost',
+          // ignore: deprecated_member_use
           onTap: () => Share.share(videoUrl ?? handle),
         ),
         _QuickItem(
@@ -1033,6 +1036,7 @@ class _QuickRow extends StatelessWidget {
             backgroundImage: AssetImage('assets/logo.png'),
           ),
           label: handle.length > 10 ? '${handle.substring(0, 10)}…' : handle,
+          // ignore: deprecated_member_use
           onTap: () => Share.share(videoUrl ?? handle),
         ),
         _QuickItem(
@@ -1110,6 +1114,7 @@ class _ShareGrid extends StatelessWidget {
         return Column(
           children: [
             InkWell(
+              // ignore: deprecated_member_use
               onTap: () => Share.share(videoUrl ?? 'Check this!'),
               customBorder: const CircleBorder(),
               child: CircleAvatar(radius: 28.r, child: Icon(it.icon)),

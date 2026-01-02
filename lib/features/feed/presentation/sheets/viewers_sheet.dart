@@ -55,7 +55,7 @@ class ViewersSheet extends StatelessWidget {
               ),
             ),
             SizedBox(height: 12.h),
-            ...viewers.map((v) => _ViewerTile(v)).toList(),
+            ...viewers.map((v) => _ViewerTile(v)),
           ],
         ),
       ),
@@ -96,14 +96,3 @@ class _ViewerTile extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
