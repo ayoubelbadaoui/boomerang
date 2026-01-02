@@ -1,8 +1,8 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Boots push notifications:
@@ -26,11 +26,29 @@ class _PushNotificationsBootstrap {
     ref.listen(authStateProvider, (prev, next) async {
       final user = next.asData?.value;
       if (user == null) {
+        developer.log(
+          '[notification push] ⚠️ No user signed in - FCM token will not be saved',
+        );
         return;
       }
+      developer.log(
+        '[notification push] 👤 User signed in: ${user.uid} - Configuring notifications...',
+      );
       await _configurePermissionsAndPresentation();
       await _saveCurrentTokenForUser(user.uid);
     });
+
+    // Also try to get token immediately if user is already signed in
+    final auth = ref.read(firebaseAuthProvider);
+    final currentUser = auth.currentUser;
+    if (currentUser != null) {
+      developer.log(
+        '[notification push] 👤 User already signed in: ${currentUser.uid} - Getting token...',
+      );
+      _configurePermissionsAndPresentation().then((_) {
+        _saveCurrentTokenForUser(currentUser.uid);
+      });
+    }
 
     // Token refresh handling
     _messaging.onTokenRefresh.listen((token) async {
@@ -42,12 +60,10 @@ class _PushNotificationsBootstrap {
 
     // Foreground message handler (basic no-UI handler)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      if (kDebugMode) {
-        debugPrint(
-          'FCM foreground message: ${message.messageId} '
-          'title=${message.notification?.title} body=${message.notification?.body}',
-        );
-      }
+      developer.log(
+        '[notification push] FCM foreground message: ${message.messageId} '
+        'title=${message.notification?.title} body=${message.notification?.body}',
+      );
       // For full foreground notifications, integrate a local notifications plugin.
     });
   }
@@ -61,37 +77,42 @@ class _PushNotificationsBootstrap {
         sound: true,
         provisional: false,
       );
-      if (kDebugMode) {
-        debugPrint(
-          '📱 APNs permission status: ${settings.authorizationStatus}',
-        );
-        debugPrint('   - Alert: ${settings.alert}');
-        debugPrint('   - Badge: ${settings.badge}');
-        debugPrint('   - Sound: ${settings.sound}');
-      }
+      developer.log(
+        '[notification push] 📱 APNs permission status: ${settings.authorizationStatus}',
+      );
+      developer.log('[notification push]    - Alert: ${settings.alert}');
+      developer.log('[notification push]    - Badge: ${settings.badge}');
+      developer.log('[notification push]    - Sound: ${settings.sound}');
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
         sound: true,
       );
     }
+
+    // Android: Request notification permission for Android 13+
+    if (Platform.isAndroid) {
+      final settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+      developer.log(
+        '[notification push] 📱 Android notification permission: ${settings.authorizationStatus}',
+      );
+    }
   }
 
   Future<void> _saveCurrentTokenForUser(String uid) async {
     final token = await _messaging.getToken();
-    if (kDebugMode) {
-      debugPrint('📱 FCM Token: ${token ?? "NULL"}');
-    }
+    developer.log('[notification push] 📱 FCM Token: ${token ?? "NULL"}');
     if (token == null || token.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('⚠️ FCM token is null or empty');
-      }
+      developer.log('[notification push] ⚠️ FCM token is null or empty');
       return;
     }
     await _saveToken(uid, token);
-    if (kDebugMode) {
-      debugPrint('✅ FCM token saved for user: $uid');
-    }
+    developer.log('[notification push] ✅ FCM token saved for user: $uid');
   }
 
   Future<void> _saveToken(String uid, String token) async {
@@ -119,9 +140,10 @@ class _PushNotificationsBootstrap {
     try {
       await tokenRef.set(payload, SetOptions(merge: true));
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Failed to save FCM token: $e');
-      }
+      developer.log(
+        '[notification push] Failed to save FCM token: $e',
+        error: e,
+      );
     }
   }
 }
