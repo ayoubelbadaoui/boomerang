@@ -51,8 +51,9 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
 /// Checks whether the current authenticated user has a profile document
 /// at `users/{uid}` in Firestore. Returns false if no user is authenticated.
 final userProfileExistsProvider = FutureProvider<bool>((ref) async {
-  final auth = ref.watch(firebaseAuthProvider);
-  final user = auth.currentUser;
+  // Track auth state changes so this provider refreshes on sign-in/out
+  final authState = ref.watch(authStateProvider);
+  final user = authState.asData?.value;
   if (user == null) return false;
   final firestore = ref.watch(firestoreProvider);
   final doc = await firestore.collection('users').doc(user.uid).get();
@@ -66,8 +67,9 @@ final userProfileExistsProvider = FutureProvider<bool>((ref) async {
 /// Checks whether the user profile is fully completed with required fields
 /// birthday, phone, and address under `users/{uid}`.
 final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
-  final auth = ref.watch(firebaseAuthProvider);
-  final user = auth.currentUser;
+  // Track auth state changes so this provider refreshes on sign-in/out
+  final authState = ref.watch(authStateProvider);
+  final user = authState.asData?.value;
   if (user == null) return false;
   final firestore = ref.watch(firestoreProvider);
   final doc = await firestore.collection('users').doc(user.uid).get();

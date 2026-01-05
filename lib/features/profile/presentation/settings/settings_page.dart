@@ -114,11 +114,7 @@ class SettingsPage extends ConsumerWidget {
                     'Logout',
                     style: TextStyle(color: Colors.red),
                   ),
-                  onTap: () async {
-                    await ref.read(authControllerProvider.notifier).logout();
-                    if (!context.mounted) return;
-                    context.go(OnboardingPage.routeName);
-                  },
+                  onTap: () => _confirmLogout(context, ref),
                 ),
               ],
             ),
@@ -151,4 +147,67 @@ class _Section extends StatelessWidget {
       onTap: onTap,
     );
   }
+}
+
+Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+  final theme = Theme.of(context);
+  await showModalBottomSheet<void>(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Logout',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Are you sure you want to log out?',
+                style: TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        await ref
+                            .read(authControllerProvider.notifier)
+                            .logout();
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                        context.go(OnboardingPage.routeName);
+                      },
+                      child: const Text('Logout'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }

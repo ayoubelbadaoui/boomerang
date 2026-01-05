@@ -185,4 +185,15 @@ class BoomerangRepo {
         .limit(100)
         .snapshots();
   }
+
+  /// Fetch a single boomerang document by id.
+  /// Returns null if not found.
+  Future<(String, Map<String, dynamic>)?> fetchBoomerangById(
+    String boomerangId,
+  ) async {
+    final snap = await _fs.collection('boomerangs').doc(boomerangId).get();
+    final data = snap.data();
+    if (!snap.exists || data == null) return null;
+    return (snap.id, data);
+  }
 }
