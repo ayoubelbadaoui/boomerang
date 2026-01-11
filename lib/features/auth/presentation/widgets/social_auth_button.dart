@@ -9,7 +9,7 @@ class AuthButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  final IconData icon;
+  final Widget icon;
   final String label;
   final VoidCallback onPressed;
 
@@ -25,7 +25,7 @@ class AuthButton extends StatelessWidget {
           ),
         ),
         onPressed: onPressed,
-        icon: Icon(icon, size: 24.r),
+        icon: icon,
         label: Text(
           label,
           style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),

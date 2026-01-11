@@ -94,6 +94,7 @@ flutter:
     - assets/bottom_navigation/active_light/
     - assets/bottom_navigation/inactive_light/
     - assets/cake.png
+    - assets/svgs/
     - assets/font/Urbanist/
 
   # An image asset can refer to one or more resolution-specific "variants", see

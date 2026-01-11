@@ -1,6 +1,7 @@
 import 'package:boomerang/features/auth/presentation/widgets/social_auth_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
@@ -48,19 +49,31 @@ class AuthChoicePage extends StatelessWidget {
               ),
               SizedBox(height: 40.h),
               AuthButton(
-                icon: Icons.facebook,
+                icon: SvgPicture.asset(
+                  'assets/svgs/facebook.svg',
+                  width: 24.w,
+                  height: 24.w,
+                ),
                 label: 'Continue with Facebook',
                 onPressed: () {},
               ),
               SizedBox(height: 16.h),
               AuthButton(
-                icon: Icons.g_mobiledata,
+                icon: SvgPicture.asset(
+                  'assets/svgs/google.svg',
+                  width: 24.w,
+                  height: 24.w,
+                ),
                 label: 'Continue with Google',
                 onPressed: () {},
               ),
               SizedBox(height: 16.h),
               AuthButton(
-                icon: Icons.apple,
+                icon: SvgPicture.asset(
+                  'assets/svgs/apple.svg',
+                  width: 24.w,
+                  height: 24.w,
+                ),
                 label: 'Continue with Apple',
                 onPressed: () {},
               ),
