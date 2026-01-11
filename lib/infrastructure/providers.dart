@@ -3,6 +3,7 @@ import 'package:boomerang/features/auth/domain/auth_state.dart';
 import 'package:boomerang/features/auth/infrastructure/auth_repo.dart';
 import 'package:boomerang/features/auth/infrastructure/firebase_auth_repo.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -92,6 +93,27 @@ final userProfileRepoProvider = Provider<UserProfileRepo>((ref) {
 final boomerangRepoProvider = Provider<BoomerangRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return BoomerangRepo(fs);
+});
+
+/// Stream of post ids liked by the current user, sourced from Firestore.
+/// This is the single source of truth for liked state in the UI.
+final likedPostIdsProvider = StreamProvider<Set<String>>((ref) {
+  final user = ref.watch(currentUserProfileProvider).value;
+  if (user == null) return const Stream.empty();
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('boomerangs')
+      .where('likedBy', arrayContains: user.uid)
+      .snapshots()
+      .map((snap) {
+        final set = snap.docs.map((d) => d.id).toSet();
+        debugPrint(
+            'likedPostIdsProvider: fetched ${set.length} liked ids for ${user.uid}');
+        return set;
+      })
+      .handleError((e, st) {
+        debugPrint('likedPostIdsProvider error: $e');
+      });
 });
 
 final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {

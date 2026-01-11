@@ -117,6 +117,8 @@ class _PostPage extends ConsumerStatefulWidget {
 class _PostPageState extends ConsumerState<_PostPage> {
   VideoPlayerController? _controller;
   bool _showPosterOverlay = true;
+  bool? _liked;
+  int? _likes;
   @override
   void initState() {
     super.initState();
@@ -157,6 +159,17 @@ class _PostPageState extends ConsumerState<_PostPage> {
   Future<void> _like() async {
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) return;
+    final baseLikedIds =
+        ref.read(likedPostIdsProvider).maybeWhen(data: (ids) => ids, orElse: () => <String>{});
+    final baseIsLiked = _liked ?? baseLikedIds.contains(widget.id);
+    final nextLiked = !baseIsLiked;
+    final currentLikes = _likes ?? (widget.data['likes'] ?? 0) as int;
+    final nextLikes = currentLikes + (nextLiked ? 1 : -1);
+    debugPrint('pager like tap post=${widget.id} nextLiked=$nextLiked');
+    setState(() {
+      _liked = nextLiked;
+      _likes = nextLikes;
+    });
     await ref
         .read(boomerangRepoProvider)
         .toggleLike(
@@ -175,11 +188,15 @@ class _PostPageState extends ConsumerState<_PostPage> {
     final avatar = data['userAvatar'] as String?;
     final image = data['imageUrl'] as String?;
     final userId = (data['userId'] ?? '') as String;
-    final likes = (data['likes'] ?? 0) as int;
+    final likes = _likes ?? (data['likes'] ?? 0) as int;
     final me = ref.read(currentUserProfileProvider).value;
     final likedBy =
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
-    final isLiked = me != null && likedBy.contains(me.uid);
+    final likedIds =
+        ref.watch(likedPostIdsProvider).value ?? const <String>{};
+    final isLiked = _liked ??
+        likedIds.contains(widget.id) ||
+        (me != null && likedBy.contains(me.uid));
 
     return Stack(
       children: [
