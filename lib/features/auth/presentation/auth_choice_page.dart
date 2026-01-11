@@ -80,12 +80,12 @@ class AuthChoicePage extends StatelessWidget {
               SizedBox(height: 32.h),
               Row(
                 children: [
-                  const Expanded(child: Divider()),
+                  const Expanded(child: Divider(color: Color(0xFFEEEEEE))),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12.w),
                     child: Text('or', style: TextStyle(fontSize: 14.sp)),
                   ),
-                  const Expanded(child: Divider()),
+                  const Expanded(child: Divider(color: Color(0xFFEEEEEE))),
                 ],
               ),
               SizedBox(height: 24.h),

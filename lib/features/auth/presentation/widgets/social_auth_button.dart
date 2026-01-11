@@ -19,6 +19,8 @@ class AuthButton extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          side: const BorderSide(color: Color(0xFFEEEEEE)),
           padding: EdgeInsets.symmetric(vertical: 16.h),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20.r),

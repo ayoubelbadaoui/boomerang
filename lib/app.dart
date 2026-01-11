@@ -23,6 +23,9 @@ class BoomerangApp extends ConsumerWidget {
             fontFamily: 'Urbanist',
             colorScheme: ColorScheme.fromSeed(
               seedColor: const Color(0xFF111111),
+            ).copyWith(
+              // Primary text/icon color for surfaces/buttons.
+              onSurface: const Color(0xFF212121),
             ),
             useMaterial3: true,
           ),
