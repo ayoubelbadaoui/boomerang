@@ -98,7 +98,7 @@ class _CreateTabState extends ConsumerState<CreateTab> {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(100),
                       ),
                     ),
                     icon: const Icon(Icons.videocam_outlined),
@@ -117,7 +117,7 @@ class _CreateTabState extends ConsumerState<CreateTab> {
                       side: const BorderSide(color: Colors.black, width: 1.5),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(100),
                       ),
                     ),
                     icon: const Icon(Icons.video_library_outlined),

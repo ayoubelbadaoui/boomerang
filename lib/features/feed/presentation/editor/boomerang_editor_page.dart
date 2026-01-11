@@ -449,7 +449,7 @@ class _Controls extends StatelessWidget {
                 backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(100),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
