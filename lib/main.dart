@@ -41,14 +41,15 @@ class _BootstrapAppState extends State<_BootstrapApp> {
 
   Future<_BootstrapState> _initialize() async {
     final hasInternet = await _hasInternetConnection();
-    if (!hasInternet) return _BootstrapState.offline;
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
       return _BootstrapState.ready;
     } catch (_) {
-      return _BootstrapState.error;
+      // If we can reach the network but Firebase fails, surface an error;
+      // otherwise treat it as offline so the user can retry.
+      return hasInternet ? _BootstrapState.error : _BootstrapState.offline;
     }
   }
 
@@ -124,12 +125,23 @@ class _OfflineApp extends StatelessWidget {
 }
 
 Future<bool> _hasInternetConnection() async {
-  try {
-    final result = await InternetAddress.lookup(
-      'clients3.google.com',
-    ).timeout(const Duration(seconds: 3));
-    return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
-  } catch (_) {
-    return false;
+  const hosts = [
+    // Multiple hosts to reduce false negatives on networks that block a single domain.
+    'example.com',
+    'cloudflare.com',
+    'google.com',
+  ];
+  for (final host in hosts) {
+    try {
+      final result = await InternetAddress.lookup(
+        host,
+      ).timeout(const Duration(seconds: 3));
+      if (result.isNotEmpty && result.first.rawAddress.isNotEmpty) {
+        return true;
+      }
+    } catch (_) {
+      // try next host
+    }
   }
+  return false;
 }
