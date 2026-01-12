@@ -15,6 +15,8 @@ import 'package:boomerang/features/feed/presentation/sheets/viewers_sheet.dart';
 import 'package:boomerang/features/feed/presentation/sheets/ranking_sheet.dart';
 // import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/core/widgets/avatar.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -106,21 +108,32 @@ class _PaginatedBoomerangListState
   @override
   Widget build(BuildContext context) {
     final likedIds = ref.watch(likedPostIdsProvider).value ?? const <String>{};
-    if (_docs.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_docs.isEmpty) {
-      return const Center(child: Text('No boomerangs yet'));
-    }
+    final isLoadingInitial = _docs.isEmpty && _loading;
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         primary: false,
         controller: _controller,
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
-        itemCount: _docs.length + (_hasMore ? 1 : 0),
+        itemCount:
+            isLoadingInitial
+                ? 1
+                : (_docs.length + (_hasMore ? 1 : (_docs.isEmpty ? 1 : 0))),
         separatorBuilder: (_, __) => SizedBox(height: 16.h),
         itemBuilder: (context, i) {
+          if (isLoadingInitial) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (_docs.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: Text('No boomerangs yet')),
+            );
+          }
           if (i >= _docs.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
@@ -421,8 +434,7 @@ class _LikeButtonState extends ConsumerState<_LikeButton> {
                     .toggleLike(
                       boomerangId: widget.postId,
                       userId: me.uid,
-                      actorName:
-                          me.nickname.isNotEmpty ? me.nickname : me.fullName,
+                      actorName: _bestName(me),
                       actorAvatar: me.avatarUrl,
                     );
               },
@@ -461,6 +473,13 @@ class _DoubleTapLikeArea extends ConsumerStatefulWidget {
   ConsumerState<_DoubleTapLikeArea> createState() => _DoubleTapLikeAreaState();
 }
 
+String _bestName(UserProfile profile) {
+  if (profile.nickname.trim().isNotEmpty) return profile.nickname;
+  if (profile.username.trim().isNotEmpty) return profile.username;
+  if (profile.fullName.trim().isNotEmpty) return profile.fullName;
+  return 'User';
+}
+
 class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
     with SingleTickerProviderStateMixin {
   bool _showHeart = false;
@@ -490,7 +509,7 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
         .toggleLike(
           boomerangId: widget.postId,
           userId: me.uid,
-          actorName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
+          actorName: _bestName(me),
           actorAvatar: me.avatarUrl,
         );
   }
@@ -856,20 +875,7 @@ class _CommentTile extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 22.r,
-                backgroundImage:
-                    userAvatar != null
-                        ? ResizeImage.resizeIfNeeded(
-                          (44.r * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                          (44.r * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                          NetworkImage(userAvatar!),
-                        )
-                        : null,
-                onBackgroundImageError: userAvatar != null ? (_, __) {} : null,
-              ),
+              AppAvatar(url: userAvatar, size: 44.r),
               SizedBox(width: 12.w),
               Expanded(
                 child: Column(

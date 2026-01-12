@@ -20,6 +20,10 @@ class CommentsRepo {
     String? userAvatar,
     required String text,
   }) async {
+    String _avatar(String? url, String seed) =>
+        (url != null && url.isNotEmpty)
+            ? url
+            : 'https://picsum.photos/seed/$seed/200/200';
     await _fs
         .collection('boomerangs')
         .doc(boomerangId)
@@ -35,28 +39,26 @@ class CommentsRepo {
         });
     // Notify owner of the boomerang about the new comment
     try {
-      final postSnap =
-          await _fs.collection('boomerangs').doc(boomerangId).get();
-      if (postSnap.exists) {
-        final data = postSnap.data() as Map<String, dynamic>;
-        final ownerId = (data['userId'] ?? '') as String;
-        if (ownerId.isNotEmpty && ownerId != userId) {
-          await _fs
-              .collection('notifications')
-              .doc(ownerId)
-              .collection('items')
-              .add({
-                'type': 'comment',
-                'boomerangId': boomerangId,
-                'boomerangImage': data['imageUrl'],
-                'actorUserId': userId,
-                'actorName': userName,
-                'actorAvatar': userAvatar,
-                'text': text,
-                'createdAt': FieldValue.serverTimestamp(),
-              });
-        }
-      }
+      final postSnap = await _fs.collection('boomerangs').doc(boomerangId).get();
+      if (!postSnap.exists) return;
+      final data = postSnap.data() as Map<String, dynamic>;
+      final ownerId = (data['userId'] ?? '') as String;
+      if (ownerId.isEmpty || ownerId == userId) return;
+      await _fs
+          .collection('users')
+          .doc(ownerId)
+          .collection('notifications')
+          .add({
+            'type': 'comment',
+            'boomerangId': boomerangId,
+            'boomerangImage': data['imageUrl'],
+            'senderId': userId,
+            'actorName': userName,
+          'actorAvatar': _avatar(userAvatar, userId),
+            'text': text,
+            'read': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
     } catch (_) {
       // ignore notification failure
     }
@@ -70,6 +72,10 @@ class CommentsRepo {
     String? userAvatar,
     required String text,
   }) async {
+    String _avatar(String? url, String seed) =>
+        (url != null && url.isNotEmpty)
+            ? url
+            : 'https://picsum.photos/seed/$seed/200/200';
     await _fs
         .collection('boomerangs')
         .doc(boomerangId)
@@ -85,6 +91,31 @@ class CommentsRepo {
           'likes': 0,
           'likedBy': <String>[],
         });
+    // Best-effort notify post owner as well.
+    try {
+      final postSnap = await _fs.collection('boomerangs').doc(boomerangId).get();
+      if (!postSnap.exists) return;
+      final data = postSnap.data() as Map<String, dynamic>;
+      final ownerId = (data['userId'] ?? '') as String;
+      if (ownerId.isEmpty || ownerId == userId) return;
+      await _fs
+          .collection('users')
+          .doc(ownerId)
+          .collection('notifications')
+          .add({
+            'type': 'comment',
+            'boomerangId': boomerangId,
+            'boomerangImage': data['imageUrl'],
+            'senderId': userId,
+            'actorName': userName,
+            'actorAvatar': _avatar(userAvatar, userId),
+            'text': text,
+            'read': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+    } catch (_) {
+      // ignore notification failure
+    }
   }
 
   Future<void> toggleLike({

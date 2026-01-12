@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/core/widgets/avatar.dart';
 
 class BoomerangPagerPage extends ConsumerStatefulWidget {
   const BoomerangPagerPage({
@@ -119,6 +121,14 @@ class _PostPageState extends ConsumerState<_PostPage> {
   bool _showPosterOverlay = true;
   bool? _liked;
   int? _likes;
+
+  String _bestName(UserProfile profile) {
+    if (profile.nickname.trim().isNotEmpty) return profile.nickname;
+    if (profile.username.trim().isNotEmpty) return profile.username;
+    if (profile.fullName.trim().isNotEmpty) return profile.fullName;
+    return 'User';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -159,8 +169,9 @@ class _PostPageState extends ConsumerState<_PostPage> {
   Future<void> _like() async {
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) return;
-    final baseLikedIds =
-        ref.read(likedPostIdsProvider).maybeWhen(data: (ids) => ids, orElse: () => <String>{});
+    final baseLikedIds = ref
+        .read(likedPostIdsProvider)
+        .maybeWhen(data: (ids) => ids, orElse: () => <String>{});
     final baseIsLiked = _liked ?? baseLikedIds.contains(widget.id);
     final nextLiked = !baseIsLiked;
     final currentLikes = _likes ?? (widget.data['likes'] ?? 0) as int;
@@ -175,7 +186,7 @@ class _PostPageState extends ConsumerState<_PostPage> {
         .toggleLike(
           boomerangId: widget.id,
           userId: me.uid,
-          actorName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
+          actorName: _bestName(me),
           actorAvatar: me.avatarUrl,
         );
   }
@@ -192,11 +203,11 @@ class _PostPageState extends ConsumerState<_PostPage> {
     final me = ref.read(currentUserProfileProvider).value;
     final likedBy =
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
-    final likedIds =
-        ref.watch(likedPostIdsProvider).value ?? const <String>{};
-    final isLiked = _liked ??
+    final likedIds = ref.watch(likedPostIdsProvider).value ?? const <String>{};
+    final isLiked =
+        _liked ??
         likedIds.contains(widget.id) ||
-        (me != null && likedBy.contains(me.uid));
+            (me != null && likedBy.contains(me.uid));
 
     return Stack(
       children: [
@@ -240,11 +251,7 @@ class _PostPageState extends ConsumerState<_PostPage> {
                 onTap:
                     () => _showProfilePreview(context, handle, avatar, userId),
                 customBorder: const CircleBorder(),
-                child: CircleAvatar(
-                  radius: 14.r,
-                  backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                  onBackgroundImageError: avatar != null ? (_, __) {} : null,
-                ),
+                child: AppAvatar(url: avatar, size: 28.r, iconSize: 14.r),
               ),
               SizedBox(width: 8.w),
               Expanded(

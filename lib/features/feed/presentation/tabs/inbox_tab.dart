@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/core/widgets/avatar.dart';
 
 class InboxTab extends ConsumerWidget {
   const InboxTab({super.key});
@@ -42,91 +43,114 @@ class InboxTab extends ConsumerWidget {
       body:
           uid == null
               ? const Center(child: Text('Sign in to see notifications'))
-              : StreamBuilder(
-                stream: ref.watch(notificationsRepoProvider).watch(uid),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final docs = snapshot.data!.docs;
-                  if (docs.isEmpty) {
-                    return const Center(child: Text('No notifications yet'));
-                  }
-                  final items =
-                      docs.map((doc) {
-                        final d = doc.data();
-                        final type = (d['type'] ?? '') as String;
-                        final title = (d['actorName'] ?? 'User') as String;
-                        final avatar = d['actorAvatar'] as String?;
-                        final ts = d['createdAt'];
-                        final createdAt =
-                            ts is Timestamp ? ts.toDate() : DateTime.now();
-                        String subtitle = '';
-                        String? thumb;
-                        String? action;
-                        _ItemType itemType = _ItemType.other;
-                        if (type == 'follow') {
-                          subtitle = 'Started following you';
-                          action = 'Follow Back';
-                          itemType = _ItemType.follow;
-                        } else if (type == 'like') {
-                          subtitle = 'Liked your video';
-                          thumb = d['boomerangImage'] as String?;
-                          itemType = _ItemType.like;
-                        } else if (type == 'comment') {
-                          subtitle = 'Commented on your video';
-                          thumb = d['boomerangImage'] as String?;
-                          itemType = _ItemType.comment;
-                        } else {
-                          subtitle = 'Activity';
-                        }
-                        return _Item(
-                          avatar:
-                              avatar ??
-                              'https://picsum.photos/seed/a${title.hashCode}/100/100',
-                          title: title,
-                          subtitle: subtitle,
-                          trailingThumb: thumb,
-                          actionLabel: action,
-                          createdAt: createdAt,
-                          actorId: (d['actorUserId'] ?? '') as String,
-                          boomerangId: d['boomerangId'] as String?,
-                          commentId: d['commentId'] as String?,
-                          type: itemType,
-                        );
-                      }).toList();
+              : RefreshIndicator(
+                onRefresh: () async {},
+                child: StreamBuilder(
+                  stream: ref.watch(notificationsRepoProvider).watch(uid),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = snapshot.data!.docs;
+                    final items =
+                        docs.map((doc) {
+                          final d = doc.data();
+                          final type = (d['type'] ?? '') as String;
+                          final rawTitle = (d['actorName'] ?? '') as String;
+                          final senderId =
+                              ((d['senderId'] ?? d['actorUserId']) ?? '')
+                                  as String;
+                          final title =
+                              rawTitle.trim().isNotEmpty
+                                  ? rawTitle
+                                  : (senderId.isNotEmpty
+                                      ? 'user_${senderId.substring(0, senderId.length.clamp(0, 6))}'
+                                      : 'User');
+                          final avatar = d['actorAvatar'] as String?;
+                          final ts = d['createdAt'];
+                          final createdAt =
+                              ts is Timestamp ? ts.toDate() : DateTime.now();
+                          String subtitle = '';
+                          String? thumb;
+                          String? action;
+                          _ItemType itemType = _ItemType.other;
+                          final read = (d['read'] ?? false) as bool;
+                          if (type == 'follow') {
+                            subtitle = 'Started following you';
+                            action = 'Follow Back';
+                            itemType = _ItemType.follow;
+                          } else if (type == 'like') {
+                            subtitle = 'Liked your video';
+                            thumb = d['boomerangImage'] as String?;
+                            itemType = _ItemType.like;
+                          } else if (type == 'comment') {
+                            subtitle = 'Commented on your video';
+                            thumb = d['boomerangImage'] as String?;
+                            itemType = _ItemType.comment;
+                          } else {
+                            subtitle = 'Activity';
+                          }
+                          return _Item(
+                            id: doc.id,
+                            avatar:
+                                avatar ??
+                                'https://picsum.photos/seed/a${title.hashCode}/100/100',
+                            title: title,
+                            subtitle: subtitle,
+                            trailingThumb: thumb,
+                            actionLabel: action,
+                            createdAt: createdAt,
+                            actorId: senderId,
+                            boomerangId: d['boomerangId'] as String?,
+                            commentId: d['commentId'] as String?,
+                            type: itemType,
+                            read: read,
+                          );
+                        }).toList();
 
-                  final sections = _groupSections(items);
-                  final children = <Widget>[];
-                  for (final section in sections) {
-                    children.add(
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 4.h),
-                        child: Text(
-                          section.label,
-                          style: TextStyle(
-                            fontSize: 22.sp,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    );
-                    for (final item in section.items) {
-                      children.add(
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.w),
-                          child: _ActivityTile(item: item),
-                        ),
+                    if (items.isEmpty) {
+                      return ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          SizedBox(height: 200),
+                          Center(child: Text('No notifications yet')),
+                        ],
                       );
                     }
-                  }
 
-                  return ListView.builder(
-                    padding: EdgeInsets.only(bottom: 24.h),
-                    itemCount: children.length,
-                    itemBuilder: (_, i) => children[i],
-                  );
-                },
+                    final sections = _groupSections(items);
+                    final children = <Widget>[];
+                    for (final section in sections) {
+                      children.add(
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 4.h),
+                          child: Text(
+                            section.label,
+                            style: TextStyle(
+                              fontSize: 22.sp,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      );
+                      for (final item in section.items) {
+                        children.add(
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16.w),
+                            child: _ActivityTile(item: item),
+                          ),
+                        );
+                      }
+                    }
+
+                    return ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.only(bottom: 24.h),
+                      itemCount: children.length,
+                      itemBuilder: (_, i) => children[i],
+                    );
+                  },
+                ),
               ),
     );
   }
@@ -134,23 +158,27 @@ class InboxTab extends ConsumerWidget {
 
 class _Item {
   _Item({
+    required this.id,
     required this.avatar,
     required this.title,
     required this.subtitle,
     required this.createdAt,
     required this.actorId,
     required this.type,
+    required this.read,
     this.trailingThumb,
     this.actionLabel,
     this.boomerangId,
     this.commentId,
   });
+  final String id;
   final String avatar;
   final String title;
   final String subtitle;
   final DateTime createdAt;
   final String actorId;
   final _ItemType type;
+  final bool read;
   final String? boomerangId;
   final String? commentId;
   final String? trailingThumb;
@@ -219,10 +247,7 @@ class _ActivityTile extends StatelessWidget {
                 InkWell(
                   onTap: () => _openProfile(context, ref, item),
                   customBorder: const CircleBorder(),
-                  child: CircleAvatar(
-                    radius: 30.r,
-                    backgroundImage: NetworkImage(item.avatar),
-                  ),
+                  child: AppAvatar(url: item.avatar, size: 60.r),
                 ),
                 SizedBox(width: 12.w),
                 Expanded(
@@ -235,7 +260,8 @@ class _ActivityTile extends StatelessWidget {
                           item.title,
                           style: TextStyle(
                             fontSize: 18.sp,
-                            fontWeight: FontWeight.w800,
+                            fontWeight:
+                                item.read ? FontWeight.w600 : FontWeight.w800,
                           ),
                         ),
                       ),
@@ -330,6 +356,7 @@ Future<void> _handleTap(BuildContext context, WidgetRef ref, _Item item) async {
     case _ItemType.other:
       break;
   }
+  await _markRead(ref, item);
 }
 
 Future<void> _openProfile(
@@ -354,6 +381,14 @@ Future<void> _openProfile(
       );
     },
   );
+}
+
+Future<void> _markRead(WidgetRef ref, _Item item) async {
+  final me = ref.read(currentUserProfileProvider).value;
+  if (me == null || item.read) return;
+  await ref
+      .read(notificationsRepoProvider)
+      .markRead(uid: me.uid, notificationId: item.id);
 }
 
 Future<void> _followBack(WidgetRef ref, String actorId) async {

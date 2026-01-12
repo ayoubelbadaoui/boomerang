@@ -21,6 +21,21 @@ class FollowRepo {
     final targetData = targetDoc.data() ?? <String, dynamic>{};
     final meData = meDoc.data() ?? <String, dynamic>{};
 
+    String pickName(Map<String, dynamic> data) {
+      final nickname = (data['nickname'] ?? '') as String;
+      final username = (data['username'] ?? '') as String;
+      final fullName = (data['fullName'] ?? '') as String;
+      if (nickname.trim().isNotEmpty) return nickname;
+      if (username.trim().isNotEmpty) return username;
+      if (fullName.trim().isNotEmpty) return fullName;
+      return 'User';
+    }
+    String pickAvatar(Map<String, dynamic> data, String seed) {
+      final avatar = (data['avatarUrl'] ?? '') as String;
+      if (avatar.trim().isNotEmpty) return avatar;
+      return 'https://picsum.photos/seed/$seed/200/200';
+    }
+
     final batch = _fs.batch();
 
     final followingRef = _fs
@@ -30,11 +45,7 @@ class FollowRepo {
         .doc(targetUserId);
     batch.set(followingRef, {
       'userId': targetUserId,
-      'userName':
-          (targetData['nickname']?.toString().isNotEmpty == true
-              ? targetData['nickname']
-              : targetData['fullName']) ??
-          'User',
+      'userName': pickName(targetData),
       'userAvatar': targetData['avatarUrl'],
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -46,32 +57,25 @@ class FollowRepo {
         .doc(me);
     batch.set(followersRef, {
       'userId': me,
-      'userName':
-          (meData['nickname']?.toString().isNotEmpty == true
-              ? meData['nickname']
-              : meData['fullName']) ??
-          'User',
+      'userName': pickName(meData),
       'userAvatar': meData['avatarUrl'],
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     await batch.commit();
 
-    // Add a notification for the target user
-    final actorName =
-        (meData['nickname']?.toString().isNotEmpty == true
-            ? meData['nickname']
-            : meData['fullName']) ??
-        'User';
+    // Add a notification for the target user (new path + fields)
+    final actorName = pickName(meData);
     await _fs
-        .collection('notifications')
+        .collection('users')
         .doc(targetUserId)
-        .collection('items')
+        .collection('notifications')
         .add({
           'type': 'follow',
-          'actorUserId': me,
+          'senderId': me,
           'actorName': actorName,
-          'actorAvatar': meData['avatarUrl'],
+          'actorAvatar': pickAvatar(meData, me),
+          'read': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
   }

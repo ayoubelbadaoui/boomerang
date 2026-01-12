@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // User profiles
+    match /users/{uid} {
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.nickname is string
+        && request.resource.data.nicknameLower is string
+        && request.resource.data.nicknameLower == lower(request.resource.data.nickname)
+        && request.resource.data.nicknameLower.size() >= 3
+        && request.resource.data.nicknameLower.size() <= 20
+        && request.resource.data.nicknameLower.matches('^[a-z0-9._]+$')
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() > 0
+        && request.resource.data.fullNameLower is string
+        && request.resource.data.fullNameLower == lower(request.resource.data.fullName);
+
+      allow update: if isSignedIn()
+        && request.auth.uid == uid;
+
+      allow read: if true;
+    }
+
+    // Notifications per user
+    match /users/{uid}/notifications/{nid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.type is string
+        && request.resource.data.senderId is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.read is bool;
+      // Prevent flipping read back to false
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.read == true
+        && resource.data.read == false;
+      allow delete: if false;
+    }
+  }
+}

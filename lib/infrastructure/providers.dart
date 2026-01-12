@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:boomerang/features/profile/infrastructure/user_profile_repo.dart';
+import 'package:boomerang/features/profile/infrastructure/username_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_repo.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/infrastructure/comments_repo.dart';
@@ -58,11 +59,7 @@ final userProfileExistsProvider = FutureProvider<bool>((ref) async {
   if (user == null) return false;
   final firestore = ref.watch(firestoreProvider);
   final doc = await firestore.collection('users').doc(user.uid).get();
-  if (doc.exists) return true;
-  // Create a minimal profile document so setup flow can complete it
-  final repo = ref.read(userProfileRepoProvider);
-  await repo.ensureBasicProfileIfMissing();
-  return true;
+  return doc.exists;
 });
 
 /// Checks whether the user profile is fully completed with required fields
@@ -83,11 +80,38 @@ final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
       data['address'] != null);
 });
 
+/// Does the current user have a valid username persisted?
+final userHasUsernameProvider = FutureProvider<bool>((ref) async {
+  final authState = ref.watch(authStateProvider);
+  final user = authState.asData?.value;
+  if (user == null) return false;
+  final firestore = ref.watch(firestoreProvider);
+  final doc = await firestore.collection('users').doc(user.uid).get();
+  if (!doc.exists) return false;
+  final data = doc.data();
+  if (data == null) return false;
+  final nickname = (data['nickname'] ?? '') as String;
+  final nicknameLower = (data['nicknameLower'] ?? '') as String;
+  final ok = nickname.trim().isNotEmpty &&
+      nicknameLower.trim().isNotEmpty &&
+      nicknameLower == nicknameLower.toLowerCase();
+  if (!ok) {
+    debugPrint('userHasUsernameProvider: missing/invalid username for ${user.uid}');
+  }
+  return ok;
+});
+
 final userProfileRepoProvider = Provider<UserProfileRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   final auth = ref.watch(firebaseAuthProvider);
   final storage = ref.watch(storageProvider);
   return UserProfileRepo(fs, auth, storage);
+});
+
+final usernameRepoProvider = Provider<UsernameRepo>((ref) {
+  final fs = ref.watch(firestoreProvider);
+  final auth = ref.watch(firebaseAuthProvider);
+  return UsernameRepo(fs, auth);
 });
 
 final boomerangRepoProvider = Provider<BoomerangRepo>((ref) {
@@ -157,6 +181,12 @@ final commentsRepoProvider = Provider<CommentsRepo>((ref) {
 final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return NotificationsRepo(fs);
+});
+
+/// Unread notifications count for current user.
+final unreadCountProvider =
+    StreamProvider.family<int, String>((ref, uid) async* {
+  yield* ref.watch(notificationsRepoProvider).watchUnreadCount(uid);
 });
 
 final savedRepoProvider = Provider<SavedRepo>((ref) {

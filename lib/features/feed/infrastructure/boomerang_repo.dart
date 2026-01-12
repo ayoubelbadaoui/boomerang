@@ -94,6 +94,10 @@ class BoomerangRepo {
     String? actorName,
     String? actorAvatar,
   }) async {
+    String _avatar(String? url, String seed) =>
+        (url != null && url.isNotEmpty)
+            ? url
+            : 'https://picsum.photos/seed/$seed/200/200';
     final ref = _fs.collection('boomerangs').doc(boomerangId);
     bool addedLike = false;
     Map<String, dynamic>? boomerangData;
@@ -120,16 +124,17 @@ class BoomerangRepo {
       final ownerId = (boomerangData!['userId'] ?? '') as String;
       if (ownerId.isNotEmpty && ownerId != userId) {
         await _fs
-            .collection('notifications')
+            .collection('users')
             .doc(ownerId)
-            .collection('items')
+            .collection('notifications')
             .add({
               'type': 'like',
               'boomerangId': boomerangId,
               'boomerangImage': boomerangData!['imageUrl'],
-              'actorUserId': userId,
+              'senderId': userId,
               'actorName': actorName,
-              'actorAvatar': actorAvatar,
+              'actorAvatar': _avatar(actorAvatar, userId),
+              'read': false,
               'createdAt': FieldValue.serverTimestamp(),
             });
       }

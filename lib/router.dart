@@ -8,6 +8,7 @@ import 'features/auth/presentation/onboarding_page.dart';
 import 'features/auth/presentation/auth_choice_page.dart';
 import 'features/auth/presentation/setup_profile_page.dart';
 import 'features/auth/presentation/setup_flow_page.dart';
+import 'features/auth/presentation/choose_username_page.dart';
 import 'infrastructure/providers.dart';
 
 final router = GoRouter(
@@ -36,6 +37,10 @@ final router = GoRouter(
       path: SetupFlowPage.routeName,
       builder: (c, s) => const SetupFlowPage(),
     ),
+    GoRoute(
+      path: ChooseUsernamePage.routeName,
+      builder: (c, s) => const ChooseUsernamePage(),
+    ),
     GoRoute(path: HomeShell.routeName, builder: (c, s) => const HomeShell()),
   ],
   redirect: (context, state) {
@@ -43,11 +48,13 @@ final router = GoRouter(
     final auth = container.read(authStateProvider);
     final profileExists = container.read(userProfileExistsProvider);
     final profileComplete = container.read(userProfileCompleteProvider);
+    final hasUsername = container.read(userHasUsernameProvider);
     final isAuthChoice = state.fullPath == AuthChoicePage.routeName;
     final isLogin = state.fullPath == LoginPage.routeName;
     final isSignup = state.fullPath == SignupPage.routeName;
     final isOnboarding = state.fullPath == OnboardingPage.routeName;
     final isSetupFlow = state.fullPath == SetupFlowPage.routeName;
+    final isChooseUsername = state.fullPath == ChooseUsernamePage.routeName;
 
     if (auth.asData == null) return null; // wait until first frame resolves
     final user = auth.asData!.value;
@@ -59,10 +66,15 @@ final router = GoRouter(
       return isAuthFlow ? null : OnboardingPage.routeName;
     }
 
-    // User is signed in: if they have a profile, send to home when on onboarding
-    if (profileExists.asData == null || profileComplete.asData == null) {
+    // User signed in: wait for username/profile checks
+    if (hasUsername.asData == null ||
+        profileExists.asData == null ||
+        profileComplete.asData == null) {
       return null; // wait checks
     }
+    final hasName = hasUsername.asData!.value;
+    if (!hasName && !isChooseUsername) return ChooseUsernamePage.routeName;
+    if (hasName && isChooseUsername) return HomeShell.routeName;
     final hasProfile = profileExists.asData!.value;
     final isComplete = profileComplete.asData!.value;
     if (hasProfile && isComplete && isOnboarding) return HomeShell.routeName;

@@ -8,6 +8,9 @@ import 'tabs/inbox_tab.dart';
 import '../../profile/presentation/profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/auth/presentation/choose_username_page.dart';
+import 'package:go_router/go_router.dart';
+import 'package:boomerang/features/feed/presentation/widgets/badge.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -31,7 +34,22 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Consumer(
+      builder: (context, ref, _) {
+        final usernameState = ref.watch(userHasUsernameProvider);
+        if (usernameState.isLoading) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final hasUsername = usernameState.asData?.value ?? false;
+        if (!hasUsername) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) context.go(ChooseUsernamePage.routeName);
+          });
+          return const Scaffold();
+        }
+        return Scaffold(
       appBar:
           _currentIndex == 0
               ? AppBar(
@@ -110,6 +128,18 @@ class _HomeShellState extends State<HomeShell> {
                 inactiveIcon:
                     'assets/bottom_navigation/inactive_light/chat.svg',
                 onTap: () => setState(() => _currentIndex = 3),
+                badge: Consumer(
+                  builder: (context, ref, _) {
+                    final me = ref.watch(currentUserProfileProvider).value;
+                    if (me == null) return const SizedBox.shrink();
+                    final unread =
+                        ref.watch(unreadCountProvider(me.uid)).maybeWhen(
+                              data: (c) => c,
+                              orElse: () => 0,
+                            );
+                    return AppBadge(count: unread);
+                  },
+                ),
               ),
               _NavItem(
                 label: 'Profile',
@@ -123,6 +153,8 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
       ),
+        );
+      },
     );
   }
 }
@@ -136,6 +168,7 @@ class _NavItem extends StatelessWidget {
     required this.activeIcon,
     required this.inactiveIcon,
     required this.onTap,
+    this.badge,
   });
 
   final String label;
@@ -143,6 +176,7 @@ class _NavItem extends StatelessWidget {
   final String activeIcon;
   final String inactiveIcon;
   final VoidCallback onTap;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -153,11 +187,22 @@ class _NavItem extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SvgPicture.asset(
-            active ? activeIcon : inactiveIcon,
-            height: 24.h,
-            width: 24.h,
-            colorFilter: null,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SvgPicture.asset(
+                active ? activeIcon : inactiveIcon,
+                height: 24.h,
+                width: 24.h,
+                colorFilter: null,
+              ),
+              if (badge != null)
+                Positioned(
+                  right: -10,
+                  top: -6,
+                  child: badge!,
+                ),
+            ],
           ),
           SizedBox(height: 6.h),
           Text(label, style: TextStyle(fontSize: 12.sp, color: color)),
