@@ -64,9 +64,9 @@ class NotificationsRepo {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watch(String uid) {
     return _fs
-        .collection('users')
-        .doc(uid)
         .collection('notifications')
+        .doc(uid)
+        .collection('items')
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
@@ -74,9 +74,9 @@ class NotificationsRepo {
   /// Stream unread count using server-side filtering.
   Stream<int> watchUnreadCount(String uid) {
     return _fs
-        .collection('users')
-        .doc(uid)
         .collection('notifications')
+        .doc(uid)
+        .collection('items')
         .where('read', isEqualTo: false)
         .snapshots()
         .map((snap) => snap.size);
@@ -84,15 +84,24 @@ class NotificationsRepo {
 
   /// Mark a single notification as read (idempotent).
   Future<void> markRead({required String uid, required String notificationId}) {
-    final ref =
+    final canonical =
+        _fs.collection('notifications').doc(uid).collection('items').doc(notificationId);
+    final legacy =
         _fs.collection('users').doc(uid).collection('notifications').doc(notificationId);
-    return _fs.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) return;
-      final data = snap.data() as Map<String, dynamic>;
-      if (data['read'] == true) return;
-      tx.update(ref, {'read': true, 'readAt': FieldValue.serverTimestamp()});
-    });
+
+    Future<void> updateDoc(DocumentReference<Map<String, dynamic>> ref) async {
+      await _fs.runTransaction((tx) async {
+        final snap = await tx.get(ref);
+        if (!snap.exists) return;
+        final data = snap.data() as Map<String, dynamic>;
+        if (data['read'] == true) return;
+        tx.update(ref, {'read': true, 'readAt': FieldValue.serverTimestamp()});
+      }).catchError((_) {
+        // ignore if legacy doc missing
+      });
+    }
+
+    return Future.wait([updateDoc(canonical), updateDoc(legacy)]);
   }
 }
 

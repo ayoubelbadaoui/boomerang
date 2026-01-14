@@ -309,11 +309,8 @@ class _ActivityTile extends StatelessWidget {
                 SizedBox(width: 12.w),
                 if (item.type == _ItemType.followRequest)
                   _FollowRequestActions(item: item)
-                else if (item.actionLabel != null)
-                  _FollowButton(
-                    label: item.actionLabel!,
-                    onPressed: () => _followBack(ref, item.actorId),
-                  )
+                else if (item.type == _ItemType.follow)
+                  _FollowBackButton(item: item)
                 else if (item.trailingThumb != null)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12.r),
@@ -328,6 +325,33 @@ class _ActivityTile extends StatelessWidget {
             ),
           ),
         );
+      },
+    );
+  }
+}
+
+class _FollowBackButton extends ConsumerWidget {
+  const _FollowBackButton({required this.item});
+  final _Item item;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (item.actorId.isEmpty) return const SizedBox.shrink();
+
+    final isFollowingAsync = ref.watch(isFollowingStreamProvider(item.actorId));
+    final isFollowing = isFollowingAsync.value ?? false;
+    final label =
+        isFollowing ? 'Unfollow' : (item.actionLabel ?? 'Follow Back');
+
+    return _FollowButton(
+      label: label,
+      onPressed: () async {
+        final repo = ref.read(followRepoProvider);
+        if (isFollowing) {
+          await repo.unfollow(item.actorId);
+        } else {
+          await repo.follow(item.actorId);
+        }
       },
     );
   }
@@ -499,11 +523,6 @@ Future<void> _markRead(WidgetRef ref, _Item item) async {
   await ref
       .read(notificationsRepoProvider)
       .markRead(uid: me.uid, notificationId: item.id);
-}
-
-Future<void> _followBack(WidgetRef ref, String actorId) async {
-  if (actorId.isEmpty) return;
-  await ref.read(followRepoProvider).follow(actorId);
 }
 
 Future<void> _openPost(BuildContext context, WidgetRef ref, _Item item) async {

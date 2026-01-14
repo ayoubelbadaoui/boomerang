@@ -31,12 +31,20 @@ class _BootstrapApp extends StatefulWidget {
 enum _BootstrapState { ready, offline, error }
 
 class _BootstrapAppState extends State<_BootstrapApp> {
-  late final Future<_BootstrapState> _initialization;
+  late Future<_BootstrapState> _initialization;
+  String? _lastErrorMessage;
 
   @override
   void initState() {
     super.initState();
-    _initialization = _initialize();
+    _startInitialization();
+  }
+
+  void _startInitialization() {
+    setState(() {
+      _lastErrorMessage = null;
+      _initialization = _initialize();
+    });
   }
 
   Future<_BootstrapState> _initialize() async {
@@ -46,7 +54,13 @@ class _BootstrapAppState extends State<_BootstrapApp> {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       return _BootstrapState.ready;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('Firebase initialization failed: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _lastErrorMessage = e.toString();
+        });
+      }
       // If we can reach the network but Firebase fails, surface an error;
       // otherwise treat it as offline so the user can retry.
       return hasInternet ? _BootstrapState.error : _BootstrapState.offline;
@@ -63,16 +77,19 @@ class _BootstrapAppState extends State<_BootstrapApp> {
           return const BoomerangApp();
         }
         if (state == _BootstrapState.offline) {
-          return const _OfflineApp(
+          return _OfflineApp(
             title: 'No internet connection',
             message:
                 'Please connect to the internet to finish starting Boomerang.',
+            onRetry: _startInitialization,
           );
         }
         if (state == _BootstrapState.error) {
-          return const _OfflineApp(
+          return _OfflineApp(
             title: 'Couldn\u2019t start',
             message: 'There was a problem starting the app. Please try again.',
+            details: _lastErrorMessage,
+            onRetry: _startInitialization,
           );
         }
         return const MaterialApp(
@@ -84,10 +101,17 @@ class _BootstrapAppState extends State<_BootstrapApp> {
 }
 
 class _OfflineApp extends StatelessWidget {
-  const _OfflineApp({required this.title, required this.message});
+  const _OfflineApp({
+    required this.title,
+    required this.message,
+    this.details,
+    this.onRetry,
+  });
 
   final String title;
   final String message;
+  final String? details;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -114,6 +138,23 @@ class _OfflineApp extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                     textAlign: TextAlign.center,
                   ),
+                  if (details != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      details!,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.black54),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  if (onRetry != null) ...[
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: onRetry,
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ],
               ),
             ),

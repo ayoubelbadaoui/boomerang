@@ -13,8 +13,8 @@ class UsernameRepo {
     if (user == null) {
       throw StateError('No authenticated user');
     }
-    final username = rawUsername.trim();
-    final usernameLower = username.toLowerCase();
+    final usernameLower = rawUsername.trim().toLowerCase();
+    final username = usernameLower; // enforce canonical lowercase
     if (username.isEmpty) {
       throw StateError('Username required');
     }

@@ -210,7 +210,14 @@ class FollowRepo {
           .doc(receiver)
           .collection('notifications')
           .doc(notificationId);
-      await notifRef.set({'read': true}, SetOptions(merge: true));
+      await notifRef.set(
+        {
+          'read': true,
+          // Flip to a standard follow notification so the client shows follow/unfollow.
+          'type': 'follow',
+        },
+        SetOptions(merge: true),
+      );
     }
   }
 
@@ -233,7 +240,7 @@ class FollowRepo {
           .doc(receiver)
           .collection('notifications')
           .doc(notificationId);
-      await notifRef.set({'read': true}, SetOptions(merge: true));
+      await notifRef.delete();
     }
   }
 

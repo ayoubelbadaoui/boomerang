@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/core/widgets/ui.dart';
-import 'package:boomerang/core/widgets/input_filled.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 
@@ -53,7 +52,10 @@ class _ChooseUsernamePageState extends ConsumerState<ChooseUsernamePage> {
       if (!mounted) return;
       final dup = e.code == 'already-exists';
       setState(() {
-        _error = dup ? 'That username is taken' : (e.message ?? 'Failed to save username');
+        _error =
+            dup
+                ? 'That username is taken'
+                : (e.message ?? 'Failed to save username');
       });
     } catch (e) {
       if (!mounted) return;
@@ -70,7 +72,8 @@ class _ChooseUsernamePageState extends ConsumerState<ChooseUsernamePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Choose username'),
-        leading: Container(), // prevent back navigation to feed without username
+        leading:
+            Container(), // prevent back navigation to feed without username
       ),
       body: SafeArea(
         child: Padding(

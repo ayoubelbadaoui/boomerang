@@ -118,7 +118,7 @@ class _PaginatedBoomerangListState
             isLoadingInitial
                 ? 1
                 : (_docs.length + (_hasMore ? 1 : (_docs.isEmpty ? 1 : 0))),
-        separatorBuilder: (_, __) => SizedBox(height: 16.h),
+        separatorBuilder: (_, __) => SizedBox(),
         itemBuilder: (context, i) {
           if (isLoadingInitial) {
             return const Padding(
@@ -218,8 +218,8 @@ class _BoomerangCard extends ConsumerWidget {
                   ),
                 ),
                 Positioned(
-                  left: 12.w,
-                  top: 12.h,
+                  left: 18.w,
+                  top: 16.h,
                   child: Row(
                     children: [
                       InkWell(
@@ -275,13 +275,13 @@ class _BoomerangCard extends ConsumerWidget {
                   ),
                 ),
                 Positioned(
-                  right: 12.w,
-                  top: 12.h,
+                  right: 20.w,
+                  top: 18.h,
                   child: _BookmarkButton(postId: id, data: data),
                 ),
                 Positioned(
                   left: 12.w,
-                  bottom: 12.h,
+                  bottom: 20.h,
                   child: Row(
                     children: [
                       _SvgCircleBtn(
@@ -296,6 +296,27 @@ class _BoomerangCard extends ConsumerWidget {
                     ],
                   ),
                 ),
+                Positioned(
+                  right: 18.w,
+                  bottom: 24.h,
+                  child: _LikeCircleButton(
+                    isLiked: isLiked,
+                    likes: likes,
+                    onToggleLike: (nextLiked, nextLikes) async {
+                      final me = ref.read(currentUserProfileProvider).value;
+                      if (me == null) return;
+                      onToggleLike?.call(nextLiked, nextLikes);
+                      await ref
+                          .read(boomerangRepoProvider)
+                          .toggleLike(
+                            boomerangId: id,
+                            userId: me.uid,
+                            actorName: _bestName(me),
+                            actorAvatar: me.avatarUrl,
+                          );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -303,16 +324,16 @@ class _BoomerangCard extends ConsumerWidget {
         Padding(
           padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Flexible(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       handle,
-                      textAlign: TextAlign.right,
+                      textAlign: TextAlign.left,
                       style: TextStyle(
                         color: Colors.black,
                         fontWeight: FontWeight.w700,
@@ -322,7 +343,7 @@ class _BoomerangCard extends ConsumerWidget {
                     SizedBox(height: 4.h),
                     Text(
                       (data['caption'] ?? '') as String? ?? '',
-                      textAlign: TextAlign.right,
+                      textAlign: TextAlign.left,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: Colors.black87, fontSize: 13.sp),
@@ -410,6 +431,53 @@ class _BookmarkButton extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _LikeCircleButton extends ConsumerStatefulWidget {
+  const _LikeCircleButton({
+    required this.isLiked,
+    required this.likes,
+    required this.onToggleLike,
+  });
+  final bool isLiked;
+  final int likes;
+  final Future<void> Function(bool nextLiked, int nextLikes) onToggleLike;
+
+  @override
+  ConsumerState<_LikeCircleButton> createState() => _LikeCircleButtonState();
+}
+
+class _LikeCircleButtonState extends ConsumerState<_LikeCircleButton> {
+  bool _busy = false;
+
+  Future<void> _tap() async {
+    if (_busy) return;
+    final nextLiked = !widget.isLiked;
+    final nextLikes = widget.likes + (nextLiked ? 1 : -1);
+    setState(() => _busy = true);
+    try {
+      await widget.onToggleLike(nextLiked, nextLikes);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: _busy ? null : _tap,
+      customBorder: const CircleBorder(),
+      child: SvgPicture.asset(
+        'assets/heart.svg',
+        width: 30.w,
+        height: 30.w,
+        colorFilter: ColorFilter.mode(
+          widget.isLiked ? Colors.red : Colors.white,
+          BlendMode.srcIn,
+        ),
+      ),
     );
   }
 }
@@ -827,49 +895,114 @@ class _BoomerangMedia extends StatefulWidget {
 
 class _BoomerangMediaState extends State<_BoomerangMedia> {
   VideoPlayerController? _controller;
+  bool _videoReady = false;
 
   @override
   void initState() {
     super.initState();
-    // Performance: avoid initializing inline video players in the scrolling feed.
-    // Videos play in the full-screen pager/viewer instead. This dramatically
-    // reduces jank and memory pressure while scrolling the feed.
+    _initController();
+  }
+
+  @override
+  void didUpdateWidget(covariant _BoomerangMedia oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.videoUrl != oldWidget.videoUrl) {
+      _disposeController();
+      _initController();
+    }
+  }
+
+  Future<void> _initController() async {
+    final url = widget.videoUrl;
+    if (url == null || url.isEmpty) return;
+    _videoReady = false;
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    _controller = controller;
+    try {
+      await controller.initialize();
+      if (!mounted) return;
+      await controller.setLooping(true);
+      await controller.setVolume(0.0);
+      await controller.play();
+      if (mounted) {
+        setState(() {
+          _videoReady = true;
+        });
+      }
+    } catch (_) {
+      // Swallow errors to avoid breaking the feed; a poster/placeholder will show instead.
+    }
+  }
+
+  void _disposeController() {
+    _controller?.dispose();
+    _controller = null;
+    _videoReady = false;
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _disposeController();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Show poster only in the feed; tap opens full-screen viewer/pager.
-    if (widget.posterUrl != null && widget.posterUrl!.isNotEmpty) {
-      final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-      final targetWidth = (MediaQuery.of(context).size.width - 32.w);
-      final cacheW = (targetWidth * devicePixelRatio).round();
-      return Image(
-        image: ResizeImage.resizeIfNeeded(
-          cacheW,
-          null,
-          NetworkImage(widget.posterUrl!),
+    final hasPoster = widget.posterUrl != null && widget.posterUrl!.isNotEmpty;
+
+    Widget posterLayer() {
+      if (hasPoster) {
+        final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+        final targetWidth = (MediaQuery.of(context).size.width - 32.w);
+        final cacheW = (targetWidth * devicePixelRatio).round();
+        return Image(
+          image: ResizeImage.resizeIfNeeded(
+            cacheW,
+            null,
+            NetworkImage(widget.posterUrl!),
+          ),
+          fit: BoxFit.cover,
+        );
+      }
+      // Lightweight placeholder while video buffers/initializes or if poster is missing.
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
-        fit: BoxFit.cover,
+        child: const Center(
+          child: Icon(Icons.play_circle_fill, color: Colors.black38, size: 42),
+        ),
       );
     }
-    // Lightweight non-black placeholder with play hint to avoid jarring black screens.
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+
+    final hasVideo = _controller != null && _controller!.value.isInitialized;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        AnimatedOpacity(
+          opacity: _videoReady ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 220),
+          child: posterLayer(),
         ),
-      ),
-      child: const Center(
-        child: Icon(Icons.play_circle_fill, color: Colors.black38, size: 42),
-      ),
+        if (hasVideo)
+          AnimatedOpacity(
+            opacity: _videoReady ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 260),
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _controller!.value.size.width,
+                height: _controller!.value.size.height,
+                child: VideoPlayer(_controller!),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

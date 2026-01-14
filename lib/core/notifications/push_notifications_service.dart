@@ -4,6 +4,7 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// Boots push notifications:
 /// - Requests permission (required on iOS)
@@ -20,6 +21,8 @@ class _PushNotificationsBootstrap {
   final Ref ref;
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _local =
+      FlutterLocalNotificationsPlugin();
 
   void initialize() {
     // React to auth changes and keep token saved when signed in
@@ -35,6 +38,7 @@ class _PushNotificationsBootstrap {
         '[notification push] 👤 User signed in: ${user.uid} - Configuring notifications...',
       );
       await _configurePermissionsAndPresentation();
+      await _initLocalNotifications();
       await _saveCurrentTokenForUser(user.uid);
     });
 
@@ -46,7 +50,9 @@ class _PushNotificationsBootstrap {
         '[notification push] 👤 User already signed in: ${currentUser.uid} - Getting token...',
       );
       _configurePermissionsAndPresentation().then((_) {
-        _saveCurrentTokenForUser(currentUser.uid);
+        _initLocalNotifications().then((_) {
+          _saveCurrentTokenForUser(currentUser.uid);
+        });
       });
     }
 
@@ -64,8 +70,31 @@ class _PushNotificationsBootstrap {
         '[notification push] FCM foreground message: ${message.messageId} '
         'title=${message.notification?.title} body=${message.notification?.body}',
       );
-      // For full foreground notifications, integrate a local notifications plugin.
+      await _showLocalNotification(message);
     });
+  }
+
+  Future<void> _initLocalNotifications() async {
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings();
+    const initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: iosInit,
+    );
+    await _local.initialize(initSettings);
+
+    // Android channel setup
+    const androidChannel = AndroidNotificationChannel(
+      'boomerang_push',
+      'Boomerang Notifications',
+      description: 'Push notifications for Boomerang',
+      importance: Importance.max,
+    );
+    await _local
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(androidChannel);
   }
 
   Future<void> _configurePermissionsAndPresentation() async {
@@ -145,5 +174,32 @@ class _PushNotificationsBootstrap {
         error: e,
       );
     }
+  }
+
+  Future<void> _showLocalNotification(RemoteMessage message) async {
+    final title = message.notification?.title ?? 'Boomerang';
+    final body = message.notification?.body ?? 'New notification';
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'boomerang_push',
+        'Boomerang Notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        playSound: true,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        presentBadge: true,
+      ),
+    );
+    await _local.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      details,
+      payload: message.data['resourceId'] ?? '',
+    );
   }
 }

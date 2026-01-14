@@ -5,27 +5,111 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Helpers to safely read merged values (request overrides resource).
+    function mergedString(field) {
+      return request.resource.data[field] is string
+        ? request.resource.data[field]
+        : (resource.data[field] is string ? resource.data[field] : null);
+    }
+
+    function mergedBool(field) {
+      return request.resource.data[field] is bool
+        ? request.resource.data[field]
+        : (resource.data[field] is bool ? resource.data[field] : null);
+    }
+
+    function validUsernameFields() {
+      let username = mergedString('username');
+      let usernameLower = mergedString('usernameLower');
+      return username != null
+        && usernameLower != null
+        && username == usernameLower
+        && usernameLower.size() >= 3
+        && usernameLower.size() <= 20
+        && usernameLower.matches('^[a-z0-9._]+$');
+    }
+
+    function validNicknameFields() {
+      let nickname = mergedString('nickname');
+      let nicknameLower = mergedString('nicknameLower');
+      return nickname != null
+        && nicknameLower != null
+        && nickname == nicknameLower
+        && nicknameLower.size() >= 3
+        && nicknameLower.size() <= 20
+        && nicknameLower.matches('^[a-z0-9._]+$');
+    }
+
+    function validFullNameFields() {
+      let fullName = mergedString('fullName');
+      let fullNameLower = mergedString('fullNameLower');
+      return fullName != null
+        && fullName.size() > 0
+        && fullNameLower != null
+        && fullNameLower == fullNameLower; // presence check only; casing enforced client-side
+    }
+
     // User profiles
     match /users/{uid} {
       allow create: if isSignedIn()
         && request.auth.uid == uid
-        && request.resource.data.nickname is string
-        && request.resource.data.nicknameLower is string
-        && request.resource.data.nicknameLower == lower(request.resource.data.nickname)
-        && request.resource.data.nicknameLower.size() >= 3
-        && request.resource.data.nicknameLower.size() <= 20
-        && request.resource.data.nicknameLower.matches('^[a-z0-9._]+$')
-        && request.resource.data.fullName is string
-        && request.resource.data.fullName.size() > 0
-        && request.resource.data.fullNameLower is string
-        && request.resource.data.fullNameLower == lower(request.resource.data.fullName);
+        && validUsernameFields()
+        && validNicknameFields()
+        && validFullNameFields();
 
       allow update: if isSignedIn()
         && request.auth.uid == uid
-        && (!request.resource.data.keys().hasAny(['isPrivate'])
-          || request.resource.data.isPrivate is bool);
+        && validUsernameFields()
+        && validNicknameFields()
+        && validFullNameFields()
+        && (mergedBool('isPrivate') == null || mergedBool('isPrivate') is bool);
 
       allow read: if true;
+    }
+
+    // Device tokens for push notifications
+    match /users/{uid}/deviceTokens/{token} {
+      allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
+      allow read: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Boomerangs (posts) and nested comments/replies
+    match /boomerangs/{boomerangId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.userId is string
+        && request.auth.uid == request.resource.data.userId;
+      // Allow owner updates; allow likes/likedBy changes while keeping ownership intact.
+      allow update: if isSignedIn()
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+
+      // Comments on a boomerang
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.userId is string
+          && request.auth.uid == request.resource.data.userId
+          && request.resource.data.text is string;
+        // Allow likes/likedBy updates while preserving owner.
+        allow update: if isSignedIn()
+          && request.resource.data.userId == resource.data.userId;
+        allow delete: if isSignedIn()
+          && request.auth.uid == resource.data.userId;
+
+        // Replies under a comment
+        match /replies/{replyId} {
+          allow read: if true;
+          allow create: if isSignedIn()
+            && request.resource.data.userId is string
+            && request.auth.uid == request.resource.data.userId
+            && request.resource.data.text is string;
+          allow update: if isSignedIn()
+            && request.resource.data.userId == resource.data.userId;
+          allow delete: if isSignedIn()
+            && request.auth.uid == resource.data.userId;
+        }
+      }
     }
 
     // Notifications per user
@@ -78,6 +162,17 @@ service cloud.firestore {
       // Follower writes when following, receiver writes when accepting.
       allow write: if isSignedIn()
         && (request.auth.uid == followerId || request.auth.uid == ownerId);
+    }
+
+    // Canonical notifications path used by backend and app
+    match /notifications/{uid}/items/{itemId} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      // Allow owner to mark read only; block other writes.
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.read == true
+        && resource.data.read == false;
+      allow create, delete: if false;
     }
   }
 }
