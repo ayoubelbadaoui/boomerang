@@ -33,6 +33,7 @@ class UsernameRepo {
         'fullName': fullName,
         'fullNameLower': fullName.toLowerCase(),
         'email': user.email,
+              'isPrivate': false, // default to public on first write
         'updatedAt': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       },

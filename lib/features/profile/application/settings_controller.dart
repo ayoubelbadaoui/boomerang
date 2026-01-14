@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/profile/domain/app_settings.dart';
 import 'package:boomerang/features/profile/infrastructure/settings_repo.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 final settingsRepoProvider = Provider<SettingsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
@@ -34,5 +35,20 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   Future<void> setBool(String key, bool value) async {
     final repo = ref.read(settingsRepoProvider);
     await repo.update({key: value});
+    if (key == 'privateAccount') {
+      final auth = ref.read(firebaseAuthProvider);
+      final uid = auth.currentUser?.uid;
+      if (uid != null) {
+        final fs = ref.read(firestoreProvider);
+        await fs
+            .collection('users')
+            .doc(uid)
+            .set({'isPrivate': value}, SetOptions(merge: true));
+        if (!value) {
+          // When switching to public, auto-accept all pending requests.
+          await ref.read(followRepoProvider).acceptAllPendingFor(uid);
+        }
+      }
+    }
   }
 }

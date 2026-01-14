@@ -79,6 +79,9 @@ class InboxTab extends ConsumerWidget {
                             subtitle = 'Started following you';
                             action = 'Follow Back';
                             itemType = _ItemType.follow;
+                          } else if (type == 'follow_request') {
+                            subtitle = 'Requested to follow you';
+                            itemType = _ItemType.followRequest;
                           } else if (type == 'like') {
                             subtitle = 'Liked your video';
                             thumb = d['boomerangImage'] as String?;
@@ -87,6 +90,10 @@ class InboxTab extends ConsumerWidget {
                             subtitle = 'Commented on your video';
                             thumb = d['boomerangImage'] as String?;
                             itemType = _ItemType.comment;
+                        } else if (type == 'reply') {
+                          subtitle = 'Replied to your comment';
+                          thumb = d['boomerangImage'] as String?;
+                          itemType = _ItemType.reply;
                           } else {
                             subtitle = 'Activity';
                           }
@@ -102,7 +109,9 @@ class InboxTab extends ConsumerWidget {
                             createdAt: createdAt,
                             actorId: senderId,
                             boomerangId: d['boomerangId'] as String?,
-                            commentId: d['commentId'] as String?,
+                          commentId: d['commentId'] as String?,
+                          parentCommentId: d['parentCommentId'] as String?,
+                          replyId: d['replyId'] as String?,
                             type: itemType,
                             read: read,
                           );
@@ -170,6 +179,8 @@ class _Item {
     this.actionLabel,
     this.boomerangId,
     this.commentId,
+    this.parentCommentId,
+    this.replyId,
   });
   final String id;
   final String avatar;
@@ -177,15 +188,17 @@ class _Item {
   final String subtitle;
   final DateTime createdAt;
   final String actorId;
-  final _ItemType type;
+    final _ItemType type;
   final bool read;
   final String? boomerangId;
   final String? commentId;
+  final String? parentCommentId;
+  final String? replyId;
   final String? trailingThumb;
   final String? actionLabel;
 }
 
-enum _ItemType { follow, like, comment, other }
+enum _ItemType { follow, followRequest, like, comment, reply, other }
 
 class _Section {
   _Section(this.label, this.items);
@@ -294,7 +307,9 @@ class _ActivityTile extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 12.w),
-                if (item.actionLabel != null)
+                if (item.type == _ItemType.followRequest)
+                  _FollowRequestActions(item: item)
+                else if (item.actionLabel != null)
                   _FollowButton(
                     label: item.actionLabel!,
                     onPressed: () => _followBack(ref, item.actorId),
@@ -344,13 +359,108 @@ class _FollowButton extends StatelessWidget {
   }
 }
 
+class _FollowRequestActions extends ConsumerStatefulWidget {
+  const _FollowRequestActions({required this.item});
+  final _Item item;
+
+  @override
+  ConsumerState<_FollowRequestActions> createState() =>
+      _FollowRequestActionsState();
+}
+
+class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
+  bool _busy = false;
+
+  Future<void> _accept() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(followRepoProvider).acceptRequest(
+            senderId: widget.item.actorId,
+            notificationId: widget.item.id,
+          );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reject() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(followRepoProvider).rejectRequest(
+            senderId: widget.item.actorId,
+            notificationId: widget.item.id,
+          );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        TextButton(
+          onPressed: _busy ? null : _reject,
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+            backgroundColor: const Color(0xFFE3E3E3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24.r),
+            ),
+          ),
+          child: Text(
+            'Reject',
+            style: TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.w700,
+              fontSize: 13.sp,
+            ),
+          ),
+        ),
+        SizedBox(width: 8.w),
+        TextButton(
+          onPressed: _busy ? null : _accept,
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+            backgroundColor: Colors.black,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24.r),
+            ),
+          ),
+          child: _busy
+              ? SizedBox(
+                  width: 14.r,
+                  height: 14.r,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Text(
+                  'Accept',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.sp,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
 Future<void> _handleTap(BuildContext context, WidgetRef ref, _Item item) async {
   switch (item.type) {
     case _ItemType.follow:
+    case _ItemType.followRequest:
       await _openProfile(context, ref, item);
       break;
     case _ItemType.like:
     case _ItemType.comment:
+    case _ItemType.reply:
       await _openPost(context, ref, item);
       break;
     case _ItemType.other:
@@ -416,8 +526,12 @@ Future<void> _openPost(BuildContext context, WidgetRef ref, _Item item) async {
   if (!context.mounted) return;
   Navigator.of(context).push(
     MaterialPageRoute(
-      builder:
-          (_) => BoomerangPagerPage(initialId: data.$1, initialData: data.$2),
+      builder: (_) => BoomerangPagerPage(
+        initialId: data.$1,
+        initialData: data.$2,
+        targetCommentId: item.parentCommentId ?? item.commentId,
+        targetReplyId: item.replyId,
+      ),
     ),
   );
 }

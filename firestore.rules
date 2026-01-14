@@ -21,7 +21,9 @@ service cloud.firestore {
         && request.resource.data.fullNameLower == lower(request.resource.data.fullName);
 
       allow update: if isSignedIn()
-        && request.auth.uid == uid;
+        && request.auth.uid == uid
+        && (!request.resource.data.keys().hasAny(['isPrivate'])
+          || request.resource.data.isPrivate is bool);
 
       allow read: if true;
     }
@@ -41,6 +43,41 @@ service cloud.firestore {
         && request.resource.data.read == true
         && resource.data.read == false;
       allow delete: if false;
+    }
+
+    // Follow requests live under the receiver.
+    match /users/{uid}/followRequests/{senderId} {
+      allow create: if isSignedIn()
+        && request.auth.uid == senderId
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.receiverId == uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp;
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && resource.data.status == 'pending'
+        && (request.resource.data.status == 'accepted'
+          || request.resource.data.status == 'rejected');
+      // Allow either sender or receiver to delete (cancel/reject).
+      allow delete: if isSignedIn()
+        && (request.auth.uid == uid || request.auth.uid == senderId);
+      allow read: if isSignedIn()
+        && (request.auth.uid == uid || request.auth.uid == senderId);
+    }
+
+    // Following collections
+    match /following/{ownerId}/users/{targetId} {
+      allow read: if isSignedIn();
+      // Owner writes their outgoing follows, or receivers can write when accepting.
+      allow write: if isSignedIn()
+        && (request.auth.uid == ownerId || request.auth.uid == targetId);
+    }
+
+    match /followers/{ownerId}/users/{followerId} {
+      allow read: if isSignedIn();
+      // Follower writes when following, receiver writes when accepting.
+      allow write: if isSignedIn()
+        && (request.auth.uid == followerId || request.auth.uid == ownerId);
     }
   }
 }

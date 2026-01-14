@@ -10,13 +10,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
-import 'package:boomerang/features/feed/presentation/sheets/qa_sheet.dart';
 import 'package:boomerang/features/feed/presentation/sheets/viewers_sheet.dart';
-import 'package:boomerang/features/feed/presentation/sheets/ranking_sheet.dart';
 // import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -194,176 +192,155 @@ class _BoomerangCard extends ConsumerWidget {
     debugPrint(
       'card build: $id isLiked=$isLiked source=${likedOverride != null ? 'override' : 'firestore'} likes=$likes',
     );
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24.r),
-      child: Container(
-        color:
-            (image != null && image.isNotEmpty)
-                ? Colors.black
-                : const Color(0xFFF2F2F2),
-        child: Stack(
-          children: [
-            AspectRatio(
-              aspectRatio: 3 / 4,
-              child: _DoubleTapLikeArea(
-                postId: id,
-                data: data,
-                isLiked: isLiked,
-                onToggleLike: (liked) {
-                  final nextLikes = liked ? likes + 1 : likes - 1;
-                  onToggleLike?.call(liked, nextLikes);
-                },
-                child: _BoomerangMedia(videoUrl: video, posterUrl: image),
-              ),
-            ),
-            Positioned(
-              left: 12.w,
-              top: 12.h,
-              child: Row(
-                children: [
-                  InkWell(
-                    onTap:
-                        () => _showProfilePreview(
-                          context,
-                          handle,
-                          avatar,
-                          data['userId'] as String,
-                        ),
-                    customBorder: const CircleBorder(),
-                    child: CircleAvatar(
-                      radius: 14.r,
-                      backgroundImage:
-                          avatar != null
-                              ? ResizeImage.resizeIfNeeded(
-                                (28.r * MediaQuery.of(context).devicePixelRatio)
-                                    .round(),
-                                (28.r * MediaQuery.of(context).devicePixelRatio)
-                                    .round(),
-                                NetworkImage(avatar),
-                              )
-                              : null,
-                      onBackgroundImageError:
-                          avatar != null ? (_, __) {} : null,
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(24.r),
+          child: Container(
+            color:
+                (image != null && image.isNotEmpty)
+                    ? Colors.black
+                    : const Color(0xFFF2F2F2),
+            child: Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 3 / 4,
+                  child: _DoubleTapLikeArea(
+                    postId: id,
+                    data: data,
+                    isLiked: isLiked,
+                    onToggleLike: (liked) {
+                      final nextLikes = liked ? likes + 1 : likes - 1;
+                      onToggleLike?.call(liked, nextLikes);
+                    },
+                    child: _BoomerangMedia(videoUrl: video, posterUrl: image),
                   ),
-                  SizedBox(width: 8.w),
-                  InkWell(
-                    onTap:
-                        () => _showProfilePreview(
-                          context,
-                          handle,
-                          avatar,
-                          data['userId'] as String,
+                ),
+                Positioned(
+                  left: 12.w,
+                  top: 12.h,
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap:
+                            () => _showProfilePreview(
+                              context,
+                              handle,
+                              avatar,
+                              data['userId'] as String,
+                            ),
+                        customBorder: const CircleBorder(),
+                        child: CircleAvatar(
+                          radius: 14.r,
+                          backgroundImage:
+                              avatar != null
+                                  ? ResizeImage.resizeIfNeeded(
+                                    (28.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    (28.r *
+                                            MediaQuery.of(
+                                              context,
+                                            ).devicePixelRatio)
+                                        .round(),
+                                    NetworkImage(avatar),
+                                  )
+                                  : null,
+                          onBackgroundImageError:
+                              avatar != null ? (_, __) {} : null,
                         ),
-                    child: Text(
+                      ),
+                      SizedBox(width: 8.w),
+                      InkWell(
+                        onTap:
+                            () => _showProfilePreview(
+                              context,
+                              handle,
+                              avatar,
+                              data['userId'] as String,
+                            ),
+                        child: Text(
+                          handle,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.sp,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  right: 12.w,
+                  top: 12.h,
+                  child: _BookmarkButton(postId: id, data: data),
+                ),
+                Positioned(
+                  left: 12.w,
+                  bottom: 12.h,
+                  child: Row(
+                    children: [
+                      _SvgCircleBtn(
+                        asset: 'assets/svgs/comment.svg',
+                        onTap: () => _showCommentsSheet(context, id, data),
+                      ),
+                      SizedBox(width: 8.w),
+                      _SvgCircleBtn(
+                        asset: 'assets/svgs/share.svg',
+                        onTap: () => _showShareSheet(context, data),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
                       handle,
+                      textAlign: TextAlign.right,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black,
                         fontWeight: FontWeight.w700,
                         fontSize: 14.sp,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              right: 12.w,
-              top: 12.h,
-              child: Row(
-                children: [
-                  InkWell(
-                    onTap: () => _showQASheet(context),
-                    customBorder: const CircleBorder(),
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      padding: EdgeInsets.all(8.r),
-                      child: const Icon(
-                        Icons.forum_outlined,
-                        color: Colors.white,
-                      ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      (data['caption'] ?? '') as String? ?? '',
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.black87, fontSize: 13.sp),
                     ),
-                  ),
-                  SizedBox(width: 8.w),
-                  InkWell(
-                    onTap: () => _showRankingSheet(context),
-                    customBorder: const CircleBorder(),
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      padding: EdgeInsets.all(8.r),
-                      child: const Icon(Icons.leaderboard, color: Colors.white),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Positioned(
-              left: 12.w,
-              bottom: 12.h,
-              child: Row(
-                children: [
-                  _CircleBtn(
-                    icon: Icons.chat_bubble_rounded,
-                    onTap: () => _showCommentsSheet(context, id, data),
-                  ),
-                  SizedBox(width: 8.w),
-                  _CircleBtn(
-                    icon: Icons.reply_outlined,
-                    onTap: () => _showShareSheet(context, data),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              right: 20.w,
-              bottom: 22.h,
-              child: _LikeButton(
-                postId: id,
-                data: data,
-                isLiked: isLiked,
-                onToggle: (liked) {
-                  final nextLikes = liked ? likes + 1 : likes - 1;
-                  onToggleLike?.call(liked, nextLikes);
-                },
-              ),
-            ),
-            Positioned(
-              left: 12.w,
-              bottom: 52.h,
-              child: Row(
-                children: [
-                  Text(
-                    handle,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14.sp,
-                    ),
-                  ),
-                  SizedBox(width: 8.w),
-                  Text(
-                    'Description',
-                    style: TextStyle(color: Colors.white70, fontSize: 14.sp),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-class _CircleBtn extends StatelessWidget {
-  const _CircleBtn({required this.icon, this.onTap});
-  final IconData icon;
+class _SvgCircleBtn extends StatelessWidget {
+  const _SvgCircleBtn({required this.asset, this.onTap});
+  final String asset;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
@@ -372,86 +349,67 @@ class _CircleBtn extends StatelessWidget {
       customBorder: const CircleBorder(),
       child: Container(
         decoration: const BoxDecoration(
-          color: Colors.black54,
+          color: Colors.black,
           shape: BoxShape.circle,
         ),
-        padding: EdgeInsets.all(8.r),
-        child: Icon(icon, color: Colors.white),
+        padding: EdgeInsets.all(10.r),
+        child: SvgPicture.asset(
+          asset,
+          width: 20.r,
+          height: 20.r,
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
       ),
     );
   }
 }
 
-class _LikeButton extends ConsumerStatefulWidget {
-  const _LikeButton({
-    required this.postId,
-    required this.data,
-    required this.isLiked,
-    required this.onToggle,
-  });
+class _BookmarkButton extends ConsumerWidget {
+  const _BookmarkButton({required this.postId, required this.data});
   final String postId;
   final Map<String, dynamic> data;
-  final bool isLiked;
-  final void Function(bool liked) onToggle;
-
   @override
-  ConsumerState<_LikeButton> createState() => _LikeButtonState();
-}
-
-class _LikeButtonState extends ConsumerState<_LikeButton> {
-  late bool _isLiked;
-
-  @override
-  void initState() {
-    super.initState();
-    _isLiked = widget.isLiked;
-  }
-
-  @override
-  void didUpdateWidget(covariant _LikeButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isLiked != widget.isLiked) {
-      _isLiked = widget.isLiked;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(currentUserProfileProvider).value;
-    return InkWell(
-      onTap:
-          me == null
-              ? null
-              : () async {
-                final next = !_isLiked;
-                debugPrint(
-                  'like: tap post=${widget.postId} nextLiked=$next (optimistic)',
+    if (me == null) {
+      return const SizedBox.shrink();
+    }
+    return StreamBuilder<bool>(
+      stream: ref
+          .watch(savedRepoProvider)
+          .watchIsSaved(userId: me.uid, boomerangId: postId),
+      initialData: false,
+      builder: (context, snap) {
+        final saved = snap.data ?? false;
+        return InkWell(
+          onTap: () async {
+            await ref
+                .read(savedRepoProvider)
+                .toggleSave(
+                  userId: me.uid,
+                  boomerangId: postId,
+                  boomerangData: data,
                 );
-                setState(() => _isLiked = next); // optimistic
-                widget.onToggle(_isLiked);
-                await ref
-                    .read(boomerangRepoProvider)
-                    .toggleLike(
-                      boomerangId: widget.postId,
-                      userId: me.uid,
-                      actorName: _bestName(me),
-                      actorAvatar: me.avatarUrl,
-                    );
-              },
-      customBorder: const CircleBorder(),
-      child: AnimatedScale(
-        scale: _isLiked ? 1.1 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        child: SvgPicture.asset(
-          'assets/heart.svg',
-          width: 30.r,
-          height: 30.r,
-          colorFilter: ColorFilter.mode(
-            _isLiked ? Colors.red : Colors.white,
-            BlendMode.srcIn,
+          },
+          customBorder: const CircleBorder(),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              shape: BoxShape.circle,
+            ),
+            padding: EdgeInsets.all(10.r),
+            child: SvgPicture.asset(
+              'assets/svgs/Bookmark.svg',
+              width: 20.r,
+              height: 20.r,
+              colorFilter: ColorFilter.mode(
+                saved ? Colors.yellow : Colors.white,
+                BlendMode.srcIn,
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -588,30 +546,6 @@ void _showProfilePreview(
   );
 }
 
-void _showQASheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (_) => const QASheet(),
-  );
-}
-
-void _showRankingSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (_) => const RankingSheet(),
-  );
-}
-
 void _showViewersSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
@@ -695,421 +629,13 @@ void _showCommentsSheet(
         maxChildSize: 0.98,
         minChildSize: 0.5,
         builder:
-            (context, controller) => _CommentsSheet(
+            (context, controller) => CommentsSheet(
               boomerangId: boomerangId,
               scrollController: controller,
             ),
       );
     },
   );
-}
-
-class _CommentsSheet extends ConsumerStatefulWidget {
-  const _CommentsSheet({
-    required this.boomerangId,
-    required this.scrollController,
-  });
-  final String boomerangId;
-  final ScrollController scrollController;
-
-  @override
-  ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
-}
-
-class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
-  final _text = TextEditingController();
-
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final stream = ref.watch(commentsRepoProvider).watch(widget.boomerangId);
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Column(
-        children: [
-          SizedBox(height: 8.h),
-          Container(
-            width: 44,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Colors.black12,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Comments',
-                style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder(
-              stream: stream,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final docs = snapshot.data!.docs;
-                return ListView.builder(
-                  primary: false,
-                  controller: widget.scrollController,
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final c = docs[i].data();
-                    final commentId = docs[i].id;
-                    return _CommentTile(
-                      boomerangId: widget.boomerangId,
-                      commentId: commentId,
-                      userAvatar: c['userAvatar'] as String?,
-                      userName: (c['userName'] ?? 'User') as String,
-                      text: (c['text'] ?? '') as String,
-                      likes: (c['likes'] ?? 0) as int,
-                      likedBy:
-                          (c['likedBy'] as List?)?.cast<String>() ??
-                          const <String>[],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _text,
-                    decoration: InputDecoration(
-                      hintText: 'Add comment...',
-                      filled: true,
-                      fillColor: const Color(0xFFF6F6F6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24.r),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 14.h,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                InkWell(
-                  onTap: () async {
-                    final text = _text.text.trim();
-                    if (text.isEmpty) return;
-                    final profileAsync = ref.read(currentUserProfileProvider);
-                    final user = profileAsync.value;
-                    // Clear input immediately and dismiss keyboard for snappy UX
-                    _text.clear();
-                    FocusScope.of(context).unfocus();
-                    await ref
-                        .read(commentsRepoProvider)
-                        .add(
-                          boomerangId: widget.boomerangId,
-                          userId: user?.uid ?? 'anon',
-                          userName:
-                              user?.nickname.isNotEmpty == true
-                                  ? user!.nickname
-                                  : (user?.fullName ?? 'User'),
-                          userAvatar: user?.avatarUrl,
-                          text: text,
-                        );
-                  },
-                  child: CircleAvatar(
-                    radius: 24.r,
-                    backgroundColor: Colors.black,
-                    child: const Icon(Icons.send, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CommentTile extends ConsumerWidget {
-  const _CommentTile({
-    required this.boomerangId,
-    required this.commentId,
-    required this.userAvatar,
-    required this.userName,
-    required this.text,
-    required this.likes,
-    required this.likedBy,
-  });
-  final String boomerangId;
-  final String commentId;
-  final String? userAvatar;
-  final String userName;
-  final String text;
-  final int likes;
-  final List<String> likedBy;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(currentUserProfileProvider).value;
-    final isLiked = me != null && likedBy.contains(me.uid);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AppAvatar(url: userAvatar, size: 44.r),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            userName,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16.sp,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () {},
-                          icon: const Icon(Icons.more_horiz),
-                        ),
-                      ],
-                    ),
-                    Text(text, style: TextStyle(fontSize: 14.sp, height: 1.4)),
-                    SizedBox(height: 8.h),
-                    Row(
-                      children: [
-                        InkWell(
-                          onTap:
-                              me == null
-                                  ? null
-                                  : () => ref
-                                      .read(commentsRepoProvider)
-                                      .toggleLike(
-                                        boomerangId: boomerangId,
-                                        commentId: commentId,
-                                        userId: me.uid,
-                                      ),
-                          customBorder: const CircleBorder(),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isLiked
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                size: 20,
-                                color: isLiked ? Colors.red : Colors.black87,
-                              ),
-                              SizedBox(width: 6.w),
-                              Text('$likes', style: TextStyle(fontSize: 13.sp)),
-                            ],
-                          ),
-                        ),
-                        SizedBox(width: 16.w),
-                        InkWell(
-                          onTap: () => _openReply(context, ref),
-                          child: Text(
-                            'Reply',
-                            style: TextStyle(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          _RepliesList(boomerangId: boomerangId, commentId: commentId),
-        ],
-      ),
-    );
-  }
-
-  void _openReply(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Container(
-            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'Add reply...',
-                      filled: true,
-                      fillColor: const Color(0xFFF6F6F6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24.r),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 14.h,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                InkWell(
-                  onTap: () async {
-                    final me = ref.read(currentUserProfileProvider).value;
-                    final text = controller.text.trim();
-                    if (me == null || text.isEmpty) return;
-                    controller.clear();
-                    FocusScope.of(context).unfocus();
-                    await ref
-                        .read(commentsRepoProvider)
-                        .addReply(
-                          boomerangId: boomerangId,
-                          parentCommentId: commentId,
-                          userId: me.uid,
-                          userName:
-                              me.nickname.isNotEmpty
-                                  ? me.nickname
-                                  : me.fullName,
-                          userAvatar: me.avatarUrl,
-                          text: text,
-                        );
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: CircleAvatar(
-                    radius: 24.r,
-                    backgroundColor: Colors.black,
-                    child: const Icon(Icons.send, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _RepliesList extends ConsumerWidget {
-  const _RepliesList({required this.boomerangId, required this.commentId});
-  final String boomerangId;
-  final String commentId;
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final stream =
-        FirebaseFirestore.instance
-            .collection('boomerangs')
-            .doc(boomerangId)
-            .collection('comments')
-            .doc(commentId)
-            .collection('replies')
-            .orderBy('createdAt', descending: true)
-            .snapshots();
-    return StreamBuilder(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: EdgeInsets.only(left: 56.w, top: 8.h),
-          child: Column(
-            children:
-                docs.map((d) {
-                  final r = d.data();
-                  return Padding(
-                    padding: EdgeInsets.only(bottom: 10.h),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          radius: 16.r,
-                          backgroundImage:
-                              (r['userAvatar'] as String?) != null
-                                  ? ResizeImage.resizeIfNeeded(
-                                    (32.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    (32.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    NetworkImage(r['userAvatar']),
-                                  )
-                                  : null,
-                          onBackgroundImageError:
-                              (r['userAvatar'] as String?) != null
-                                  ? (_, __) {}
-                                  : null,
-                        ),
-                        SizedBox(width: 8.w),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                r['userName'] ?? 'User',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14.sp,
-                                ),
-                              ),
-                              Text(
-                                r['text'] ?? '',
-                                style: TextStyle(fontSize: 13.sp),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _QuickRow extends StatelessWidget {

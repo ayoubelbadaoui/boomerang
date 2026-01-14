@@ -3,6 +3,7 @@ import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 
 class OtherUserProfilePage extends ConsumerWidget {
   const OtherUserProfilePage({super.key, required this.userId});
@@ -136,7 +137,20 @@ class OtherUserProfilePage extends ConsumerWidget {
                 if (!isSelf)
                   SizedBox(
                     width: double.infinity,
-                    child: _FollowButton(userId: userId),
+                    child: _FollowButton(
+                      userId: userId,
+                      isPrivate: p?.isPrivate ?? false,
+                    ),
+                  ),
+                if (!isSelf)
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final incoming =
+                          ref.watch(incomingFollowRequestProvider(userId)).value;
+                      final pending = incoming?.isPending == true;
+                      if (!pending) return const SizedBox.shrink();
+                      return _IncomingRequestBanner(userId: userId);
+                    },
                   ),
                 SizedBox(height: 16.h),
                 Row(
@@ -191,37 +205,32 @@ class _ModeIcon extends StatelessWidget {
 }
 
 class _FollowButton extends ConsumerStatefulWidget {
-  const _FollowButton({required this.userId});
+  const _FollowButton({required this.userId, required this.isPrivate});
   final String userId;
+  final bool isPrivate;
   @override
   ConsumerState<_FollowButton> createState() => _FollowButtonState();
 }
 
 class _FollowButtonState extends ConsumerState<_FollowButton> {
   bool _loading = false;
-  bool? _isFollowing;
+  bool _optimisticRequested = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final repo = ref.read(followRepoProvider);
-      final v = await repo.isFollowing(widget.userId);
-      if (mounted) setState(() => _isFollowing = v);
-    });
-  }
-
-  Future<void> _toggleFollow() async {
-    if (_loading || _isFollowing == null) return;
+  Future<void> _toggleFollow({
+    required bool isFollowing,
+  }) async {
+    if (_loading) return;
     setState(() => _loading = true);
     final repo = ref.read(followRepoProvider);
     try {
-      if (_isFollowing == true) {
+      if (isFollowing) {
         await repo.unfollow(widget.userId);
-        if (mounted) setState(() => _isFollowing = false);
+        if (mounted) _optimisticRequested = false;
       } else {
-        await repo.follow(widget.userId);
-        if (mounted) setState(() => _isFollowing = true);
+        final outcome = await repo.followOrRequest(widget.userId);
+        if (mounted) {
+          _optimisticRequested = outcome == FollowOutcome.requested;
+        }
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -230,18 +239,143 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
 
   @override
   Widget build(BuildContext context) {
+    final isFollowing =
+        ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false;
+    final outgoing =
+        ref.watch(outgoingFollowRequestProvider(widget.userId)).value;
+    final requested = _optimisticRequested || (outgoing?.isPending == true);
+
+    final label = isFollowing
+        ? 'Following'
+        : requested
+            ? 'Requested'
+            : (widget.isPrivate ? 'Request' : 'Follow');
+    final onPressed = (requested || _loading)
+        ? null
+        : () => _toggleFollow(isFollowing: isFollowing);
+
     return OutlinedButton.icon(
-      onPressed: (_isFollowing == null || _loading) ? null : _toggleFollow,
-      icon: Icon(_isFollowing == true ? Icons.check : Icons.person_add_alt_1),
-      label: Text(_isFollowing == true ? 'Following' : 'Follow'),
+      onPressed: onPressed,
+      icon: _loading
+          ? SizedBox(
+              width: 16.r,
+              height: 16.r,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(isFollowing ? Icons.check : Icons.person_add_alt_1),
+      label: Text(label),
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: Colors.black, width: 1),
         padding: EdgeInsets.symmetric(vertical: 14.h),
         shape: StadiumBorder(
           side: BorderSide(color: Colors.black, width: 1.w),
         ),
-        backgroundColor: _isFollowing == true ? Colors.white : Colors.black,
-        foregroundColor: _isFollowing == true ? Colors.black : Colors.white,
+        backgroundColor: isFollowing ? Colors.white : Colors.black,
+        foregroundColor: isFollowing ? Colors.black : Colors.white,
+        disabledForegroundColor: Colors.black45,
+        disabledBackgroundColor: Colors.grey.shade200,
+      ),
+    );
+  }
+}
+
+class _IncomingRequestBanner extends ConsumerStatefulWidget {
+  const _IncomingRequestBanner({required this.userId});
+  final String userId;
+
+  @override
+  ConsumerState<_IncomingRequestBanner> createState() =>
+      _IncomingRequestBannerState();
+}
+
+class _IncomingRequestBannerState
+    extends ConsumerState<_IncomingRequestBanner> {
+  bool _busy = false;
+
+  Future<void> _accept() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(followRepoProvider)
+          .acceptRequest(senderId: widget.userId);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reject() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(followRepoProvider)
+          .rejectRequest(senderId: widget.userId);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Follow request pending',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14.sp,
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _busy ? null : _reject,
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24.r),
+                    ),
+                    side: const BorderSide(color: Colors.black54),
+                  ),
+                  child: const Text('Reject'),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _busy ? null : _accept,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24.r),
+                    ),
+                  ),
+                  child: _busy
+                      ? SizedBox(
+                          width: 16.r,
+                          height: 16.r,
+                          child:
+                              const CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Accept'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

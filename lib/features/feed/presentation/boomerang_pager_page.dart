@@ -7,15 +7,20 @@ import 'package:video_player/video_player.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 
 class BoomerangPagerPage extends ConsumerStatefulWidget {
   const BoomerangPagerPage({
     super.key,
     required this.initialId,
     required this.initialData,
+    this.targetCommentId,
+    this.targetReplyId,
   });
   final String initialId;
   final Map<String, dynamic> initialData;
+  final String? targetCommentId;
+  final String? targetReplyId;
 
   @override
   ConsumerState<BoomerangPagerPage> createState() => _BoomerangPagerPageState();
@@ -91,7 +96,12 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
                 return const Center(child: CircularProgressIndicator());
               }
               final it = _docs[i];
-              return _PostPage(id: it.id, data: it.data);
+              return _PostPage(
+                id: it.id,
+                data: it.data,
+                targetCommentId: widget.targetCommentId,
+                targetReplyId: widget.targetReplyId,
+              );
             },
           ),
           Positioned(
@@ -109,9 +119,16 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
 }
 
 class _PostPage extends ConsumerStatefulWidget {
-  const _PostPage({required this.id, required this.data});
+  const _PostPage({
+    required this.id,
+    required this.data,
+    this.targetCommentId,
+    this.targetReplyId,
+  });
   final String id;
   final Map<String, dynamic> data;
+  final String? targetCommentId;
+  final String? targetReplyId;
   @override
   ConsumerState<_PostPage> createState() => _PostPageState();
 }
@@ -409,12 +426,10 @@ void _showCommentsSheet(BuildContext context, String boomerangId) {
         initialChildSize: 0.9,
         maxChildSize: 0.98,
         minChildSize: 0.5,
-        builder: (context, controller) {
-          return _CommentsSheet(
-            boomerangId: boomerangId,
-            scrollController: controller,
-          );
-        },
+        builder: (context, controller) => CommentsSheet(
+          boomerangId: boomerangId,
+          scrollController: controller,
+        ),
       );
     },
   );

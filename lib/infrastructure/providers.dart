@@ -183,6 +183,31 @@ final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
   return NotificationsRepo(fs);
 });
 
+final outgoingFollowRequestProvider =
+    StreamProvider.family<FollowRequest?, String>((ref, targetId) {
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null) return const Stream.empty();
+  return ref
+      .watch(followRepoProvider)
+      .watchRequest(receiverId: targetId, senderId: me.uid);
+});
+
+final incomingFollowRequestProvider =
+    StreamProvider.family<FollowRequest?, String>((ref, senderId) {
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null) return const Stream.empty();
+  return ref
+      .watch(followRepoProvider)
+      .watchRequest(receiverId: me.uid, senderId: senderId);
+});
+
+final isFollowingStreamProvider =
+    StreamProvider.family<bool, String>((ref, targetId) {
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null || me.uid == targetId) return const Stream.empty();
+  return ref.watch(followRepoProvider).watchIsFollowing(targetId);
+});
+
 /// Unread notifications count for current user.
 final unreadCountProvider =
     StreamProvider.family<int, String>((ref, uid) async* {

@@ -10,6 +10,7 @@ class UserProfile {
     this.instagram = '',
     this.facebook = '',
     this.twitter = '',
+    this.isPrivate = false,
   });
   final String uid;
   final String fullName;
@@ -21,6 +22,7 @@ class UserProfile {
   final String instagram;
   final String facebook;
   final String twitter;
+  final bool isPrivate;
 
   String get handle => '@${nickname.replaceAll(' ', '_').toLowerCase()}';
 
@@ -36,6 +38,7 @@ class UserProfile {
       instagram: (data['instagram'] ?? '') as String,
       facebook: (data['facebook'] ?? '') as String,
       twitter: (data['twitter'] ?? '') as String,
+      isPrivate: (data['isPrivate'] ?? false) as bool,
     );
   }
 }

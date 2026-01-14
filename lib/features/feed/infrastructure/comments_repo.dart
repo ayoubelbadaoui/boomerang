@@ -54,7 +54,7 @@ class CommentsRepo {
             'boomerangImage': data['imageUrl'],
             'senderId': userId,
             'actorName': userName,
-          'actorAvatar': _avatar(userAvatar, userId),
+            'actorAvatar': _avatar(userAvatar, userId),
             'text': text,
             'read': false,
             'createdAt': FieldValue.serverTimestamp(),
@@ -76,7 +76,7 @@ class CommentsRepo {
         (url != null && url.isNotEmpty)
             ? url
             : 'https://picsum.photos/seed/$seed/200/200';
-    await _fs
+    final replyRef = await _fs
         .collection('boomerangs')
         .doc(boomerangId)
         .collection('comments')
@@ -91,28 +91,44 @@ class CommentsRepo {
           'likes': 0,
           'likedBy': <String>[],
         });
-    // Best-effort notify post owner as well.
+    final replyId = replyRef.id;
+    // Best-effort notify post owner and parent comment author.
     try {
       final postSnap = await _fs.collection('boomerangs').doc(boomerangId).get();
       if (!postSnap.exists) return;
       final data = postSnap.data() as Map<String, dynamic>;
       final ownerId = (data['userId'] ?? '') as String;
-      if (ownerId.isEmpty || ownerId == userId) return;
-      await _fs
-          .collection('users')
-          .doc(ownerId)
-          .collection('notifications')
-          .add({
-            'type': 'comment',
-            'boomerangId': boomerangId,
-            'boomerangImage': data['imageUrl'],
-            'senderId': userId,
-            'actorName': userName,
-            'actorAvatar': _avatar(userAvatar, userId),
-            'text': text,
-            'read': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+      final parentSnap = await _fs
+          .collection('boomerangs')
+          .doc(boomerangId)
+          .collection('comments')
+          .doc(parentCommentId)
+          .get();
+      final parentAuthor = (parentSnap.data()?['userId'] ?? '') as String;
+      final targets = <String>{};
+      if (ownerId.isNotEmpty && ownerId != userId) targets.add(ownerId);
+      if (parentAuthor.isNotEmpty && parentAuthor != userId) {
+        targets.add(parentAuthor);
+      }
+      for (final target in targets) {
+        await _fs
+            .collection('users')
+            .doc(target)
+            .collection('notifications')
+            .add({
+              'type': target == ownerId ? 'comment' : 'reply',
+              'boomerangId': boomerangId,
+              'parentCommentId': parentCommentId,
+              'replyId': replyId,
+              'boomerangImage': data['imageUrl'],
+              'senderId': userId,
+              'actorName': userName,
+              'actorAvatar': _avatar(userAvatar, userId),
+              'text': text,
+              'read': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+      }
     } catch (_) {
       // ignore notification failure
     }

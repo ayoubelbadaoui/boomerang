@@ -22,6 +22,24 @@ class NotificationsRepo {
     });
   }
 
+  Future<void> addFollowRequest({
+    required String toUserId,
+    required String actorUserId,
+    required String actorName,
+    String? actorAvatar,
+  }) async {
+    final ref =
+        _fs.collection('users').doc(toUserId).collection('notifications').doc();
+    await ref.set({
+      'type': 'follow_request',
+      'senderId': actorUserId,
+      'actorName': actorName,
+      'actorAvatar': actorAvatar,
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> addLike({
     required String toUserId,
     required String boomerangId,

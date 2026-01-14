@@ -50,109 +50,110 @@ class _HomeShellState extends State<HomeShell> {
           return const Scaffold();
         }
         return Scaffold(
-      appBar:
-          _currentIndex == 0
-              ? AppBar(
-                centerTitle: true,
-                elevation: 0,
-                title: const Text('Home'),
-                actions: [
-                  Consumer(
-                    builder:
-                        (context, ref, _) => Padding(
-                          padding: EdgeInsets.only(right: 8.w),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(24),
-                            onTap: () async {
-                              await ref
-                                  .read(boomerangRepoProvider)
-                                  .addRandomBoomerang();
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Random boomerang added'),
+          appBar:
+              _currentIndex == 0
+                  ? AppBar(
+                    centerTitle: true,
+                    elevation: 0,
+                    title: const Text('Home'),
+                    actions: [
+                      Consumer(
+                        builder:
+                            (context, ref, _) => Padding(
+                              padding: EdgeInsets.only(right: 8.w),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(24),
+                                onTap: () async {
+                                  await ref
+                                      .read(boomerangRepoProvider)
+                                      .addRandomBoomerang();
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Random boomerang added'),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.all(10.w),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.bolt,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              );
-                            },
-                            child: Container(
-                              padding: EdgeInsets.all(10.w),
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.bolt,
-                                color: Colors.white,
                               ),
                             ),
-                          ),
-                        ),
+                      ),
+                    ],
+                  )
+                  : null,
+          body: _tabs[_currentIndex],
+
+          bottomNavigationBar: Padding(
+            padding: EdgeInsets.only(bottom: 8.h, top: 8.h),
+            child: SizedBox(
+              height: 72.h,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _NavItem(
+                    label: 'Home',
+                    active: _currentIndex == 0,
+                    activeIcon:
+                        'assets/bottom_navigation/active_light/home.svg',
+                    inactiveIcon:
+                        'assets/bottom_navigation/inactive_light/home.svg',
+                    onTap: () => setState(() => _currentIndex = 0),
+                  ),
+                  _NavItem(
+                    label: 'Discover',
+                    active: _currentIndex == 1,
+                    activeIcon:
+                        'assets/bottom_navigation/active_light/discover.svg',
+                    inactiveIcon:
+                        'assets/bottom_navigation/inactive_light/discover.svg',
+                    onTap: () => setState(() => _currentIndex = 1),
+                  ),
+                  _CreateButton(
+                    active: _currentIndex == 2,
+                    onTap: () => setState(() => _currentIndex = 2),
+                  ),
+                  _NavItem(
+                    label: 'Inbox',
+                    active: _currentIndex == 3,
+                    activeIcon:
+                        'assets/bottom_navigation/active_light/chat.svg',
+                    inactiveIcon:
+                        'assets/bottom_navigation/inactive_light/chat.svg',
+                    onTap: () => setState(() => _currentIndex = 3),
+                    badge: Consumer(
+                      builder: (context, ref, _) {
+                        final me = ref.watch(currentUserProfileProvider).value;
+                        if (me == null) return const SizedBox.shrink();
+                        final unread = ref
+                            .watch(unreadCountProvider(me.uid))
+                            .maybeWhen(data: (c) => c, orElse: () => 0);
+                        return AppBadge(count: unread);
+                      },
+                    ),
+                  ),
+                  _NavItem(
+                    label: 'Profile',
+                    active: _currentIndex == 4,
+                    activeIcon:
+                        'assets/bottom_navigation/active_light/profile.svg',
+                    inactiveIcon:
+                        'assets/bottom_navigation/inactive_light/profile.svg',
+                    onTap: () => setState(() => _currentIndex = 4),
                   ),
                 ],
-              )
-              : null,
-      body: _tabs[_currentIndex],
-
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.only(bottom: 8.h, top: 8.h),
-        child: SizedBox(
-          height: 72.h,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _NavItem(
-                label: 'Home',
-                active: _currentIndex == 0,
-                activeIcon: 'assets/bottom_navigation/active_light/home.svg',
-                inactiveIcon:
-                    'assets/bottom_navigation/inactive_light/home.svg',
-                onTap: () => setState(() => _currentIndex = 0),
               ),
-              _NavItem(
-                label: 'Discover',
-                active: _currentIndex == 1,
-                activeIcon:
-                    'assets/bottom_navigation/active_light/discover.svg',
-                inactiveIcon:
-                    'assets/bottom_navigation/inactive_light/discover.svg',
-                onTap: () => setState(() => _currentIndex = 1),
-              ),
-              _CreateButton(
-                active: _currentIndex == 2,
-                onTap: () => setState(() => _currentIndex = 2),
-              ),
-              _NavItem(
-                label: 'Inbox',
-                active: _currentIndex == 3,
-                activeIcon: 'assets/bottom_navigation/active_light/chat.svg',
-                inactiveIcon:
-                    'assets/bottom_navigation/inactive_light/chat.svg',
-                onTap: () => setState(() => _currentIndex = 3),
-                badge: Consumer(
-                  builder: (context, ref, _) {
-                    final me = ref.watch(currentUserProfileProvider).value;
-                    if (me == null) return const SizedBox.shrink();
-                    final unread =
-                        ref.watch(unreadCountProvider(me.uid)).maybeWhen(
-                              data: (c) => c,
-                              orElse: () => 0,
-                            );
-                    return AppBadge(count: unread);
-                  },
-                ),
-              ),
-              _NavItem(
-                label: 'Profile',
-                active: _currentIndex == 4,
-                activeIcon: 'assets/bottom_navigation/active_light/profile.svg',
-                inactiveIcon:
-                    'assets/bottom_navigation/inactive_light/profile.svg',
-                onTap: () => setState(() => _currentIndex = 4),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
         );
       },
     );
@@ -196,12 +197,7 @@ class _NavItem extends StatelessWidget {
                 width: 24.h,
                 colorFilter: null,
               ),
-              if (badge != null)
-                Positioned(
-                  right: -10,
-                  top: -6,
-                  child: badge!,
-                ),
+              if (badge != null) Positioned(right: -10, top: -6, child: badge!),
             ],
           ),
           SizedBox(height: 6.h),
