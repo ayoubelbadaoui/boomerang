@@ -28,6 +28,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   final TextEditingController _phone = TextEditingController();
   final TextEditingController _address = TextEditingController();
   bool _saving = false;
+  bool _lockNickname = false;
   File? _avatarFile;
 
   @override
@@ -37,9 +38,38 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     final auth = container.read(firebaseAuthProvider);
     final prefill = auth.currentUser?.email ?? '';
     _email.text = prefill;
+    _hydrateFromUserDoc();
+  }
+
+  Future<void> _hydrateFromUserDoc() async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final auth = container.read(firebaseAuthProvider);
+    final uid = auth.currentUser?.uid;
+    if (uid == null) return;
+    final fs = container.read(firestoreProvider);
+    try {
+      final snap = await fs.collection('users').doc(uid).get();
+      final data = snap.data();
+      if (data == null) return;
+      final nick = (data['nickname'] ?? data['username'] ?? '') as String;
+      final full = (data['fullName'] ?? '') as String;
+      if (!mounted) return;
+      setState(() {
+        if (nick.trim().isNotEmpty) {
+          _nickname.text = nick;
+          _lockNickname = true;
+        }
+        if (full.trim().isNotEmpty) {
+          _fullName.text = full;
+        }
+      });
+    } catch (_) {
+      // best-effort prefill; ignore failures
+    }
   }
 
   void _next() async {
+    if (_saving) return;
     if (_index < 3) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 300),
@@ -51,31 +81,43 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
       final container = ProviderScope.containerOf(context, listen: false);
       final repo = container.read(userProfileRepoProvider);
       String? avatarUrl;
-      if (_avatarFile != null) {
-        avatarUrl = await repo.uploadAvatar(_avatarFile!);
+      try {
+        if (_avatarFile != null) {
+          avatarUrl = await repo.uploadAvatar(_avatarFile!);
+        }
+        await repo.upsertCurrentUserProfile(
+          gender: _gender,
+          birthday: _birthday,
+          fullName: _fullName.text.trim(),
+          nickname: _nickname.text.trim(),
+          email: _email.text.trim(),
+          phone: _phone.text.trim(),
+          address: _address.text.trim(),
+          avatarUrl: avatarUrl,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile created successfully'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        context.go(HomeShell.routeName);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not finish setup: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _saving = false);
+      } finally {
+        if (mounted) {
+          setState(() => _saving = false);
+        }
       }
-      await repo.upsertCurrentUserProfile(
-        gender: _gender,
-        birthday: _birthday,
-        fullName: _fullName.text.trim(),
-        nickname: _nickname.text.trim(),
-        email: _email.text.trim(),
-        phone: _phone.text.trim(),
-        address: _address.text.trim(),
-        avatarUrl: avatarUrl,
-      );
-      if (!mounted) return;
-      // Show success then navigate home
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile created successfully'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      // Keep buttons hidden during transition
-      setState(() => _saving = false);
-      context.go(HomeShell.routeName);
     }
   }
 
@@ -131,6 +173,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                   phone: _phone,
                   address: _address,
                   onAvatarSelected: (f) => _avatarFile = f,
+                  lockNickname: _lockNickname,
                 ),
                 const _FingerprintStep(),
               ],
@@ -148,6 +191,12 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                             onPressed: _skip,
                             style: OutlinedButton.styleFrom(
                               shape: const StadiumBorder(),
+                              foregroundColor: Colors.black,
+                              side: const BorderSide(
+                                color: Colors.black,
+                                width: 1.5,
+                              ),
+                              backgroundColor: Colors.white,
                               padding: EdgeInsets.symmetric(vertical: 16.h),
                             ),
                             child: const Text('Skip'),
@@ -159,6 +208,8 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                             onPressed: _next,
                             style: ElevatedButton.styleFrom(
                               shape: const StadiumBorder(),
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
                               padding: EdgeInsets.symmetric(vertical: 16.h),
                             ),
                             child: const Text('Continue'),
@@ -181,6 +232,7 @@ class _FillProfileStep extends StatelessWidget {
     required this.phone,
     required this.address,
     this.onAvatarSelected,
+    this.lockNickname = false,
   });
   final TextEditingController fullName;
   final TextEditingController nickname;
@@ -188,6 +240,7 @@ class _FillProfileStep extends StatelessWidget {
   final TextEditingController phone;
   final TextEditingController address;
   final ValueChanged<File?>? onAvatarSelected;
+  final bool lockNickname;
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -222,7 +275,12 @@ class _FillProfileStep extends StatelessWidget {
           SizedBox(height: 24.h),
           _Input(label: 'Full Name', controller: fullName),
           SizedBox(height: 12.h),
-          _Input(label: 'Nickname', controller: nickname),
+          lockNickname
+              ? _ReadOnlyField(
+                  label: 'Username',
+                  value: nickname.text,
+                )
+              : _Input(label: 'Nickname', controller: nickname),
           SizedBox(height: 12.h),
           _Input(
             label: 'Email',
@@ -698,6 +756,46 @@ class _Input extends StatelessWidget {
           borderSide: BorderSide.none,
         ),
       ),
+    );
+  }
+}
+
+class _ReadOnlyField extends StatelessWidget {
+  const _ReadOnlyField({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+            color: Colors.black54,
+          ),
+        ),
+        SizedBox(height: 6.h),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF6F6F6),
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

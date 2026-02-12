@@ -56,39 +56,7 @@ class _HomeShellState extends State<HomeShell> {
                     centerTitle: true,
                     elevation: 0,
                     title: const Text('Home'),
-                    actions: [
-                      Consumer(
-                        builder:
-                            (context, ref, _) => Padding(
-                              padding: EdgeInsets.only(right: 8.w),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(24),
-                                onTap: () async {
-                                  await ref
-                                      .read(boomerangRepoProvider)
-                                      .addRandomBoomerang();
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Random boomerang added'),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: EdgeInsets.all(10.w),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.bolt,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                      ),
-                    ],
+                    actions: const [],
                   )
                   : null,
           body: _tabs[_currentIndex],
@@ -123,12 +91,10 @@ class _HomeShellState extends State<HomeShell> {
                     onTap: () => setState(() => _currentIndex = 2),
                   ),
                   _NavItem(
-                    label: 'Inbox',
+                    label: 'Activity',
                     active: _currentIndex == 3,
-                    activeIcon:
-                        'assets/bottom_navigation/active_light/chat.svg',
-                    inactiveIcon:
-                        'assets/bottom_navigation/inactive_light/chat.svg',
+                    icon: Icons.notifications_none_rounded,
+                    activeIconData: Icons.notifications_rounded,
                     onTap: () => setState(() => _currentIndex = 3),
                     badge: Consumer(
                       builder: (context, ref, _) {
@@ -166,10 +132,12 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
     required this.active,
-    required this.activeIcon,
-    required this.inactiveIcon,
+    this.activeIcon = '',
+    this.inactiveIcon = '',
     required this.onTap,
     this.badge,
+    this.icon,
+    this.activeIconData,
   });
 
   final String label;
@@ -178,30 +146,34 @@ class _NavItem extends StatelessWidget {
   final String inactiveIcon;
   final VoidCallback onTap;
   final Widget? badge;
+  final IconData? icon;
+  final IconData? activeIconData;
 
   @override
   Widget build(BuildContext context) {
     final color = active ? Colors.black : Colors.grey;
+    final double iconSize = 30.h;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              SvgPicture.asset(
-                active ? activeIcon : inactiveIcon,
-                height: 24.h,
-                width: 24.h,
-                colorFilter: null,
-              ),
-              if (badge != null) Positioned(right: -10, top: -6, child: badge!),
-            ],
-          ),
-          SizedBox(height: 6.h),
-          Text(label, style: TextStyle(fontSize: 12.sp, color: color)),
+          if (icon != null)
+            Icon(
+              active ? (activeIconData ?? icon) : icon,
+              size: iconSize,
+              color: color,
+            )
+          else
+            SvgPicture.asset(
+              active ? activeIcon : inactiveIcon,
+              height: iconSize,
+              width: iconSize,
+              colorFilter: null,
+            ),
+          if (badge != null) Positioned(right: -10, top: -6, child: badge!),
         ],
       ),
     );

@@ -99,10 +99,9 @@ class BoomerangProcessor {
       '-r',
       '$fps',
       '-an',
+      // Use hardware encoder on iOS (VideoToolbox) to avoid missing libx264.
       '-c:v',
-      'libx264',
-      '-preset',
-      'faster',
+      'h264_videotoolbox',
       '-movflags',
       '+faststart',
       '"$singleCyclePath"',

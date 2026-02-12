@@ -24,20 +24,17 @@ class UsernameRepo {
     final nickname = username;
     final userRef = _fs.collection('users').doc(user.uid);
 
-    await userRef.set(
-      {
-        'username': username,
-        'usernameLower': usernameLower,
-        'nickname': nickname,
-        'nicknameLower': nickname.toLowerCase(),
-        'fullName': fullName,
-        'fullNameLower': fullName.toLowerCase(),
-        'email': user.email,
-              'isPrivate': false, // default to public on first write
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await userRef.set({
+      'username': username,
+      'usernameLower': usernameLower,
+      'nickname': nickname,
+      'nicknameLower': nickname.toLowerCase(),
+      'fullName': fullName,
+      'fullNameLower': fullName.toLowerCase(),
+      'email': user.email,
+      'isPrivate': false, // default to public on first write
+      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

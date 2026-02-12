@@ -382,9 +382,7 @@ class _Controls extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text('Total duration', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             children:
@@ -403,6 +401,7 @@ class _Controls extends StatelessWidget {
                     checkmarkColor: Colors.black,
                     selectedColor: Colors.white,
                     backgroundColor: Colors.black12,
+                    shape: const StadiumBorder(),
                     side: BorderSide(
                       color: sel ? Colors.black : Colors.black26,
                       width: 1.5,
@@ -432,6 +431,7 @@ class _Controls extends StatelessWidget {
                     checkmarkColor: Colors.black,
                     selectedColor: Colors.white,
                     backgroundColor: Colors.black12,
+                    shape: const StadiumBorder(),
                     side: BorderSide(
                       color: sel ? Colors.black : Colors.black26,
                       width: 1.5,

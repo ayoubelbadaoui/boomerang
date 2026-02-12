@@ -150,6 +150,30 @@ class BoomerangRepo {
     String? caption,
     List<String>? hashtags,
   }) async {
+    // Normalize hashtags: lowercase, strip leading '#', drop empties
+    final normalizedTags =
+        (hashtags ?? const <String>[])
+            .map((t) => t.trim().toLowerCase().replaceFirst(RegExp('^#'), ''))
+            .where((t) => t.isNotEmpty)
+            .toList();
+
+    // Ensure hashtag docs exist before creating the post (for discover search)
+    if (normalizedTags.isNotEmpty) {
+      final preBatch = _fs.batch();
+      for (final tag in normalizedTags.toSet()) {
+        final doc = _fs.collection('hashtags').doc(tag);
+        preBatch.set(doc, {
+          'updatedAt': FieldValue.serverTimestamp(),
+          'count': FieldValue.increment(0),
+        }, SetOptions(merge: true));
+      }
+      try {
+        await preBatch.commit();
+      } catch (_) {
+        // best effort; continue
+      }
+    }
+
     final ref = await _fs.collection('boomerangs').add({
       'userId': userId,
       'userName': userName,
@@ -157,15 +181,15 @@ class BoomerangRepo {
       'videoUrl': videoUrl,
       'imageUrl': imageUrl,
       if (caption != null) 'caption': caption,
-      if (hashtags != null) 'hashtags': hashtags,
+      if (normalizedTags.isNotEmpty) 'hashtags': normalizedTags,
       'likes': 0,
       'likedBy': <String>[],
       'createdAt': FieldValue.serverTimestamp(),
     });
     // Increment hashtags usage counters (best-effort)
-    if (hashtags != null && hashtags.isNotEmpty) {
+    if (normalizedTags.isNotEmpty) {
       final batch = _fs.batch();
-      for (final tag in hashtags.toSet()) {
+      for (final tag in normalizedTags.toSet()) {
         final doc = _fs.collection('hashtags').doc(tag);
         batch.set(doc, {
           'count': FieldValue.increment(1),

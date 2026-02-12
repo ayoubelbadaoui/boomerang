@@ -57,6 +57,7 @@ class InboxTab extends ConsumerWidget {
                           final d = doc.data();
                           final type = (d['type'] ?? '') as String;
                           final rawTitle = (d['actorName'] ?? '') as String;
+                          final status = (d['status'] ?? '') as String;
                           final senderId =
                               ((d['senderId'] ?? d['actorUserId']) ?? '')
                                   as String;
@@ -114,6 +115,7 @@ class InboxTab extends ConsumerWidget {
                           replyId: d['replyId'] as String?,
                             type: itemType,
                             read: read,
+                            status: status,
                           );
                         }).toList();
 
@@ -175,6 +177,7 @@ class _Item {
     required this.actorId,
     required this.type,
     required this.read,
+    this.status,
     this.trailingThumb,
     this.actionLabel,
     this.boomerangId,
@@ -196,6 +199,7 @@ class _Item {
   final String? replyId;
   final String? trailingThumb;
   final String? actionLabel;
+  final String? status;
 }
 
 enum _ItemType { follow, followRequest, like, comment, reply, other }
@@ -250,6 +254,13 @@ class _ActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
+        final isFollowing =
+            ref.watch(isFollowingStreamProvider(item.actorId)).value ?? false;
+        final isPendingRequest = item.type == _ItemType.followRequest &&
+            (item.status?.isEmpty == true || item.status == 'pending') &&
+            !item.read &&
+            !isFollowing;
+
         return InkWell(
           onTap: () => _handleTap(context, ref, item),
           borderRadius: BorderRadius.circular(16.r),
@@ -307,7 +318,7 @@ class _ActivityTile extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 12.w),
-                if (item.type == _ItemType.followRequest)
+                if (isPendingRequest)
                   _FollowRequestActions(item: item)
                 else if (item.type == _ItemType.follow)
                   _FollowBackButton(item: item)
@@ -394,28 +405,45 @@ class _FollowRequestActions extends ConsumerStatefulWidget {
 
 class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
   bool _busy = false;
+  bool _resolved = false;
+
+  Future<void> _markRead() async {
+    final me = ref.read(currentUserProfileProvider).value;
+    if (me == null) return;
+    await ref
+        .read(notificationsRepoProvider)
+        .markRead(uid: me.uid, notificationId: widget.item.id);
+  }
 
   Future<void> _accept() async {
-    if (_busy) return;
-    setState(() => _busy = true);
+    if (_busy || _resolved) return;
+    setState(() {
+      _busy = true;
+      _resolved = true; // optimistic hide
+    });
     try {
       await ref.read(followRepoProvider).acceptRequest(
             senderId: widget.item.actorId,
             notificationId: widget.item.id,
           );
+      await _markRead();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _reject() async {
-    if (_busy) return;
-    setState(() => _busy = true);
+    if (_busy || _resolved) return;
+    setState(() {
+      _busy = true;
+      _resolved = true; // optimistic hide
+    });
     try {
       await ref.read(followRepoProvider).rejectRequest(
             senderId: widget.item.actorId,
             notificationId: widget.item.id,
           );
+      await _markRead();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -423,6 +451,7 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
 
   @override
   Widget build(BuildContext context) {
+    if (_resolved) return const SizedBox.shrink();
     return Row(
       children: [
         TextButton(

@@ -7,6 +7,7 @@ import 'dart:developer' show log;
 import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:boomerang/features/profile/presentation/widgets/boomerang_preview.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class UserBoomerangsGrid extends ConsumerStatefulWidget {
   const UserBoomerangsGrid({super.key});
@@ -51,22 +52,20 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
         }
         return Column(
           children: [
-            GridView.builder(
+            MasonryGridView.count(
               physics: const NeverScrollableScrollPhysics(),
               shrinkWrap: true,
               itemCount: s.docs.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 16.h,
-                crossAxisSpacing: 16.w,
-                childAspectRatio: 3 / 4,
-              ),
+              crossAxisCount: 2,
+              mainAxisSpacing: 12.h,
+              crossAxisSpacing: 12.w,
               itemBuilder: (context, index) {
                 final doc = s.docs[index];
                 final data = doc.data();
                 final id = doc.id;
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
+                final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
                 return InkWell(
                   onLongPress:
                       () => showBoomerangPreview(
@@ -81,7 +80,10 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                       ),
                     );
                   },
-                  child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),
+                  child: AspectRatio(
+                    aspectRatio: aspectRatio,
+                    child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),
+                  ),
                 );
               },
             ),

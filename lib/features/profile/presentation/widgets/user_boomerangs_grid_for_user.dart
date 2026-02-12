@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class UserBoomerangsGridForUser extends ConsumerStatefulWidget {
   const UserBoomerangsGridForUser({super.key, required this.userId});
@@ -52,22 +53,20 @@ class _UserBoomerangsGridForUserState
         }
         return Column(
           children: [
-            GridView.builder(
+            MasonryGridView.count(
               physics: const NeverScrollableScrollPhysics(),
               shrinkWrap: true,
               itemCount: s.docs.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 16.h,
-                crossAxisSpacing: 16.w,
-                childAspectRatio: 3 / 4,
-              ),
+              crossAxisCount: 2,
+              mainAxisSpacing: 12.h,
+              crossAxisSpacing: 12.w,
               itemBuilder: (context, index) {
                 final doc = s.docs[index];
                 final data = doc.data();
                 final id = doc.id;
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
+                final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
                 return InkWell(
                   onTap: () {
                     Navigator.of(context).push(
@@ -76,7 +75,10 @@ class _UserBoomerangsGridForUserState
                       ),
                     );
                   },
-                  child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),
+                  child: AspectRatio(
+                    aspectRatio: aspectRatio,
+                    child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),
+                  ),
                 );
               },
             ),

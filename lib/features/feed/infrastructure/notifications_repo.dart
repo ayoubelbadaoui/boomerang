@@ -64,9 +64,9 @@ class NotificationsRepo {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watch(String uid) {
     return _fs
-        .collection('notifications')
+        .collection('users')
         .doc(uid)
-        .collection('items')
+        .collection('notifications')
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
@@ -74,9 +74,9 @@ class NotificationsRepo {
   /// Stream unread count using server-side filtering.
   Stream<int> watchUnreadCount(String uid) {
     return _fs
-        .collection('notifications')
+        .collection('users')
         .doc(uid)
-        .collection('items')
+        .collection('notifications')
         .where('read', isEqualTo: false)
         .snapshots()
         .map((snap) => snap.size);

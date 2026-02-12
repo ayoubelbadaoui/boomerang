@@ -73,6 +73,11 @@ service cloud.firestore {
       allow read: if isSignedIn() && request.auth.uid == uid;
     }
 
+    // User metadata (e.g., settings)
+    match /users/{uid}/meta/{docId} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
     // Boomerangs (posts) and nested comments/replies
     match /boomerangs/{boomerangId} {
       allow read: if true;

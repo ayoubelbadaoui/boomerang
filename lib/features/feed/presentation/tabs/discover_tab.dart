@@ -5,6 +5,8 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'dart:async';
 
 class DiscoverTab extends ConsumerStatefulWidget {
@@ -58,6 +60,7 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim();
+    final textTheme = Theme.of(context).textTheme;
     // no-op here; children decide based on query
     return Scaffold(
       backgroundColor: Colors.white,
@@ -108,9 +111,9 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
               indicatorWeight: 3,
               labelColor: Colors.black,
               unselectedLabelColor: Colors.black45,
-              labelStyle: TextStyle(
+              labelStyle: textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
-                fontSize: 18.sp,
+                fontSize: textTheme.titleLarge?.fontSize ?? 18.sp,
               ),
               tabs: const [
                 Tab(text: 'Bmg.'),
@@ -206,8 +209,14 @@ class _BmgGrid extends ConsumerWidget {
   final String query;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isHashtag = query.startsWith('#') && query.length > 1;
-    final tag = isHashtag ? query.substring(1).toLowerCase() : '';
+    final trimmed = query.trim();
+    final isHashtag = trimmed.isNotEmpty;
+    final tag =
+        isHashtag
+            ? (trimmed.startsWith('#')
+                ? trimmed.substring(1).toLowerCase()
+                : trimmed.toLowerCase())
+            : '';
     final stream =
         isHashtag
             ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
@@ -232,126 +241,133 @@ class _BmgGrid extends ConsumerWidget {
             precacheImage(NetworkImage(u), context);
           }
         } catch (_) {}
-        return GridView.builder(
+          return MasonryGridView.count(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 16.h,
-            crossAxisSpacing: 16.w,
-            childAspectRatio: 3 / 4,
-          ),
+          crossAxisCount: 2,
+          mainAxisSpacing: 16.h,
+          crossAxisSpacing: 16.w,
           itemCount: docs.length,
           itemBuilder: (context, i) {
             final d = docs[i].data();
+              final id = docs[i].id;
             final name = (d['userName'] ?? '') as String;
             final poster = (d['imageUrl'] ?? '') as String;
             final views = (d['likes'] ?? 0) as int;
             final avatar = (d['userAvatar'] as String?);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18.r),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (poster.isNotEmpty)
-                          Builder(
-                            builder: (context) {
-                              final dpr =
-                                  MediaQuery.of(context).devicePixelRatio;
-                              final gridW =
-                                  (MediaQuery.of(context).size.width -
-                                      (16.w * 3)) /
-                                  2;
-                              final cacheW = (gridW * dpr).round();
-                              return Image(
-                                image: ResizeImage.resizeIfNeeded(
-                                  cacheW,
-                                  null,
-                                  NetworkImage(poster),
-                                ),
-                                fit: BoxFit.cover,
-                                errorBuilder:
-                                    (_, __, ___) => Container(
-                                      color: const Color(0xFFF2F2F2),
-                                    ),
-                              );
-                            },
-                          )
-                        else
-                          Container(
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.play_circle_fill,
-                                color: Colors.black38,
-                                size: 36,
-                              ),
-                            ),
-                          ),
-                        Positioned(
-                          left: 8.w,
-                          bottom: 8.h,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8.w,
-                              vertical: 4.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.play_circle_filled,
-                                  size: 14,
-                                  color: Colors.white70,
-                                ),
-                                SizedBox(width: 4.w),
-                                Text(
-                                  '${(views / 1000).toStringAsFixed(1)}K',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+            final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
+            final tileWidth =
+                (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
+            final cacheW =
+                (tileWidth * MediaQuery.of(context).devicePixelRatio).round();
+
+            return GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => BoomerangPagerPage(
+                      initialId: id,
+                      initialData: d,
                     ),
                   ),
-                ),
-                SizedBox(height: 8.h),
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 12.r,
-                      backgroundImage:
-                          avatar != null ? NetworkImage(avatar) : null,
-                    ),
-                    SizedBox(width: 8.w),
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14.sp,
-                        ),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AspectRatio(
+                    aspectRatio: aspectRatio,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18.r),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (poster.isNotEmpty)
+                            Image(
+                              image: ResizeImage.resizeIfNeeded(
+                                cacheW,
+                                null,
+                                NetworkImage(poster),
+                              ),
+                              fit: BoxFit.cover,
+                              errorBuilder:
+                                  (_, __, ___) => Container(
+                                    color: const Color(0xFFF2F2F2),
+                                  ),
+                            )
+                          else
+                            Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.play_circle_fill,
+                                  color: Colors.black38,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                          Positioned(
+                            left: 8.w,
+                            bottom: 8.h,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8.w,
+                                vertical: 4.h,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.play_circle_filled,
+                                    size: 14,
+                                    color: Colors.white70,
+                                  ),
+                                  SizedBox(width: 4.w),
+                                  Text(
+                                    '${(views / 1000).toStringAsFixed(1)}K',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  SizedBox(height: 8.h),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12.r,
+                        backgroundImage:
+                            avatar != null ? NetworkImage(avatar) : null,
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -423,14 +439,36 @@ class _TagsSearchListState extends ConsumerState<_TagsSearchList> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.query.trim().isEmpty) {
+    final normalizedQuery = widget.query.startsWith('#')
+        ? widget.query.substring(1).trim()
+        : widget.query.trim();
+    final tag = normalizedQuery.toLowerCase();
+
+    if (normalizedQuery.isEmpty) {
       return const Center(child: Text('Search hashtags by typing #tag'));
     }
     if (_items.isEmpty && _loading) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('No hashtags found'));
+      return ListView(
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.tag),
+            title: Text('#$tag'),
+            subtitle: const Text('Search posts with this hashtag'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => HashtagFeedPage(tag: tag)),
+              );
+            },
+          ),
+          SizedBox(height: 16.h),
+          const Center(child: Text('No hashtags found')),
+        ],
+      );
     }
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {

@@ -105,6 +105,20 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
             },
           ),
           Positioned(
+            top: MediaQuery.of(context).viewPadding.top + 8.h,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                'Reels',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ),
+          ),
+          Positioned(
             left: 8.w,
             top: MediaQuery.of(context).viewPadding.top + 8.h,
             child: IconButton(

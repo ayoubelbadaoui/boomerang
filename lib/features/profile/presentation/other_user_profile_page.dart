@@ -248,7 +248,7 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     final label = isFollowing
         ? 'Following'
         : requested
-            ? 'Requested'
+            ? 'Pending'
             : (widget.isPrivate ? 'Request' : 'Follow');
     final onPressed = (requested || _loading)
         ? null

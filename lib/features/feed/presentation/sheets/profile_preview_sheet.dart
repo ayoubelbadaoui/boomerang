@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
+import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 
 class ProfilePreviewSheet extends ConsumerStatefulWidget {
   const ProfilePreviewSheet({
@@ -25,29 +26,21 @@ class ProfilePreviewSheet extends ConsumerStatefulWidget {
 
 class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
   bool _loading = false;
-  bool? _isFollowing;
+  bool _optimisticRequested = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final repo = ref.read(followRepoProvider);
-      final v = await repo.isFollowing(widget.userId);
-      if (mounted) setState(() => _isFollowing = v);
-    });
-  }
-
-  Future<void> _toggleFollow() async {
-    if (_loading || _isFollowing == null) return;
+  Future<void> _toggleFollow({required bool isFollowing}) async {
+    if (_loading) return;
     setState(() => _loading = true);
     final repo = ref.read(followRepoProvider);
     try {
-      if (_isFollowing == true) {
+      if (isFollowing) {
         await repo.unfollow(widget.userId);
-        if (mounted) setState(() => _isFollowing = false);
+        if (mounted) _optimisticRequested = false;
       } else {
-        await repo.follow(widget.userId);
-        if (mounted) setState(() => _isFollowing = true);
+        final outcome = await repo.followOrRequest(widget.userId);
+        if (mounted) {
+          _optimisticRequested = outcome == FollowOutcome.requested;
+        }
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -58,6 +51,23 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
   Widget build(BuildContext context) {
     final me = ref.watch(currentUserProfileProvider).value;
     final isSelf = me?.uid == widget.userId;
+    final isFollowing =
+        ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false;
+    final outgoing =
+        ref.watch(outgoingFollowRequestProvider(widget.userId)).value;
+    final requested = _optimisticRequested || (outgoing?.isPending == true);
+    final followLabel =
+        isFollowing
+            ? 'Following'
+            : requested
+                ? 'Pending'
+                : 'Follow';
+    final followIcon =
+        isFollowing
+            ? Icons.check
+            : requested
+                ? Icons.schedule
+                : Icons.person_add_alt_1;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
@@ -225,24 +235,31 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed:
-                          (_isFollowing == null || _loading)
+                          (requested || _loading)
                               ? null
-                              : _toggleFollow,
-                      icon: Icon(
-                        _isFollowing == true
-                            ? Icons.check
-                            : Icons.person_add_alt_1,
-                      ),
+                              : () => _toggleFollow(isFollowing: isFollowing),
+                      icon:
+                          _loading
+                              ? SizedBox(
+                                  width: 16.r,
+                                  height: 16.r,
+                                  child: const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                        AlwaysStoppedAnimation(Colors.white),
+                                  ),
+                                )
+                              : Icon(followIcon),
                       label: Text(
-                        _isFollowing == true ? 'Following' : 'Follow',
+                        followLabel,
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
-                            _isFollowing == true ? Colors.white : Colors.black,
+                            isFollowing ? Colors.white : Colors.black,
                         foregroundColor:
-                            _isFollowing == true ? Colors.black : Colors.white,
+                            isFollowing ? Colors.black : Colors.white,
                         side:
-                            _isFollowing == true
+                            isFollowing
                                 ? const BorderSide(
                                   color: Colors.black,
                                   width: 1,

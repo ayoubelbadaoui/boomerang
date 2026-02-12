@@ -29,6 +29,9 @@ load File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb')
 target 'Runner' do
   use_modular_headers!
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+  # ffmpeg kit (community fork with bundled xcframeworks + dSYMs)
+  pod 'ffmpeg-kit-ios-full', :podspec => 'https://raw.githubusercontent.com/luthviar/ffmpeg-kit-ios-full/main/ffmpeg-kit-ios-full.podspec'
 end
 
 post_install do |installer|
