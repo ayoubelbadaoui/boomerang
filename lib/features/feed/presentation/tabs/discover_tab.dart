@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
+import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 import 'dart:async';
 
 class DiscoverTab extends ConsumerStatefulWidget {
@@ -252,7 +253,6 @@ class _BmgGrid extends ConsumerWidget {
               final id = docs[i].id;
             final name = (d['userName'] ?? '') as String;
             final poster = (d['imageUrl'] ?? '') as String;
-            final views = (d['likes'] ?? 0) as int;
             final avatar = (d['userAvatar'] as String?);
             final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
             final tileWidth =
@@ -312,60 +312,42 @@ class _BmgGrid extends ConsumerWidget {
                                 ),
                               ),
                             ),
-                          Positioned(
-                            left: 8.w,
-                            bottom: 8.h,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8.w,
-                                vertical: 4.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(12.r),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.play_circle_filled,
-                                    size: 14,
-                                    color: Colors.white70,
-                                  ),
-                                  SizedBox(width: 4.w),
-                                  Text(
-                                    '${(views / 1000).toStringAsFixed(1)}K',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
                   ),
                   SizedBox(height: 8.h),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12.r,
-                        backgroundImage:
-                            avatar != null ? NetworkImage(avatar) : null,
-                      ),
-                      SizedBox(width: 8.w),
-                      Expanded(
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12.r,
+                      backgroundImage:
+                          avatar != null ? NetworkImage(avatar) : null,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => OtherUserProfilePage(
+                                userId: (d['userId'] ?? '') as String,
+                              ),
+                            ),
+                          );
+                        },
                         child: Text(
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
                 ],
               ),
             );

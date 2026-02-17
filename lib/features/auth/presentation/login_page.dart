@@ -185,17 +185,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
                 SizedBox(height: 24.h),
-                const SectionDivider(label: 'or continue with'),
-                SizedBox(height: 20.h),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: const [
-                    SocialButton(icon: Icons.facebook),
-                    SocialButton(icon: Icons.g_mobiledata),
-                    SocialButton(icon: Icons.apple),
-                  ],
-                ),
-                SizedBox(height: 24.h),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

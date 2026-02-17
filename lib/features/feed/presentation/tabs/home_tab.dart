@@ -43,6 +43,7 @@ class _PaginatedBoomerangListState
   DocumentSnapshot<Map<String, dynamic>>? _last;
   bool _loading = false;
   bool _hasMore = true;
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -95,18 +96,20 @@ class _PaginatedBoomerangListState
 
   Future<void> _refresh() async {
     setState(() {
+      _refreshing = true;
       _docs.clear();
       _last = null;
       _hasMore = true;
     });
     debugPrint('feed: refresh triggered');
     await _fetchNext();
+    if (mounted) setState(() => _refreshing = false);
   }
 
   @override
   Widget build(BuildContext context) {
     final likedIds = ref.watch(likedPostIdsProvider).value ?? const <String>{};
-    final isLoadingInitial = _docs.isEmpty && _loading;
+    final isLoadingInitial = _docs.isEmpty && _loading && !_refreshing;
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView.separated(
@@ -127,10 +130,7 @@ class _PaginatedBoomerangListState
             );
           }
           if (_docs.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: Text('No boomerangs yet')),
-            );
+            return const SizedBox.shrink();
           }
           if (i >= _docs.length) {
             return const Padding(

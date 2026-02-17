@@ -15,6 +15,7 @@ class OnboardingPage extends StatelessWidget {
     final pages = _OnboardingItem.pages;
 
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           PageView.builder(
@@ -132,7 +133,10 @@ class OnboardingPage extends StatelessWidget {
             right: 16.w,
             child: TextButton(
               onPressed: () => context.push(AuthChoicePage.routeName),
-              child: const Text('Skip'),
+              child: const Text(
+                'Skip',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -148,13 +152,7 @@ class _OnboardingSlide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Background image
-        Image.asset(item.imageAsset, fit: BoxFit.cover),
-      ],
-    );
+    return Container(color: Colors.black);
   }
 }
 

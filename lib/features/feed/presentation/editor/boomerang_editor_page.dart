@@ -317,7 +317,6 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chipTimes = <double>[3, 6, 10];
     final speedOptions = <double>[0.5, 1.0, 1.5, 2.0];
 
     return Container(
@@ -381,34 +380,6 @@ class _Controls extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            children:
-                chipTimes.map((t) {
-                  final sel = totalSeconds.round() == t.round();
-                  return ChoiceChip(
-                    label: Text(
-                      '${t.toStringAsFixed(0)}s',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    selected: sel,
-                    showCheckmark: true,
-                    checkmarkColor: Colors.black,
-                    selectedColor: Colors.white,
-                    backgroundColor: Colors.black12,
-                    shape: const StadiumBorder(),
-                    side: BorderSide(
-                      color: sel ? Colors.black : Colors.black26,
-                      width: 1.5,
-                    ),
-                    onSelected: (_) => onTotalChanged(t),
-                  );
-                }).toList(),
           ),
           const SizedBox(height: 12),
           Text('Speed', style: theme.textTheme.titleMedium),

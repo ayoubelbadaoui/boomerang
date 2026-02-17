@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/auth/presentation/choose_username_page.dart';
 import 'package:go_router/go_router.dart';
-import 'package:boomerang/features/feed/presentation/widgets/badge.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -28,7 +27,7 @@ class _HomeShellState extends State<HomeShell> {
     const HomeTab(),
     const DiscoverTab(),
     const CreateTab(),
-    const InboxTab(),
+    const _MessagingComingSoon(),
     const ProfileTab(),
   ];
 
@@ -56,7 +55,25 @@ class _HomeShellState extends State<HomeShell> {
                     centerTitle: true,
                     elevation: 0,
                     title: const Text('Home'),
-                    actions: const [],
+                    actions: [
+                      IconButton(
+                        splashRadius: 24,
+                        icon: SvgPicture.asset(
+                          'assets/svgs/notification.svg',
+                          height: 24.h,
+                          width: 24.h,
+                          colorFilter: const ColorFilter.mode(
+                            Colors.black,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const InboxTab()),
+                          );
+                        },
+                      ),
+                    ],
                   )
                   : null,
           body: _tabs[_currentIndex],
@@ -91,21 +108,13 @@ class _HomeShellState extends State<HomeShell> {
                     onTap: () => setState(() => _currentIndex = 2),
                   ),
                   _NavItem(
-                    label: 'Activity',
+                    label: 'Inbox',
                     active: _currentIndex == 3,
-                    icon: Icons.notifications_none_rounded,
-                    activeIconData: Icons.notifications_rounded,
+                    activeIcon:
+                        'assets/bottom_navigation/active_light/chat.svg',
+                    inactiveIcon:
+                        'assets/bottom_navigation/inactive_light/chat.svg',
                     onTap: () => setState(() => _currentIndex = 3),
-                    badge: Consumer(
-                      builder: (context, ref, _) {
-                        final me = ref.watch(currentUserProfileProvider).value;
-                        if (me == null) return const SizedBox.shrink();
-                        final unread = ref
-                            .watch(unreadCountProvider(me.uid))
-                            .maybeWhen(data: (c) => c, orElse: () => 0);
-                        return AppBadge(count: unread);
-                      },
-                    ),
                   ),
                   _NavItem(
                     label: 'Profile',
@@ -135,9 +144,6 @@ class _NavItem extends StatelessWidget {
     this.activeIcon = '',
     this.inactiveIcon = '',
     required this.onTap,
-    this.badge,
-    this.icon,
-    this.activeIconData,
   });
 
   final String label;
@@ -145,36 +151,21 @@ class _NavItem extends StatelessWidget {
   final String activeIcon;
   final String inactiveIcon;
   final VoidCallback onTap;
-  final Widget? badge;
-  final IconData? icon;
-  final IconData? activeIconData;
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? Colors.black : Colors.grey;
-    final double iconSize = 30.h;
+    final double iconSize = 28.h; // uniform size for active/inactive icons
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          if (icon != null)
-            Icon(
-              active ? (activeIconData ?? icon) : icon,
-              size: iconSize,
-              color: color,
-            )
-          else
-            SvgPicture.asset(
-              active ? activeIcon : inactiveIcon,
-              height: iconSize,
-              width: iconSize,
-              colorFilter: null,
-            ),
-          if (badge != null) Positioned(right: -10, top: -6, child: badge!),
-        ],
+      child: SizedBox(
+        width: iconSize,
+        height: iconSize,
+        child: SvgPicture.asset(
+          active ? activeIcon : inactiveIcon,
+          fit: BoxFit.contain,
+          colorFilter: null,
+        ),
       ),
     );
   }
@@ -200,6 +191,22 @@ class _CreateButton extends StatelessWidget {
             width: 24.h,
             colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessagingComingSoon extends StatelessWidget {
+  const _MessagingComingSoon();
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text(
+          'Messaging coming soon',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          textAlign: TextAlign.center,
         ),
       ),
     );
