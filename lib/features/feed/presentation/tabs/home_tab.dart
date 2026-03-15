@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -501,7 +502,6 @@ class _DoubleTapLikeArea extends ConsumerStatefulWidget {
 
 String _bestName(UserProfile profile) {
   if (profile.nickname.trim().isNotEmpty) return profile.nickname;
-  if (profile.username.trim().isNotEmpty) return profile.username;
   if (profile.fullName.trim().isNotEmpty) return profile.fullName;
   return 'User';
 }
@@ -955,13 +955,9 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
         final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
         final targetWidth = (MediaQuery.of(context).size.width - 32.w);
         final cacheW = (targetWidth * devicePixelRatio).round();
-        return Image(
-          image: ResizeImage.resizeIfNeeded(
-            cacheW,
-            null,
-            NetworkImage(widget.posterUrl!),
-          ),
-          fit: BoxFit.cover,
+        return _FreshStorageImage(
+          url: widget.posterUrl!,
+          cacheWidth: cacheW,
         );
       }
       // Lightweight placeholder while video buffers/initializes or if poster is missing.
@@ -1003,6 +999,64 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Attempts to refresh a Firebase Storage download URL to avoid stale-token 412s.
+class _FreshStorageImage extends StatefulWidget {
+  const _FreshStorageImage({
+    required this.url,
+    this.cacheWidth,
+  });
+  final String url;
+  final int? cacheWidth;
+
+  @override
+  State<_FreshStorageImage> createState() => _FreshStorageImageState();
+}
+
+class _FreshStorageImageState extends State<_FreshStorageImage> {
+  String? _resolvedUrl;
+  bool _triedRefresh = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    try {
+      final ref = FirebaseStorage.instance.refFromURL(widget.url);
+      final fresh = await ref.getDownloadURL();
+      if (mounted) {
+        setState(() => _resolvedUrl = fresh);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _triedRefresh = true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _resolvedUrl ?? widget.url;
+    return Image(
+      image: ResizeImage.resizeIfNeeded(
+        widget.cacheWidth,
+        null,
+        NetworkImage(url),
+      ),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) {
+        if (!_triedRefresh) {
+          _triedRefresh = true;
+          _resolve();
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 }

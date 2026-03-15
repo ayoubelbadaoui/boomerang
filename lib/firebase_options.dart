@@ -57,19 +57,20 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDfc96JIPb4TvxSsu_KybLuqYhhUCo9rGw',
-    appId: '1:778677827043:android:b4f932125777fd46619cd6',
-    messagingSenderId: '778677827043',
-    projectId: 'boomerang-fec61',
-    storageBucket: 'boomerang-fec61.firebasestorage.app',
+    apiKey: 'AIzaSyDZt0ykiPCpzSr5vJhQ44roLYG0MyaLgpM',
+    appId: '1:851358132889:android:e85183ccf8ee543e2fa608',
+    messagingSenderId: '851358132889',
+    projectId: 'boomerang-new-2052e',
+    storageBucket: 'boomerang-new-2052e.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyC9liCjizoUljMixTkXG2m1zTA_TaGFkK8',
-    appId: '1:778677827043:ios:b58a92e09d32c72b619cd6',
-    messagingSenderId: '778677827043',
-    projectId: 'boomerang-fec61',
-    storageBucket: 'boomerang-fec61.firebasestorage.app',
-    iosBundleId: 'com.ayoubhassan.boomerang',
+    apiKey: 'AIzaSyCN-yKwem9XHefhBFK5g9gcKBmXbogGIkA',
+    appId: '1:851358132889:ios:e0a09cc9bb64b1252fa608',
+    messagingSenderId: '851358132889',
+    projectId: 'boomerang-new-2052e',
+    storageBucket: 'boomerang-new-2052e.firebasestorage.app',
+    iosBundleId: 'com.alwateam.boomerang',
   );
+
 }

@@ -8,7 +8,7 @@ import 'tabs/inbox_tab.dart';
 import '../../profile/presentation/profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
-import 'package:boomerang/features/auth/presentation/choose_username_page.dart';
+import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
 import 'package:go_router/go_router.dart';
 
 class HomeShell extends StatefulWidget {
@@ -35,16 +35,16 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
-        final usernameState = ref.watch(userHasUsernameProvider);
-        if (usernameState.isLoading) {
+        final nicknameState = ref.watch(userHasNicknameProvider);
+        if (nicknameState.isLoading) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final hasUsername = usernameState.asData?.value ?? false;
-        if (!hasUsername) {
+        final hasNickname = nicknameState.asData?.value ?? false;
+        if (!hasNickname) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) context.go(ChooseUsernamePage.routeName);
+            if (mounted) context.go(SetupFlowPage.routeName);
           });
           return const Scaffold();
         }

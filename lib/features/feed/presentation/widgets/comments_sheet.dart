@@ -132,9 +132,10 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
                     final isHighlight = _highlightCommentId == commentId;
                     return Container(
                       key: key,
-                      color: isHighlight
-                          ? Colors.yellow.withOpacity(0.15)
-                          : Colors.transparent,
+                      color:
+                          isHighlight
+                              ? Colors.yellow.withValues(alpha: 0.15)
+                              : Colors.transparent,
                       child: _CommentTile(
                         boomerangId: widget.boomerangId,
                         commentId: commentId,
@@ -144,10 +145,11 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
                         likes: (c['likes'] ?? 0) as int,
                         likedBy:
                             (c['likedBy'] as List?)?.cast<String>() ??
-                                const <String>[],
-                        createdAt: (c['createdAt'] is Timestamp)
-                            ? (c['createdAt'] as Timestamp).toDate()
-                            : DateTime.now(),
+                            const <String>[],
+                        createdAt:
+                            (c['createdAt'] is Timestamp)
+                                ? (c['createdAt'] as Timestamp).toDate()
+                                : DateTime.now(),
                         highlightReplyId: _highlightReplyId,
                         replyKeys: _replyKeys,
                         targetReplyId: _highlightReplyId,
@@ -247,7 +249,9 @@ class _CommentTile extends ConsumerWidget {
                           child: Row(
                             children: [
                               Icon(
-                                isLiked ? Icons.favorite : Icons.favorite_border,
+                                isLiked
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
                                 size: 22,
                                 color: isLiked ? Colors.red : Colors.black54,
                               ),
@@ -355,9 +359,10 @@ class _CommentTile extends ConsumerWidget {
                           boomerangId: boomerangId,
                           parentCommentId: commentId,
                           userId: user?.uid ?? 'anon',
-                          userName: user?.nickname.isNotEmpty == true
-                              ? user!.nickname
-                              : (user?.fullName ?? 'User'),
+                          userName:
+                              user?.nickname.isNotEmpty == true
+                                  ? user!.nickname
+                                  : (user?.fullName ?? 'User'),
                           userAvatar: user?.avatarUrl,
                           text: text,
                         );
@@ -391,14 +396,15 @@ class _RepliesList extends ConsumerWidget {
   final String? targetReplyId;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stream = FirebaseFirestore.instance
-        .collection('boomerangs')
-        .doc(boomerangId)
-        .collection('comments')
-        .doc(commentId)
-        .collection('replies')
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+    final stream =
+        FirebaseFirestore.instance
+            .collection('boomerangs')
+            .doc(boomerangId)
+            .collection('comments')
+            .doc(commentId)
+            .collection('replies')
+            .orderBy('createdAt', descending: true)
+            .snapshots();
     return StreamBuilder(
       stream: stream,
       builder: (context, snapshot) {
@@ -408,70 +414,72 @@ class _RepliesList extends ConsumerWidget {
         return Padding(
           padding: EdgeInsets.only(left: 68.w, top: 8.h),
           child: Column(
-            children: docs.map((d) {
-              final r = d.data();
-              final replyId = d.id;
-              final avatar = r['userAvatar'] as String?;
-              final name = (r['userName'] ?? 'User') as String;
-              final text = (r['text'] ?? '') as String;
-              final ts = r['createdAt'];
-              final createdAt =
-                  ts is Timestamp ? ts.toDate() : DateTime.now();
-              final key = replyKeys.putIfAbsent(replyId, () => GlobalKey());
-              final isHighlight = targetReplyId == replyId;
-              return Padding(
-                key: key,
-                padding: EdgeInsets.only(bottom: 10.h),
-                child: Container(
-                  color: isHighlight
-                      ? Colors.yellow.withOpacity(0.12)
-                      : Colors.transparent,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AppAvatar(url: avatar, size: 40.r),
-                      SizedBox(width: 8.w),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: TextStyle(
-                                fontFamily: 'Urbanist',
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14.sp,
-                                height: 1.4,
-                                letterSpacing: 0.2,
-                              ),
+            children:
+                docs.map((d) {
+                  final r = d.data();
+                  final replyId = d.id;
+                  final avatar = r['userAvatar'] as String?;
+                  final name = (r['userName'] ?? 'User') as String;
+                  final text = (r['text'] ?? '') as String;
+                  final ts = r['createdAt'];
+                  final createdAt =
+                      ts is Timestamp ? ts.toDate() : DateTime.now();
+                  final key = replyKeys.putIfAbsent(replyId, () => GlobalKey());
+                  final isHighlight = targetReplyId == replyId;
+                  return Padding(
+                    key: key,
+                    padding: EdgeInsets.only(bottom: 10.h),
+                    child: Container(
+                      color:
+                          isHighlight
+                              ? Colors.yellow.withValues(alpha: 0.12)
+                              : Colors.transparent,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AppAvatar(url: avatar, size: 40.r),
+                          SizedBox(width: 8.w),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontFamily: 'Urbanist',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14.sp,
+                                    height: 1.4,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                SizedBox(height: 4.h),
+                                Text(
+                                  text,
+                                  style: TextStyle(
+                                    fontFamily: 'Urbanist',
+                                    fontSize: 13.sp,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                SizedBox(height: 6.h),
+                                Text(
+                                  _timeAgo(createdAt),
+                                  style: TextStyle(
+                                    color: Colors.black45,
+                                    fontFamily: 'Urbanist',
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(height: 4.h),
-                            Text(
-                              text,
-                              style: TextStyle(
-                                fontFamily: 'Urbanist',
-                                fontSize: 13.sp,
-                                height: 1.4,
-                              ),
-                            ),
-                            SizedBox(height: 6.h),
-                            Text(
-                              _timeAgo(createdAt),
-                              style: TextStyle(
-                                color: Colors.black45,
-                                fontFamily: 'Urbanist',
-                                fontSize: 12.sp,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
+                    ),
+                  );
+                }).toList(),
           ),
         );
       },
@@ -540,9 +548,10 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
                   .add(
                     boomerangId: widget.boomerangId,
                     userId: user?.uid ?? 'anon',
-                    userName: user?.nickname.isNotEmpty == true
-                        ? user!.nickname
-                        : (user?.fullName ?? 'User'),
+                    userName:
+                        user?.nickname.isNotEmpty == true
+                            ? user!.nickname
+                            : (user?.fullName ?? 'User'),
                     userAvatar: user?.avatarUrl,
                     text: text,
                   );

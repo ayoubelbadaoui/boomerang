@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "778677827043",
-    "project_id": "boomerang-fec61",
-    "storage_bucket": "boomerang-fec61.firebasestorage.app"
+    "project_number": "851358132889",
+    "project_id": "boomerang-new-2052e",
+    "storage_bucket": "boomerang-new-2052e.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:778677827043:android:b4f932125777fd46619cd6",
+        "mobilesdk_app_id": "1:851358132889:android:e85183ccf8ee543e2fa608",
         "android_client_info": {
           "package_name": "com.alwa.bm"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDfc96JIPb4TvxSsu_KybLuqYhhUCo9rGw"
+          "current_key": "AIzaSyDZt0ykiPCpzSr5vJhQ44roLYG0MyaLgpM"
         }
       ],
       "services": {

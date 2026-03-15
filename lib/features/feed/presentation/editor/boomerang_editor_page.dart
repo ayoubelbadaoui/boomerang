@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
@@ -196,11 +198,21 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Boomerang created')));
       Navigator.pop(context);
-    } catch (e) {
+    } catch (e, _) {
       if (!mounted) return;
+      final isPluginMissing =
+          e is MissingPluginException ||
+          (e is PlatformException &&
+              (e.message ?? '').contains('MissingPluginException'));
+      final message =
+          isPluginMissing
+              ? 'Video processing is not available on this device. Try a full rebuild (flutter clean && flutter run) or use a different device.'
+              : 'Failed: $e';
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      ).showSnackBar(SnackBar(content: Text(message)));
+      log('Editor ERROR: ${message.toString()}');
+      log('Editor ERROR: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _processing = false);
     }

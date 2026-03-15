@@ -3,8 +3,6 @@ class UserProfile {
     required this.uid,
     required this.fullName,
     required this.nickname,
-    required this.username,
-    required this.usernameLower,
     this.avatarUrl,
     this.bio = '',
     this.instagram = '',
@@ -15,8 +13,6 @@ class UserProfile {
   final String uid;
   final String fullName;
   final String nickname;
-  final String username;
-  final String usernameLower;
   final String? avatarUrl;
   final String bio;
   final String instagram;
@@ -27,12 +23,11 @@ class UserProfile {
   String get handle => '@${nickname.replaceAll(' ', '_').toLowerCase()}';
 
   factory UserProfile.fromMap(String uid, Map<String, dynamic> data) {
+    final nickname = (data['nickname'] ?? data['username'] ?? '') as String;
     return UserProfile(
       uid: uid,
       fullName: (data['fullName'] ?? '') as String,
-      nickname: (data['nickname'] ?? '') as String,
-      username: (data['username'] ?? '') as String,
-      usernameLower: (data['usernameLower'] ?? '') as String,
+      nickname: nickname,
       avatarUrl: data['avatarUrl'] as String?,
       bio: (data['bio'] ?? '') as String,
       instagram: (data['instagram'] ?? '') as String,

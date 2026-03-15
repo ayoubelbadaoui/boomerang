@@ -277,7 +277,7 @@ class _FillProfileStep extends StatelessWidget {
           SizedBox(height: 12.h),
           lockNickname
               ? _ReadOnlyField(
-                  label: 'Username',
+                  label: 'Nickname',
                   value: nickname.text,
                 )
               : _Input(label: 'Nickname', controller: nickname),

@@ -15,13 +15,14 @@ import io.flutter.plugins.videoplayer.VideoPlayerPlugin
 import vn.hunghd.flutter.plugins.imagecropper.ImageCropperPlugin
 import com.dexterous.flutterlocalnotifications.FlutterLocalNotificationsPlugin
 import dev.fluttercommunity.plus.share.SharePlusPlugin
+import com.antonkarpenko.ffmpegkit.FFmpegKitFlutterPlugin
 
 class MainActivity : FlutterActivity() {
-    // Manually register plugins and intentionally skip ffmpeg_kit_flutter_new,
-    // which is crashing on JNI load in this emulator/device.
+    // Manually register plugins (include ffmpeg for Edit Boomerang video processing).
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         // Skip super.configureFlutterEngine to avoid auto-registration failure.
         val plugins = flutterEngine.plugins
+        plugins.add(FFmpegKitFlutterPlugin())
         plugins.add(CameraAndroidCameraxPlugin())
         plugins.add(FlutterFirebaseFirestorePlugin())
         plugins.add(FlutterFirebaseAuthPlugin())

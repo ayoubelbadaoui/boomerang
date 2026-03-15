@@ -155,7 +155,6 @@ class _PostPageState extends ConsumerState<_PostPage> {
 
   String _bestName(UserProfile profile) {
     if (profile.nickname.trim().isNotEmpty) return profile.nickname;
-    if (profile.username.trim().isNotEmpty) return profile.username;
     if (profile.fullName.trim().isNotEmpty) return profile.fullName;
     return 'User';
   }

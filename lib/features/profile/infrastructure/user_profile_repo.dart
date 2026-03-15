@@ -21,11 +21,17 @@ class UserProfileRepo {
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
+    final safeFullName = fullName.trim();
+    final safeNickname = nickname.trim().isNotEmpty ? nickname.trim() : safeFullName;
+    final fullNameLower = safeFullName.toLowerCase();
+    final nicknameLower = safeNickname.toLowerCase();
     await _firestore.collection('users').doc(uid).set({
       'gender': gender,
       'birthday': birthday.toIso8601String(),
-      'fullName': fullName,
-      'nickname': nickname,
+      'fullName': safeFullName,
+      'fullNameLower': fullNameLower,
+      'nickname': safeNickname,
+      'nicknameLower': nicknameLower,
       'email': email,
       'phone': phone,
       'address': address,

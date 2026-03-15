@@ -9,11 +9,9 @@ class FollowRepo {
   String? get _uid => _auth.currentUser?.uid;
 
   String pickName(Map<String, dynamic> data) {
-    final nickname = (data['nickname'] ?? '') as String;
-    final username = (data['username'] ?? '') as String;
+    final nickname = (data['nickname'] ?? data['username'] ?? '') as String;
     final fullName = (data['fullName'] ?? '') as String;
     if (nickname.trim().isNotEmpty) return nickname;
-    if (username.trim().isNotEmpty) return username;
     if (fullName.trim().isNotEmpty) return fullName;
     return 'User';
   }
