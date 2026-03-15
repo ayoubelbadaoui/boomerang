@@ -1,64 +1,76 @@
-// ignore_for_file: unnecessary_brace_in_string_interps
-
 import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Simple placeholder processor that simulates a boomerang effect by
-/// duplicating the input video into a new temporary file path.
-///
-/// Replace the implementation with real processing (e.g., ffmpeg) later.
 class BoomerangProcessor {
   const BoomerangProcessor();
 
-  /// Extract a lightweight poster image from the input video for use as a preview.
-  ///
-  /// - Uses FFmpeg 'thumbnail' filter to pick a representative frame
-  /// - Scales down to [targetWidth] while preserving aspect ratio
-  /// - Outputs a small JPEG to a temporary file and returns its path
+  static List<List<String>> get _encoderCandidates {
+    if (Platform.isIOS || Platform.isMacOS) {
+      return [
+        ['-c:v', 'h264_videotoolbox'],
+        ['-c:v', 'mpeg4', '-q:v', '3'],
+      ];
+    }
+    return [
+      ['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'],
+      ['-c:v', 'mpeg4', '-q:v', '3'],
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Poster — seek to 0.1s and grab 1 frame (no thumbnail filter — it drops
+  // frames on Android VFR videos just like the fps filter did).
+  // ---------------------------------------------------------------------------
+
   Future<String> generatePoster(
     String inputPath, {
     int targetWidth = 360,
   }) async {
-    final input = File(inputPath);
-    if (!await input.exists()) {
-      throw Exception('Input file does not exist: $inputPath');
-    }
-    final tempDir = await getTemporaryDirectory();
-    final outPath =
-        '${tempDir.path}/poster_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    _assertExists(inputPath);
+    final outPath = await _tmpPath('poster', 'jpg');
 
-    // Pick a thumbnail frame and scale down to reduce bytes. Use mjpeg encoder for speed.
-    final cmd = [
+    final session = await FFmpegKit.executeWithArguments([
       '-y',
-      '-i',
-      '"$inputPath"',
-      '-vf',
-      '"thumbnail,scale=${targetWidth}:-1"',
-      '-frames:v',
-      '1',
-      '-q:v',
-      '6',
-      '"$outPath"',
-    ].join(' ');
-
-    final session = await FFmpegKit.execute(cmd);
-    final rc = await session.getReturnCode();
-    if (!ReturnCode.isSuccess(rc)) {
+      '-ss', '0.1',
+      '-i', inputPath,
+      '-vf', 'scale=$targetWidth:-1',
+      '-frames:v', '1',
+      '-q:v', '6',
+      outPath,
+    ]);
+    if (!ReturnCode.isSuccess(await session.getReturnCode()) ||
+        !File(outPath).existsSync()) {
       final logs = await session.getAllLogsAsString();
-      throw Exception(
-        'FFmpeg poster gen failed (code: ${rc?.getValue()})\n$logs',
-      );
+      throw Exception('Poster failed\n$logs');
     }
     return outPath;
   }
 
-  /// Build a real "boomerang" clip by concatenating a forward segment with its reversed copy.
-  ///
-  /// - Trims to the first [segmentSeconds] seconds to keep the loop snappy
-  /// - Removes audio for consistency across concat and playback
-  /// - Re-encodes to yuv420p H.264 with faststart for mobile compatibility
+  // ---------------------------------------------------------------------------
+  // Preview (single cycle, low-res, for editor looping)
+  // ---------------------------------------------------------------------------
+
+  Future<String> makePreview(
+    String inputPath, {
+    double segmentSeconds = 1.6,
+    double speed = 1.0,
+    int previewWidth = 480,
+  }) async {
+    _assertExists(inputPath);
+    return _buildBoomerangViaFrames(
+      inputPath,
+      segmentSeconds: segmentSeconds,
+      speed: speed,
+      scaleWidth: previewWidth,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Final boomerang (full-res, looped to target duration)
+  // ---------------------------------------------------------------------------
+
   Future<String> makeBoomerang(
     String inputPath, {
     double segmentSeconds = 1.6,
@@ -66,108 +78,175 @@ class BoomerangProcessor {
     double totalDurationSeconds = 6.0,
     double speed = 1.0,
   }) async {
-    final input = File(inputPath);
-    if (!await input.exists()) {
-      throw Exception('Input file does not exist: $inputPath');
-    }
+    _assertExists(inputPath);
 
-    final tempDir = await getTemporaryDirectory();
-    final outPath =
-        '${tempDir.path}/boomerang_${DateTime.now().millisecondsSinceEpoch}.mp4';
-    final singleCyclePath =
-        '${tempDir.path}/boomerang_cycle_${DateTime.now().millisecondsSinceEpoch}.mp4';
-
-    // Use a single-pass filter_complex to create forward + reverse and concat
-    // Notes:
-    //  - format=yuv420p improves compatibility with iOS/Android decoders
-    //  - -an strips audio to avoid A/V concat issues and boomerang audio oddities
-    final speedStr = speed.toStringAsFixed(3);
-    final filterBase =
-        "[0:v]trim=start=0:end=${segmentSeconds.toStringAsFixed(2)},setpts=PTS-STARTPTS,split=2[fwd][tmp];[tmp]reverse[rev];[fwd][rev]concat=n=2:v=1:a=0,format=yuv420p";
-    final filter =
-        speed == 1.0 ? "$filterBase[v]" : "$filterBase,setpts=PTS/$speedStr[v]";
-
-    // Quote paths to handle spaces
-    final cmd = [
-      '-y',
-      '-i',
-      '"$inputPath"',
-      '-filter_complex',
-      '"$filter"',
-      '-map',
-      '"[v]"',
-      '-r',
-      '$fps',
-      '-an',
-      // Use hardware encoder on iOS (VideoToolbox) to avoid missing libx264.
-      '-c:v',
-      'h264_videotoolbox',
-      '-movflags',
-      '+faststart',
-      '"$singleCyclePath"',
-    ].join(' ');
-
-    final session = await FFmpegKit.execute(cmd);
-    final rc = await session.getReturnCode();
-    if (!ReturnCode.isSuccess(rc)) {
-      final logs = await session.getAllLogsAsString();
-      throw Exception('FFmpeg failed (code: ${rc?.getValue()})\n$logs');
-    }
-
-    // If the user wants a longer clip, repeat the single boomerang cycle
-    final cycleDuration =
-        (2 * segmentSeconds) /
-        (speed <= 0 ? 1.0 : speed); // forward + reverse adjusted by speed
-    final cyclesNeeded = (totalDurationSeconds / cycleDuration).ceil().clamp(
-      1,
-      12,
+    final cyclePath = await _buildBoomerangViaFrames(
+      inputPath,
+      segmentSeconds: segmentSeconds,
+      speed: speed,
     );
-    if (cyclesNeeded <= 1) {
-      // Move singleCycle to final outPath
-      await File(singleCyclePath).copy(outPath);
-      return outPath;
-    }
 
-    // Prepare concat list file
-    final listFile = File(
-      '${tempDir.path}/boomerang_list_${DateTime.now().millisecondsSinceEpoch}.txt',
-    );
-    final buffer = StringBuffer();
-    for (int i = 0; i < cyclesNeeded; i++) {
-      buffer.writeln("file '$singleCyclePath'");
-    }
-    await listFile.writeAsString(buffer.toString());
+    final cycleDuration = (2 * segmentSeconds) / (speed <= 0 ? 1.0 : speed);
+    final cycles = (totalDurationSeconds / cycleDuration).ceil().clamp(1, 12);
+    if (cycles <= 1) return cyclePath;
 
-    final concatCmd = [
+    final outPath = await _tmpPath('boomerang', 'mp4');
+    final loopSession = await FFmpegKit.executeWithArguments([
       '-y',
-      '-f',
-      'concat',
-      '-safe',
-      '0',
-      '-i',
-      '"${listFile.path}"',
-      '-c',
-      'copy',
-      '-movflags',
-      '+faststart',
-      '"$outPath"',
-    ].join(' ');
-
-    final concatSession = await FFmpegKit.execute(concatCmd);
-    final concatRc = await concatSession.getReturnCode();
-    if (!ReturnCode.isSuccess(concatRc)) {
-      final logs = await concatSession.getAllLogsAsString();
-      throw Exception(
-        'FFmpeg concat failed (code: ${concatRc?.getValue()})\n$logs',
-      );
+      '-stream_loop', '${cycles - 1}',
+      '-i', cyclePath,
+      '-c', 'copy',
+      '-fflags', '+genpts',
+      '-movflags', '+faststart',
+      outPath,
+    ]);
+    if (!ReturnCode.isSuccess(await loopSession.getReturnCode())) {
+      return cyclePath;
     }
-
-    // Cleanup
-    try {
-      await listFile.delete();
-      await File(singleCyclePath).delete();
-    } catch (_) {}
-
+    try { await File(cyclePath).delete(); } catch (_) {}
     return outPath;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Core: frame-extraction approach.
+  //
+  //  1. Extract raw frames as JPEGs (no fps filter — Android VFR breaks it)
+  //  2. Build boomerang sequence in Dart (forward + reverse file copies)
+  //  3. Encode image sequence to video
+  // ---------------------------------------------------------------------------
+
+  Future<String> _buildBoomerangViaFrames(
+    String inputPath, {
+    required double segmentSeconds,
+    required double speed,
+    int? scaleWidth,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final framePrefix = 'bfr${ts}_';
+    final seqPrefix = 'bsq${ts}_';
+
+    try {
+      // Step 1: extract raw frames. -ss 0 before -i resets the timestamp origin
+      // (needed for Android VFR cameras with wall-clock DTS). -vsync 0 prevents
+      // frame dropping. -frames:v limits by count instead of duration (which
+      // fails with VFR timestamps).
+      final maxFrames = (segmentSeconds * 60).ceil();
+      final framePattern = '${tempDir.path}/$framePrefix%05d.jpg';
+      final extractArgs = <String>[
+        '-y',
+        '-ss', '0',
+        '-i', inputPath,
+        '-frames:v', '$maxFrames',
+        '-vsync', '0',
+        if (scaleWidth != null) ...['-vf', 'scale=$scaleWidth:-2'],
+        '-q:v', '4',
+        framePattern,
+      ];
+
+      final extractSession =
+          await FFmpegKit.executeWithArguments(extractArgs);
+      final extractRc = await extractSession.getReturnCode();
+      if (!ReturnCode.isSuccess(extractRc)) {
+        final logs = await extractSession.getAllLogsAsString();
+        throw Exception('Frame extraction failed (${extractRc?.getValue()})\n$logs');
+      }
+
+      // Collect extracted frames.
+      final frames = tempDir
+          .listSync()
+          .whereType<File>()
+          .where((f) {
+            final name = f.path.split('/').last;
+            return name.startsWith(framePrefix) && name.endsWith('.jpg');
+          })
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+
+      if (frames.isEmpty) {
+        final logs = await extractSession.getAllLogsAsString() ?? '';
+        throw Exception(
+          'Frame extraction produced 0 files.\n'
+          'rc: ${extractRc?.getValue()}, pattern: $framePattern\n'
+          '${logs.length > 500 ? logs.substring(logs.length - 500) : logs}',
+        );
+      }
+
+      // Step 2: build forward + reverse sequence.
+      int seqIndex = 1;
+      String seqName(int i) =>
+          '$seqPrefix${i.toString().padLeft(5, '0')}.jpg';
+
+      for (final f in frames) {
+        await f.copy('${tempDir.path}/${seqName(seqIndex++)}');
+      }
+      for (int i = frames.length - 2; i >= 0; i--) {
+        await frames[i].copy('${tempDir.path}/${seqName(seqIndex++)}');
+      }
+
+      // Step 3: encode image sequence → video.
+      final outPath = await _tmpPath('cycle', 'mp4');
+      final nativeFps = frames.length / segmentSeconds;
+      final effectiveFps = (speed == 1.0 ? nativeFps : nativeFps * speed)
+          .clamp(10.0, 120.0);
+      final fpsStr = effectiveFps.toStringAsFixed(2);
+      final seqPattern = '${tempDir.path}/$seqPrefix%05d.jpg';
+
+      String? lastLogs;
+      for (final enc in _encoderCandidates) {
+        final encSession = await FFmpegKit.executeWithArguments([
+          '-y',
+          '-framerate', fpsStr,
+          '-i', seqPattern,
+          '-pix_fmt', 'yuv420p',
+          '-r', fpsStr,
+          '-an',
+          ...enc,
+          '-movflags', '+faststart',
+          outPath,
+        ]);
+        if (ReturnCode.isSuccess(await encSession.getReturnCode()) &&
+            await _hasVideoContent(outPath)) {
+          return outPath;
+        }
+        lastLogs = await encSession.getAllLogsAsString();
+      }
+
+      throw Exception('Image sequence encoding failed.\n$lastLogs');
+    } finally {
+      _cleanupByPrefix(tempDir, framePrefix);
+      _cleanupByPrefix(tempDir, seqPrefix);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  static void _assertExists(String path) {
+    if (!File(path).existsSync()) {
+      throw Exception('Input file does not exist: $path');
+    }
+  }
+
+  static Future<String> _tmpPath(String label, String ext) async {
+    final dir = await getTemporaryDirectory();
+    return '${dir.path}/${label}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+  }
+
+  static Future<bool> _hasVideoContent(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return false;
+    return (await file.length()) > 10240;
+  }
+
+  static void _cleanupByPrefix(Directory dir, String prefix) {
+    try {
+      for (final f in dir.listSync()) {
+        if (f is File && f.path.split('/').last.startsWith(prefix)) {
+          f.deleteSync();
+        }
+      }
+    } catch (_) {}
   }
 }
