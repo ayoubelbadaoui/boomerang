@@ -149,14 +149,14 @@ class _Section extends StatelessWidget {
   }
 }
 
-Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-  final theme = Theme.of(context);
+Future<void> _confirmLogout(BuildContext navigatorContext, WidgetRef ref) async {
+  final theme = Theme.of(navigatorContext);
   await showModalBottomSheet<void>(
-    context: context,
+    context: navigatorContext,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (context) {
+    builder: (sheetContext) {
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -180,7 +180,7 @@ Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(sheetContext).pop(),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -195,9 +195,18 @@ Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
                         await ref
                             .read(authControllerProvider.notifier)
                             .logout();
-                        if (!context.mounted) return;
-                        Navigator.of(context).pop();
-                        context.go(OnboardingPage.routeName);
+                        if (!sheetContext.mounted) return;
+                        Navigator.of(sheetContext).pop();
+                        // Invalidate so HomeShell/router don't see stale profile and redirect to setup
+                        final container = ProviderScope.containerOf(
+                          navigatorContext,
+                          listen: false,
+                        );
+                        container.invalidate(userHasNicknameProvider);
+                        container.invalidate(userProfileExistsProvider);
+                        container.invalidate(userProfileCompleteProvider);
+                        if (!navigatorContext.mounted) return;
+                        navigatorContext.go(OnboardingPage.routeName);
                       },
                       child: const Text('Logout'),
                     ),

@@ -35,6 +35,12 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
+        final user = ref.watch(authStateProvider).value;
+        if (user == null) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
         final nicknameState = ref.watch(userHasNicknameProvider);
         if (nicknameState.isLoading) {
           return const Scaffold(

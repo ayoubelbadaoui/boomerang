@@ -20,6 +20,7 @@ class SetupFlowPage extends StatefulWidget {
 
 class _SetupFlowPageState extends State<SetupFlowPage> {
   final PageController _controller = PageController();
+  final _profileFormKey = GlobalKey<FormState>();
   int _index = 0;
   String _gender = 'male';
   DateTime _birthday = DateTime(1995, 12, 27);
@@ -76,6 +77,9 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
 
   void _next() async {
     if (_saving) return;
+    if (_index == 2) {
+      if (!_profileFormKey.currentState!.validate()) return;
+    }
     if (_index < 3) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 300),
@@ -104,6 +108,20 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           avatarUrl: avatarUrl,
         );
         if (!mounted) return;
+        final container = ProviderScope.containerOf(context, listen: false);
+        container.invalidate(userHasNicknameProvider);
+        container.invalidate(userProfileExistsProvider);
+        container.invalidate(userProfileCompleteProvider);
+        // Wait for providers to refetch so HomeShell sees the new profile and does not redirect back to setup
+        bool hasNickname = await container.read(userHasNicknameProvider.future);
+        if (!mounted) return;
+        if (!hasNickname) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          if (!mounted) return;
+          container.invalidate(userHasNicknameProvider);
+          hasNickname = await container.read(userHasNicknameProvider.future);
+        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile created successfully'),
@@ -111,6 +129,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        if (!mounted) return;
         context.go(HomeShell.routeName);
       } catch (e, stackTrace) {
         developer.log(
@@ -181,6 +200,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                   onChanged: (d) => setState(() => _birthday = d),
                 ),
                 _FillProfileStep(
+                  formKey: _profileFormKey,
                   fullName: _fullName,
                   nickname: _nickname,
                   email: _email,
@@ -240,6 +260,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
 
 class _FillProfileStep extends StatelessWidget {
   const _FillProfileStep({
+    required this.formKey,
     required this.fullName,
     required this.nickname,
     required this.email,
@@ -248,6 +269,7 @@ class _FillProfileStep extends StatelessWidget {
     this.onAvatarSelected,
     this.lockNickname = false,
   });
+  final GlobalKey<FormState> formKey;
   final TextEditingController fullName;
   final TextEditingController nickname;
   final TextEditingController email;
@@ -255,66 +277,86 @@ class _FillProfileStep extends StatelessWidget {
   final TextEditingController address;
   final ValueChanged<File?>? onAvatarSelected;
   final bool lockNickname;
+
+  static String? _required(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'This field is required' : null;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.all(20.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: 24.h),
-          Center(
-            child: Stack(
-              children: [
-                _AvatarPicker(radius: 64.r, onSelected: onAvatarSelected),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: EdgeInsets.all(6.r),
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      shape: BoxShape.circle,
+    return Form(
+      key: formKey,
+      child: Padding(
+        padding: EdgeInsets.all(20.w),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: 24.h),
+              Center(
+                child: Stack(
+                  children: [
+                    _AvatarPicker(radius: 64.r, onSelected: onAvatarSelected),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: EdgeInsets.all(6.r),
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.edit,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              SizedBox(height: 24.h),
+              _FormInput(
+                label: 'Full Name',
+                controller: fullName,
+                validator: _required,
+              ),
+              SizedBox(height: 12.h),
+              lockNickname
+                  ? _ReadOnlyField(
+                      label: 'Nickname',
+                      value: nickname.text,
+                    )
+                  : _FormInput(
+                      label: 'Nickname',
+                      controller: nickname,
+                      validator: _required,
+                    ),
+              SizedBox(height: 12.h),
+              _FormInput(
+                label: 'Email',
+                controller: email,
+                validator: _required,
+                suffix: const Icon(Icons.mail_outline_rounded),
+                enabled: false,
+              ),
+              SizedBox(height: 12.h),
+              _FormInput(
+                label: 'Phone Number',
+                controller: phone,
+                validator: _required,
+                prefix: const Text('🇺🇸  ▾'),
+              ),
+              SizedBox(height: 12.h),
+              _FormInput(
+                label: 'Address',
+                controller: address,
+                validator: _required,
+                suffix: const Icon(Icons.location_on_outlined),
+              ),
+            ],
           ),
-          SizedBox(height: 24.h),
-          _Input(label: 'Full Name', controller: fullName),
-          SizedBox(height: 12.h),
-          lockNickname
-              ? _ReadOnlyField(
-                  label: 'Nickname',
-                  value: nickname.text,
-                )
-              : _Input(label: 'Nickname', controller: nickname),
-          SizedBox(height: 12.h),
-          _Input(
-            label: 'Email',
-            controller: email,
-            suffix: const Icon(Icons.mail_outline_rounded),
-            enabled: false,
-          ),
-          SizedBox(height: 12.h),
-          _Input(
-            label: 'Phone Number',
-            controller: phone,
-            prefix: const Text('🇺🇸  ▾'),
-          ),
-          SizedBox(height: 12.h),
-          _Input(
-            label: 'Address',
-            controller: address,
-            suffix: const Icon(Icons.location_on_outlined),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -731,27 +773,29 @@ class _GenderChoice extends StatelessWidget {
   }
 }
 
-// Old placeholder field removed
-
-class _Input extends StatelessWidget {
-  const _Input({
+/// TextFormField with _Input-style decoration, for use inside Form with validators.
+class _FormInput extends StatelessWidget {
+  const _FormInput({
     required this.label,
     required this.controller,
+    required this.validator,
     this.prefix,
     this.suffix,
     this.enabled = true,
   });
   final String label;
   final TextEditingController controller;
+  final String? Function(String?)? validator;
   final Widget? prefix;
   final Widget? suffix;
   final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       enabled: enabled,
+      validator: validator,
       decoration: InputDecoration(
         hintText: label,
         filled: true,
@@ -768,6 +812,10 @@ class _Input extends StatelessWidget {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16.r),
           borderSide: BorderSide.none,
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16.r),
+          borderSide: const BorderSide(color: Colors.red),
         ),
       ),
     );
