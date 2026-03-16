@@ -64,12 +64,15 @@ class SavedBoomerangsGrid extends ConsumerWidget {
                   fit: StackFit.expand,
                   children: [
                     if (imageUrl.isNotEmpty)
-                      Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder:
-                            (_, __, ___) =>
-                                Container(color: const Color(0xFFF2F2F2)),
+                      RepaintBoundary(
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
+                          errorBuilder:
+                              (_, __, ___) =>
+                                  Container(color: const Color(0xFFF2F2F2)),
+                        ),
                       )
                     else
                       Container(color: const Color(0xFFF2F2F2)),

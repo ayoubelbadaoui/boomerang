@@ -182,6 +182,7 @@ class _GridTileState extends State<_GridTile> {
             Image.network(
               imageUrl,
               fit: BoxFit.cover,
+              cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
               errorBuilder:
                   (_, __, ___) => Container(color: const Color(0xFFF2F2F2)),
             )

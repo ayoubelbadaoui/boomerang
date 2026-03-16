@@ -117,6 +117,7 @@ class _PaginatedBoomerangListState
         physics: const AlwaysScrollableScrollPhysics(),
         primary: false,
         controller: _controller,
+        addAutomaticKeepAlives: false,
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
         itemCount:
             isLoadingInitial
@@ -900,7 +901,12 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   @override
   void initState() {
     super.initState();
-    _initController();
+    // Delay video init slightly so the widget tree settles first and the
+    // poster is visible immediately. This prevents all visible cards from
+    // racing to download + decode video simultaneously during scroll.
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _initController();
+    });
   }
 
   @override
@@ -929,9 +935,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
           _videoReady = true;
         });
       }
-    } catch (_) {
-      // Swallow errors to avoid breaking the feed; a poster/placeholder will show instead.
-    }
+    } catch (_) {}
   }
 
   void _disposeController() {
@@ -952,8 +956,8 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
     Widget posterLayer() {
       if (hasPoster) {
-        final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-        final targetWidth = (MediaQuery.of(context).size.width - 32.w);
+        final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+        final targetWidth = (MediaQuery.sizeOf(context).width - 32.w);
         final cacheW = (targetWidth * devicePixelRatio).round();
         return _FreshStorageImage(
           url: widget.posterUrl!,

@@ -8,6 +8,7 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
+import 'dart:developer' as developer;
 
 class SetupFlowPage extends StatefulWidget {
   const SetupFlowPage({super.key});
@@ -63,8 +64,13 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           _fullName.text = full;
         }
       });
-    } catch (_) {
-      // best-effort prefill; ignore failures
+    } catch (e, stackTrace) {
+      developer.log(
+        'SetupFlow: could not hydrate from user doc',
+        name: 'SetupFlow',
+        error: e,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -83,8 +89,10 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
       String? avatarUrl;
       try {
         if (_avatarFile != null) {
+          developer.log('Setup: uploading avatar', name: 'SetupFlow');
           avatarUrl = await repo.uploadAvatar(_avatarFile!);
         }
+        developer.log('Setup: upserting user profile', name: 'SetupFlow');
         await repo.upsertCurrentUserProfile(
           gender: _gender,
           birthday: _birthday,
@@ -104,7 +112,13 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           ),
         );
         context.go(HomeShell.routeName);
-      } catch (e) {
+      } catch (e, stackTrace) {
+        developer.log(
+          'Setup failed: $e',
+          name: 'SetupFlow',
+          error: e,
+          stackTrace: stackTrace,
+        );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

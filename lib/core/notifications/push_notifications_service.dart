@@ -134,14 +134,23 @@ class _PushNotificationsBootstrap {
   }
 
   Future<void> _saveCurrentTokenForUser(String uid) async {
-    final token = await _messaging.getToken();
-    developer.log('[notification push] 📱 FCM Token: ${token ?? "NULL"}');
-    if (token == null || token.isEmpty) {
-      developer.log('[notification push] ⚠️ FCM token is null or empty');
-      return;
+    try {
+      final token = await _messaging.getToken();
+      developer.log('[notification push] 📱 FCM Token: ${token ?? "NULL"}');
+      if (token == null || token.isEmpty) {
+        developer.log('[notification push] ⚠️ FCM token is null or empty');
+        return;
+      }
+      await _saveToken(uid, token);
+      developer.log('[notification push] ✅ FCM token saved for user: $uid');
+    } catch (e) {
+      // On iOS the APNS token may not be available yet (e.g. simulator, or
+      // before the OS has delivered it). Swallow the error so it doesn't
+      // propagate as an unhandled exception that janks the UI thread.
+      developer.log(
+        '[notification push] ⚠️ Could not get FCM token (APNS may not be ready): $e',
+      );
     }
-    await _saveToken(uid, token);
-    developer.log('[notification push] ✅ FCM token saved for user: $uid');
   }
 
   Future<void> _saveToken(String uid, String token) async {

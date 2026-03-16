@@ -38,7 +38,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       // Kick off precache; don't await all.
       for (final u in urls) {
         // ignore: discarded_futures
-        precacheImage(NetworkImage(u), context);
+        precacheImage(ResizeImage(NetworkImage(u), width: 400), context);
       }
     } catch (_) {
       // Ignore warmup failures
@@ -69,7 +69,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(Assets.logo),
+            Image.asset(Assets.logo, cacheWidth: 240),
             SizedBox(height: 16.h),
             CircularProgressIndicator(color: Colors.black),
           ],

@@ -102,7 +102,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             24.w,
             12.h,
             24.w,
-            12.h + MediaQuery.of(context).viewInsets.bottom,
+            12.h + MediaQuery.viewInsetsOf(context).bottom,
           ),
           child: Form(
             key: _formKey,

@@ -84,6 +84,7 @@ class _PreviewContentState extends State<_PreviewContent> {
                             ? Image.network(
                               widget.posterUrl!,
                               fit: BoxFit.cover,
+                              cacheWidth: (200 * MediaQuery.devicePixelRatioOf(context)).round(),
                             )
                             : Container(color: Colors.black)),
               ),

@@ -72,7 +72,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
     final stream = ref.watch(commentsRepoProvider).watch(widget.boomerangId);
     return Padding(
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
       ),
       child: Column(
         children: [
@@ -326,7 +326,7 @@ class _CommentTile extends ConsumerWidget {
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
           ),
           child: Container(
             padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),

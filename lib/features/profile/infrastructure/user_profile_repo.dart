@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 class UserProfileRepo {
@@ -22,31 +23,78 @@ class UserProfileRepo {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
     final safeFullName = fullName.trim();
-    final safeNickname = nickname.trim().isNotEmpty ? nickname.trim() : safeFullName;
+    final rawNickname = nickname.trim().isNotEmpty ? nickname.trim() : safeFullName;
     final fullNameLower = safeFullName.toLowerCase();
-    final nicknameLower = safeNickname.toLowerCase();
-    await _firestore.collection('users').doc(uid).set({
-      'gender': gender,
-      'birthday': birthday.toIso8601String(),
-      'fullName': safeFullName,
-      'fullNameLower': fullNameLower,
-      'nickname': safeNickname,
-      'nicknameLower': nicknameLower,
-      'email': email,
-      'phone': phone,
-      'address': address,
-      if (avatarUrl != null) 'avatarUrl': avatarUrl,
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    // Firestore rules require nickname/nicknameLower: 3–20 chars, [a-z0-9._] only.
+    // Build merged doc from existing + our data so merged result always passes rules.
+    final ref = _firestore.collection('users').doc(uid);
+    try {
+      final existing = await ref.get();
+      final Map<String, dynamic> data = Map<String, dynamic>.from(existing.data() ?? {});
+      data['gender'] = gender;
+      data['birthday'] = birthday.toIso8601String();
+      data['fullName'] = safeFullName;
+      data['fullNameLower'] = fullNameLower;
+      data['email'] = email;
+      data['phone'] = phone;
+      data['address'] = address;
+      if (avatarUrl != null) data['avatarUrl'] = avatarUrl;
+      data['updatedAt'] = FieldValue.serverTimestamp();
+      data['createdAt'] = data['createdAt'] ?? FieldValue.serverTimestamp();
+
+      final sanitizedNick = _sanitizeNicknameForRules(rawNickname, uid);
+      data['nickname'] = sanitizedNick;
+      data['nicknameLower'] = sanitizedNick;
+
+      if (data.containsKey('username') || data.containsKey('usernameLower')) {
+        final existingUser = data['username'] as String?;
+        if (existingUser != null && existingUser.isNotEmpty) {
+          final sanitized = _sanitizeNicknameForRules(existingUser, uid);
+          data['username'] = sanitized;
+          data['usernameLower'] = sanitized;
+        } else {
+          data.remove('username');
+          data.remove('usernameLower');
+        }
+      }
+
+      await ref.set(data, SetOptions(merge: true));
+    } catch (e, stackTrace) {
+      developer.log(
+        'UserProfileRepo.upsertCurrentUserProfile failed (users/$uid)',
+        name: 'UserProfileRepo',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Sanitize nickname to satisfy Firestore rules: 3–20 chars, [a-z0-9._] only.
+  static String _sanitizeNicknameForRules(String raw, String uid) {
+    if (raw.isEmpty) return 'user_${uid.substring(0, uid.length >= 6 ? 6 : uid.length)}';
+    var s = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._]'), '_');
+    if (s.length < 3) s = 'user_${uid.substring(0, uid.length >= 6 ? 6 : uid.length)}';
+    if (s.length > 20) s = s.substring(0, 20);
+    return s;
   }
 
   Future<String> uploadAvatar(File file) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
     final ref = _storage.ref().child('users/$uid/avatar.jpg');
-    await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
-    return ref.getDownloadURL();
+    try {
+      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+      return ref.getDownloadURL();
+    } catch (e, stackTrace) {
+      developer.log(
+        'UserProfileRepo.uploadAvatar failed (users/$uid/avatar.jpg)',
+        name: 'UserProfileRepo',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
   }
 
   /// Ensure a minimal user profile document exists for the current user.
@@ -59,23 +107,38 @@ class UserProfileRepo {
 
     final displayName = user.displayName ?? '';
     final email = user.email ?? '';
-    final nickname =
+    var nickname =
         displayName.isNotEmpty
             ? displayName
             : (email.isNotEmpty
                 ? email.split('@').first
                 : 'user_${user.uid.substring(0, 6)}');
+    // Firestore rules require nickname 3–20 chars, [a-z0-9._]; ensure minimum length.
+    if (nickname.length < 3) nickname = 'user_${user.uid.substring(0, 6)}';
+    nickname = nickname.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._]'), '_');
+    if (nickname.length < 3) nickname = 'user_${user.uid.substring(0, 6)}';
+    if (nickname.length > 20) nickname = nickname.substring(0, 20);
 
-    await _firestore.collection('users').doc(user.uid).set({
-      'fullName': displayName,
-      'nickname': nickname,
-      'fullNameLower': displayName.toLowerCase(),
-      'nicknameLower': nickname.toLowerCase(),
-      'email': email,
-      if (user.photoURL != null) 'avatarUrl': user.photoURL,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'fullName': displayName,
+        'nickname': nickname,
+        'fullNameLower': displayName.toLowerCase(),
+        'nicknameLower': nickname,
+        'email': email,
+        if (user.photoURL != null) 'avatarUrl': user.photoURL,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e, stackTrace) {
+      developer.log(
+        'UserProfileRepo.ensureBasicProfileIfMissing failed (users/${user.uid})',
+        name: 'UserProfileRepo',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
   }
 
   /// Partially update current user's profile fields.

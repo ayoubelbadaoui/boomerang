@@ -108,7 +108,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     final video = data['videoUrl'] as String?;
     final likes = (data['likes'] ?? 0) as int;
     final userId = (data['userId'] ?? '') as String;
-    final double topInset = MediaQuery.of(context).viewPadding.top;
+    final double topInset = MediaQuery.viewPaddingOf(context).top;
     final tags =
         ((data['hashtags'] as List?)?.cast<String>() ?? const <String>[]);
     final me = ref.watch(currentUserProfileProvider).value;
@@ -133,7 +133,11 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                         ),
                       )
                       : (image != null && image.isNotEmpty
-                          ? Image.network(image, fit: BoxFit.cover)
+                          ? Image.network(
+                              image,
+                              fit: BoxFit.cover,
+                              cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
+                            )
                           : Container(color: Colors.black)),
             ),
           ),

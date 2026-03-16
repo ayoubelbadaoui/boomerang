@@ -30,7 +30,13 @@ class QRCodePage extends ConsumerWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20.r),
               ),
-              child: Image.network(url, width: 260, height: 260),
+              child: Image.network(
+                url,
+                width: 260,
+                height: 260,
+                cacheWidth: (260 * MediaQuery.devicePixelRatioOf(context)).round(),
+                cacheHeight: (260 * MediaQuery.devicePixelRatioOf(context)).round(),
+              ),
             ),
             SizedBox(height: 24.h),
             Text(

@@ -46,7 +46,7 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
             24.w,
             16.h,
             24.w,
-            16.h + MediaQuery.of(context).viewInsets.bottom,
+            16.h + MediaQuery.viewInsetsOf(context).bottom,
           ),
           child: Column(
             children: [

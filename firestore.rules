@@ -34,36 +34,35 @@ service cloud.firestore {
       let nicknameLower = mergedString('nicknameLower');
       return nickname != null
         && nicknameLower != null
-        && nickname == nicknameLower
+        && nickname.lower() == nicknameLower
         && nicknameLower.size() >= 3
         && nicknameLower.size() <= 20
         && nicknameLower.matches('^[a-z0-9._]+$');
     }
 
-    function validFullNameFields() {
-      let fullName = mergedString('fullName');
-      let fullNameLower = mergedString('fullNameLower');
-      return fullName != null
-        && fullName.size() > 0
-        && fullNameLower != null
-        && fullNameLower == fullNameLower; // presence check only; casing enforced client-side
+    // Optional: pass when field is absent or valid (for stub profile / sign-up flow).
+    function optionalUsernameFields() {
+      let username = mergedString('username');
+      let usernameLower = mergedString('usernameLower');
+      return (username == null && usernameLower == null) || validUsernameFields();
     }
 
-    // User profiles
+    function optionalNicknameFields() {
+      let nickname = mergedString('nickname');
+      let nicknameLower = mergedString('nicknameLower');
+      return (nickname == null && nicknameLower == null) || validNicknameFields();
+    }
+
+    function optionalFullNameFields() {
+      let fullName = mergedString('fullName');
+      let fullNameLower = mergedString('fullNameLower');
+      return (fullName == null && fullNameLower == null)
+        || (fullName != null && fullNameLower != null && fullName.lower() == fullNameLower);
+    }
+
+    // User profiles: only the owner can write; app enforces nickname/username format.
     match /users/{uid} {
-      allow create: if isSignedIn()
-        && request.auth.uid == uid
-        && validUsernameFields()
-        && validNicknameFields()
-        && validFullNameFields();
-
-      allow update: if isSignedIn()
-        && request.auth.uid == uid
-        && validUsernameFields()
-        && validNicknameFields()
-        && validFullNameFields()
-        && (mergedBool('isPrivate') == null || mergedBool('isPrivate') is bool);
-
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
       allow read: if true;
     }
 
@@ -71,6 +70,11 @@ service cloud.firestore {
     match /users/{uid}/deviceTokens/{token} {
       allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
       allow read: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Saved boomerangs per user
+    match /users/{uid}/saved/{boomerangId} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
     // User metadata (e.g., settings)

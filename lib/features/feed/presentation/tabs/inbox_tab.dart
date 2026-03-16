@@ -330,6 +330,8 @@ class _ActivityTile extends StatelessWidget {
                       width: 56.r,
                       height: 56.r,
                       fit: BoxFit.cover,
+                      cacheWidth: (56.r * MediaQuery.devicePixelRatioOf(context)).round(),
+                      cacheHeight: (56.r * MediaQuery.devicePixelRatioOf(context)).round(),
                     ),
                   ),
               ],

@@ -11,7 +11,11 @@ class SavedRepo {
     required String userId,
     required String boomerangId,
   }) {
-    return _col(userId).doc(boomerangId).snapshots().map((s) => s.exists);
+    return _col(userId)
+        .doc(boomerangId)
+        .snapshots()
+        .map((s) => s.exists)
+        .handleError((_) => false);
   }
 
   Future<bool> isSaved({

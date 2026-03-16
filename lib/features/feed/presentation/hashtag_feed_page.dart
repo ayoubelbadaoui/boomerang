@@ -74,7 +74,11 @@ class HashtagFeedPage extends ConsumerWidget {
                       fit: StackFit.expand,
                       children: [
                         if (poster != null && poster.isNotEmpty)
-                          Image.network(poster, fit: BoxFit.cover)
+                          Image.network(
+                            poster,
+                            fit: BoxFit.cover,
+                            cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
+                          )
                         else
                           Container(color: const Color(0xFFEEEEEE)),
                         if ((poster == null || poster.isEmpty) &&

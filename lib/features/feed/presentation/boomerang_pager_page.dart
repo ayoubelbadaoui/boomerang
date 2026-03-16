@@ -105,7 +105,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
             },
           ),
           Positioned(
-            top: MediaQuery.of(context).viewPadding.top + 8.h,
+            top: MediaQuery.viewPaddingOf(context).top + 8.h,
             left: 0,
             right: 0,
             child: Center(
@@ -120,7 +120,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
           ),
           Positioned(
             left: 8.w,
-            top: MediaQuery.of(context).viewPadding.top + 8.h,
+            top: MediaQuery.viewPaddingOf(context).top + 8.h,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
@@ -265,7 +265,11 @@ class _PostPageState extends ConsumerState<_PostPage> {
                   AnimatedOpacity(
                     opacity: _showPosterOverlay ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 180),
-                    child: Image.network(image, fit: BoxFit.cover),
+                    child: Image.network(
+                      image,
+                      fit: BoxFit.cover,
+                      cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
+                    ),
                   ),
               ],
             ),
