@@ -1,3 +1,5 @@
+import 'package:boomerang/features/profile/application/profile_controller.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -100,8 +102,11 @@ class ManageAccountPage extends ConsumerWidget {
             ),
             onTap: () async {
               await ref.read(userProfileRepoProvider).deleteAccount();
-              // Ensure app session is cleared
               await ref.read(authControllerProvider.notifier).logout();
+              final container = ProviderScope.containerOf(context, listen: false);
+              invalidateUserScopedProviders(container);
+              container.invalidate(profileControllerProvider);
+              container.invalidate(userBoomerangsControllerProvider);
               if (context.mounted) context.go(OnboardingPage.routeName);
             },
           ),

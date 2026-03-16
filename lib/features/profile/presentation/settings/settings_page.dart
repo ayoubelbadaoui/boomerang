@@ -1,4 +1,6 @@
+import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/settings_controller.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/profile/presentation/settings/manage_account_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/privacy_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/security_page.dart';
@@ -197,14 +199,13 @@ Future<void> _confirmLogout(BuildContext navigatorContext, WidgetRef ref) async 
                             .logout();
                         if (!sheetContext.mounted) return;
                         Navigator.of(sheetContext).pop();
-                        // Invalidate so HomeShell/router don't see stale profile and redirect to setup
                         final container = ProviderScope.containerOf(
                           navigatorContext,
                           listen: false,
                         );
-                        container.invalidate(userHasNicknameProvider);
-                        container.invalidate(userProfileExistsProvider);
-                        container.invalidate(userProfileCompleteProvider);
+                        invalidateUserScopedProviders(container);
+                        container.invalidate(profileControllerProvider);
+                        container.invalidate(userBoomerangsControllerProvider);
                         if (!navigatorContext.mounted) return;
                         navigatorContext.go(OnboardingPage.routeName);
                       },

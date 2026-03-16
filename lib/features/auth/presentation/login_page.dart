@@ -1,4 +1,6 @@
 import 'package:boomerang/features/auth/presentation/signup_page.dart';
+import 'package:boomerang/features/profile/application/profile_controller.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
@@ -165,7 +167,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     if (!mounted) return;
                     final next = ref.read(authStateProvider).asData?.value;
                     if (next != null) {
-                      // Navigate to home and clear back stack
+                      final container = ProviderScope.containerOf(context, listen: false);
+                      invalidateUserScopedProviders(container);
+                      container.invalidate(profileControllerProvider);
+                      container.invalidate(userBoomerangsControllerProvider);
+                      if (!mounted) return;
                       context.go(HomeShell.routeName);
                     }
                   },

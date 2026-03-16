@@ -304,3 +304,17 @@ final profileGuardProvider = Provider<void>((ref) {
     }
   });
 });
+
+/// Call on logout (and optionally after login) so the UI never shows the previous user.
+/// Invalidates all providers that cache or stream current-user data.
+void invalidateUserScopedProviders(ProviderContainer container) {
+  container.invalidate(userHasNicknameProvider);
+  container.invalidate(userProfileExistsProvider);
+  container.invalidate(userProfileCompleteProvider);
+  container.invalidate(currentUserProfileProvider);
+  container.invalidate(likedPostIdsProvider);
+  container.invalidate(outgoingFollowRequestProvider);
+  container.invalidate(incomingFollowRequestProvider);
+  container.invalidate(isFollowingStreamProvider);
+  container.invalidate(unreadCountProvider);
+}
