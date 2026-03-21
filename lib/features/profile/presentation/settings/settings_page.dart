@@ -218,6 +218,8 @@ Future<void> _confirmLogout(BuildContext navigatorContext, WidgetRef ref) async 
                         container.invalidate(profileControllerProvider);
                         container.invalidate(userBoomerangsControllerProvider);
                         if (!navigatorContext.mounted) return;
+                        Navigator.of(navigatorContext).popUntil((route) => route.isFirst);
+                        if (!navigatorContext.mounted) return;
                         navigatorContext.go(OnboardingPage.routeName);
                       },
                       child: const Text('Logout'),

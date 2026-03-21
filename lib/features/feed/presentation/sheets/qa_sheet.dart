@@ -124,7 +124,8 @@ class _QAListTile extends StatelessWidget {
           CircleAvatar(
             radius: 28.r,
             backgroundImage: NetworkImage(item.avatar),
-            backgroundColor: const Color(0xFFF2F2F2),
+            onBackgroundImageError: (_, __) {},
+            backgroundColor: Colors.grey.shade200,
           ),
           SizedBox(width: 12.w),
           Expanded(

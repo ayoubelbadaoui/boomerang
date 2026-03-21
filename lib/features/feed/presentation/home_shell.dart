@@ -11,17 +11,29 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
 import 'package:go_router/go_router.dart';
 
-class HomeShell extends StatefulWidget {
+final homeTabIndexProvider = StateProvider<int>((ref) => 0);
+
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   static const String routeName = '/home';
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(homeTabIndexProvider, (_, next) {
+      if (next != _currentIndex) {
+        setState(() => _currentIndex = next);
+      }
+    });
+  }
 
   static final List<Widget> _tabs = <Widget>[
     const HomeTab(),
@@ -31,30 +43,33 @@ class _HomeShellState extends State<HomeShell> {
     const ProfileTab(),
   ];
 
+  void _setTab(int index) {
+    setState(() => _currentIndex = index);
+    ref.read(homeTabIndexProvider.notifier).state = index;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, _) {
-        final user = ref.watch(authStateProvider).value;
-        if (user == null) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final nicknameState = ref.watch(userHasNicknameProvider);
-        if (nicknameState.isLoading) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final hasNickname = nicknameState.asData?.value ?? false;
-        if (!hasNickname) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) context.go(SetupFlowPage.routeName);
-          });
-          return const Scaffold();
-        }
-        return Scaffold(
+    final user = ref.watch(authStateProvider).value;
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final nicknameState = ref.watch(userHasNicknameProvider);
+    if (nicknameState.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final hasNickname = nicknameState.asData?.value ?? false;
+    if (!hasNickname) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go(SetupFlowPage.routeName);
+      });
+      return const Scaffold();
+    }
+    return Scaffold(
           appBar:
               _currentIndex == 0
                   ? AppBar(
@@ -98,7 +113,7 @@ class _HomeShellState extends State<HomeShell> {
                         'assets/bottom_navigation/active_light/home.svg',
                     inactiveIcon:
                         'assets/bottom_navigation/inactive_light/home.svg',
-                    onTap: () => setState(() => _currentIndex = 0),
+                    onTap: () => _setTab(0),
                   ),
                   _NavItem(
                     label: 'Discover',
@@ -107,11 +122,11 @@ class _HomeShellState extends State<HomeShell> {
                         'assets/bottom_navigation/active_light/discover.svg',
                     inactiveIcon:
                         'assets/bottom_navigation/inactive_light/discover.svg',
-                    onTap: () => setState(() => _currentIndex = 1),
+                    onTap: () => _setTab(1),
                   ),
                   _CreateButton(
                     active: _currentIndex == 2,
-                    onTap: () => setState(() => _currentIndex = 2),
+                    onTap: () => _setTab(2),
                   ),
                   _NavItem(
                     label: 'Inbox',
@@ -120,7 +135,7 @@ class _HomeShellState extends State<HomeShell> {
                         'assets/bottom_navigation/active_light/chat.svg',
                     inactiveIcon:
                         'assets/bottom_navigation/inactive_light/chat.svg',
-                    onTap: () => setState(() => _currentIndex = 3),
+                    onTap: () => _setTab(3),
                   ),
                   _NavItem(
                     label: 'Profile',
@@ -129,14 +144,12 @@ class _HomeShellState extends State<HomeShell> {
                         'assets/bottom_navigation/active_light/profile.svg',
                     inactiveIcon:
                         'assets/bottom_navigation/inactive_light/profile.svg',
-                    onTap: () => setState(() => _currentIndex = 4),
+                    onTap: () => _setTab(4),
                   ),
                 ],
               ),
             ),
           ),
-        );
-      },
     );
   }
 }

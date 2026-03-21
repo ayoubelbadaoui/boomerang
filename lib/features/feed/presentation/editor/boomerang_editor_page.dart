@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -194,10 +195,11 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
           );
 
       if (!mounted) return;
+      ref.read(homeTabIndexProvider.notifier).state = 4;
+      Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Boomerang created')));
-      Navigator.pop(context);
     } catch (e, _) {
       if (!mounted) return;
       final isPluginMissing =

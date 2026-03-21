@@ -103,7 +103,12 @@ class _RankList extends StatelessWidget {
               style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700),
             ),
             SizedBox(width: 16.w),
-            CircleAvatar(radius: 24.r, backgroundImage: NetworkImage(r.avatar)),
+            CircleAvatar(
+              radius: 24.r,
+              backgroundImage: NetworkImage(r.avatar),
+              onBackgroundImageError: (_, __) {},
+              backgroundColor: Colors.grey.shade200,
+            ),
             SizedBox(width: 12.w),
             Expanded(
               child: Column(

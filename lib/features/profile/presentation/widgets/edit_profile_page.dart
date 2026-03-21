@@ -65,12 +65,12 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         (_selected != null || p?.avatarUrl != null)
                             ? (_, __) {}
                             : null,
-                    backgroundColor: const Color(0xFFF2F2F2),
+                    backgroundColor: Colors.grey.shade200,
                     child:
                         (_selected == null && p?.avatarUrl == null)
-                            ? const Icon(
+                            ? Icon(
                               Icons.person,
-                              color: Colors.black26,
+                              color: Colors.grey.shade600,
                               size: 48,
                             )
                             : null,

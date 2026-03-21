@@ -96,14 +96,10 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 radius: 44.r,
                 backgroundImage:
                     widget.avatarUrl != null
-                        ? ResizeImage.resizeIfNeeded(
-                          (88.r * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                          (88.r * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                          NetworkImage(widget.avatarUrl!),
-                        )
+                        ? NetworkImage(widget.avatarUrl!)
                         : null,
+                onBackgroundImageError:
+                    widget.avatarUrl != null ? (_, __) {} : null,
                 backgroundColor: Colors.grey.shade200,
                 child: widget.avatarUrl == null
                     ? Icon(Icons.person, size: 44.r, color: Colors.grey.shade600)

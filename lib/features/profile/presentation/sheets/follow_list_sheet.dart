@@ -86,21 +86,7 @@ class FollowListSheet extends ConsumerWidget {
                         leading: CircleAvatar(
                           radius: 22.r,
                           backgroundImage:
-                              avatar != null
-                                  ? ResizeImage.resizeIfNeeded(
-                                    (44.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    (44.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    NetworkImage(avatar),
-                                  )
-                                  : null,
+                              avatar != null ? NetworkImage(avatar) : null,
                           onBackgroundImageError:
                               avatar != null ? (_, __) {} : null,
                           backgroundColor: Colors.grey.shade200,

@@ -1,4 +1,5 @@
 import 'package:boomerang/features/profile/application/profile_controller.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/profile/presentation/widgets/edit_profile_page.dart';
 import 'package:boomerang/features/profile/presentation/widgets/mode_icon.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid.dart';
@@ -76,8 +77,25 @@ class ProfileTab extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, __) => const Center(child: Text('Failed to load profile')),
         data:
-            (p) => SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: 20.w),
+            (p) => RefreshIndicator(
+              color: Colors.black,
+              onRefresh: () async {
+                final uid = p?.uid ?? '';
+                ref.invalidate(profileControllerProvider);
+                ref.invalidate(currentUserProfileProvider);
+                if (uid.isNotEmpty) {
+                  ref.invalidate(userBoomerangsCountProvider(uid));
+                  ref.invalidate(followersCountProvider(uid));
+                  ref.invalidate(followingCountProvider(uid));
+                  ref.invalidate(userTotalLikesProvider(uid));
+                }
+                await ref
+                    .read(userBoomerangsControllerProvider.notifier)
+                    .refresh();
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.symmetric(horizontal: 20.w),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -91,31 +109,10 @@ class ProfileTab extends ConsumerWidget {
                           radius: 48.r,
                           backgroundImage:
                               p?.avatarUrl != null
-                                  ? ResizeImage.resizeIfNeeded(
-                                    (96.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    (96.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    NetworkImage(p!.avatarUrl!),
-                                  )
+                                  ? NetworkImage(p!.avatarUrl!)
                                   : null,
                           onBackgroundImageError:
-                              p?.avatarUrl != null
-                                  ? (ex, st) {
-                                    log(
-                                      'Avatar image load error',
-                                      name: 'ProfileTab',
-                                      error: ex,
-                                      stackTrace: st,
-                                    );
-                                  }
-                                  : null,
+                              p?.avatarUrl != null ? (_, __) {} : null,
                           backgroundColor: Colors.grey.shade200,
                           child:
                               p?.avatarUrl == null
@@ -336,6 +333,7 @@ class ProfileTab extends ConsumerWidget {
                   ),
                   SizedBox(height: 80.h),
                 ],
+              ),
               ),
             ),
       ),

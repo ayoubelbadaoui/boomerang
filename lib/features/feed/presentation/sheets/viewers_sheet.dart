@@ -78,7 +78,12 @@ class _ViewerTile extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: 8.h),
       child: Row(
         children: [
-          CircleAvatar(radius: 24.r, backgroundImage: NetworkImage(v.avatar)),
+          CircleAvatar(
+            radius: 24.r,
+            backgroundImage: NetworkImage(v.avatar),
+            onBackgroundImageError: (_, __) {},
+            backgroundColor: Colors.grey.shade200,
+          ),
           SizedBox(width: 12.w),
           Expanded(
             child: Text(

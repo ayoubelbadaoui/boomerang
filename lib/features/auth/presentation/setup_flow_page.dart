@@ -222,38 +222,18 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
             child:
                 (_saving || _index == 3)
                     ? const Center(child: CircularProgressIndicator())
-                    : Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _skip,
-                            style: OutlinedButton.styleFrom(
-                              shape: const StadiumBorder(),
-                              foregroundColor: Colors.black,
-                              side: const BorderSide(
-                                color: Colors.black,
-                                width: 1.5,
-                              ),
-                              backgroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: 16.h),
-                            ),
-                            child: const Text('Skip'),
-                          ),
+                    : SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _next,
+                        style: ElevatedButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16.h),
                         ),
-                        SizedBox(width: 16.w),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _next,
-                            style: ElevatedButton.styleFrom(
-                              shape: const StadiumBorder(),
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: 16.h),
-                            ),
-                            child: const Text('Continue'),
-                          ),
-                        ),
-                      ],
+                        child: const Text('Continue'),
+                      ),
                     ),
           ),
         ],

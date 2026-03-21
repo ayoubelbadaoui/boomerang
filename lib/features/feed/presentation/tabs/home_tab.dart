@@ -237,21 +237,7 @@ class _BoomerangCard extends ConsumerWidget {
                         child: CircleAvatar(
                           radius: 14.r,
                           backgroundImage:
-                              avatar != null
-                                  ? ResizeImage.resizeIfNeeded(
-                                    (28.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    (28.r *
-                                            MediaQuery.of(
-                                              context,
-                                            ).devicePixelRatio)
-                                        .round(),
-                                    NetworkImage(avatar),
-                                  )
-                                  : null,
+                              avatar != null ? NetworkImage(avatar) : null,
                           onBackgroundImageError:
                               avatar != null ? (_, __) {} : null,
                           backgroundColor: Colors.grey.shade200,

@@ -50,14 +50,10 @@ class OtherUserProfilePage extends ConsumerWidget {
                 CircleAvatar(
                   radius: 48.r,
                   backgroundImage: p?.avatarUrl != null
-                      ? ResizeImage.resizeIfNeeded(
-                          (96.r * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                          (96.r * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                          NetworkImage(p!.avatarUrl!),
-                        )
+                      ? NetworkImage(p!.avatarUrl!)
                       : null,
+                  onBackgroundImageError:
+                      p?.avatarUrl != null ? (_, __) {} : null,
                   backgroundColor: Colors.grey.shade200,
                   child: p?.avatarUrl == null
                       ? Icon(
