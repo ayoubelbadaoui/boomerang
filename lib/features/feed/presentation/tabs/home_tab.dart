@@ -112,6 +112,7 @@ class _PaginatedBoomerangListState
     final likedIds = ref.watch(likedPostIdsProvider).value ?? const <String>{};
     final isLoadingInitial = _docs.isEmpty && _loading && !_refreshing;
     return RefreshIndicator(
+      color: Colors.black,
       onRefresh: _refresh,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -253,6 +254,10 @@ class _BoomerangCard extends ConsumerWidget {
                                   : null,
                           onBackgroundImageError:
                               avatar != null ? (_, __) {} : null,
+                          backgroundColor: Colors.grey.shade200,
+                          child: avatar == null
+                              ? Icon(Icons.person, size: 14.r, color: Colors.grey.shade600)
+                              : null,
                         ),
                       ),
                       SizedBox(width: 8.w),
@@ -305,16 +310,18 @@ class _BoomerangCard extends ConsumerWidget {
                     isLiked: isLiked,
                     likes: likes,
                     onToggleLike: (nextLiked, nextLikes) async {
+                      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+                      if (uid == null) return;
                       final me = ref.read(currentUserProfileProvider).value;
-                      if (me == null) return;
                       onToggleLike?.call(nextLiked, nextLikes);
+                      final authUser = ref.read(firebaseAuthProvider).currentUser;
                       await ref
                           .read(boomerangRepoProvider)
                           .toggleLike(
                             boomerangId: id,
-                            userId: me.uid,
-                            actorName: _bestName(me),
-                            actorAvatar: me.avatarUrl,
+                            userId: uid,
+                            actorName: me != null ? _bestName(me) : (authUser?.displayName ?? 'User'),
+                            actorAvatar: me?.avatarUrl ?? authUser?.photoURL,
                           );
                     },
                   ),

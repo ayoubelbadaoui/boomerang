@@ -1,4 +1,3 @@
-import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -148,21 +147,22 @@ class _FaqItemState extends State<_FaqItem> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.fade(0.06),
-            blurRadius: 24,
-            spreadRadius: 2,
-          ),
-        ],
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: ExpansionTile(
+        shape: const RoundedRectangleBorder(side: BorderSide.none),
+        collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+        iconColor: Colors.black,
+        collapsedIconColor: Colors.black,
+        textColor: Colors.black,
+        collapsedTextColor: Colors.black,
         title: Text(
           widget.title,
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16.sp),
         ),
         trailing: Icon(
           open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+          color: Colors.black,
         ),
         onExpansionChanged: (v) => setState(() => open = v),
         children: [
@@ -198,17 +198,13 @@ class _ContactTab extends StatelessWidget {
           items
               .map(
                 (e) => Container(
-                  margin: EdgeInsets.only(bottom: 12.h),
+                  margin: EdgeInsets.only(
+                    bottom: 12.h,
+                  ).copyWith(right: 8, left: 8),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16.r),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.fade(0.06),
-                        blurRadius: 24,
-                        spreadRadius: 2,
-                      ),
-                    ],
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
                   child: ListTile(
                     leading: CircleAvatar(

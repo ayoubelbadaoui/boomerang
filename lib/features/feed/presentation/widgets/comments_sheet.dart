@@ -238,13 +238,17 @@ class _CommentTile extends ConsumerWidget {
                           onTap:
                               me == null
                                   ? null
-                                  : () => ref
-                                      .read(commentsRepoProvider)
-                                      .toggleLike(
-                                        boomerangId: boomerangId,
-                                        commentId: commentId,
-                                        userId: me.uid,
-                                      ),
+                                  : () {
+                                      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+                                      if (uid == null) return;
+                                      ref
+                                          .read(commentsRepoProvider)
+                                          .toggleLike(
+                                            boomerangId: boomerangId,
+                                            commentId: commentId,
+                                            userId: uid,
+                                          );
+                                    },
                           customBorder: const CircleBorder(),
                           child: Row(
                             children: [
@@ -349,8 +353,10 @@ class _CommentTile extends ConsumerWidget {
                   onTap: () async {
                     final text = controller.text.trim();
                     if (text.isEmpty) return;
-                    final profileAsync = ref.read(currentUserProfileProvider);
-                    final user = profileAsync.value;
+                    final authUser = ref.read(firebaseAuthProvider).currentUser;
+                    final uid = authUser?.uid;
+                    if (uid == null) return;
+                    final profile = ref.read(currentUserProfileProvider).value;
                     controller.clear();
                     FocusScope.of(context).unfocus();
                     await ref
@@ -358,12 +364,12 @@ class _CommentTile extends ConsumerWidget {
                         .addReply(
                           boomerangId: boomerangId,
                           parentCommentId: commentId,
-                          userId: user?.uid ?? 'anon',
+                          userId: uid,
                           userName:
-                              user?.nickname.isNotEmpty == true
-                                  ? user!.nickname
-                                  : (user?.fullName ?? 'User'),
-                          userAvatar: user?.avatarUrl,
+                              profile?.nickname.isNotEmpty == true
+                                  ? profile!.nickname
+                                  : (profile?.fullName ?? authUser?.displayName ?? 'User'),
+                          userAvatar: profile?.avatarUrl ?? authUser?.photoURL,
                           text: text,
                         );
                     if (context.mounted) Navigator.pop(context);
@@ -539,20 +545,22 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
             onTap: () async {
               final text = _controller.text.trim();
               if (text.isEmpty) return;
-              final profileAsync = ref.read(currentUserProfileProvider);
-              final user = profileAsync.value;
+              final authUser = ref.read(firebaseAuthProvider).currentUser;
+              final uid = authUser?.uid;
+              if (uid == null) return;
+              final profile = ref.read(currentUserProfileProvider).value;
               _controller.clear();
               FocusScope.of(context).unfocus();
               await ref
                   .read(commentsRepoProvider)
                   .add(
                     boomerangId: widget.boomerangId,
-                    userId: user?.uid ?? 'anon',
+                    userId: uid,
                     userName:
-                        user?.nickname.isNotEmpty == true
-                            ? user!.nickname
-                            : (user?.fullName ?? 'User'),
-                    userAvatar: user?.avatarUrl,
+                        profile?.nickname.isNotEmpty == true
+                            ? profile!.nickname
+                            : (profile?.fullName ?? authUser?.displayName ?? 'User'),
+                    userAvatar: profile?.avatarUrl ?? authUser?.photoURL,
                     text: text,
                   );
             },

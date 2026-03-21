@@ -197,8 +197,9 @@ class _PostPageState extends ConsumerState<_PostPage> {
   }
 
   Future<void> _like() async {
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid == null) return;
     final me = ref.read(currentUserProfileProvider).value;
-    if (me == null) return;
     final baseLikedIds = ref
         .read(likedPostIdsProvider)
         .maybeWhen(data: (ids) => ids, orElse: () => <String>{});
@@ -215,9 +216,9 @@ class _PostPageState extends ConsumerState<_PostPage> {
         .read(boomerangRepoProvider)
         .toggleLike(
           boomerangId: widget.id,
-          userId: me.uid,
-          actorName: _bestName(me),
-          actorAvatar: me.avatarUrl,
+          userId: uid,
+          actorName: me != null ? _bestName(me) : (ref.read(firebaseAuthProvider).currentUser?.displayName ?? 'User'),
+          actorAvatar: me?.avatarUrl ?? ref.read(firebaseAuthProvider).currentUser?.photoURL,
         );
   }
 
@@ -524,6 +525,10 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                             userAvatar != null
                                 ? NetworkImage(userAvatar)
                                 : null,
+                        backgroundColor: Colors.grey.shade200,
+                        child: userAvatar == null
+                            ? Icon(Icons.person, color: Colors.grey.shade600)
+                            : null,
                       ),
                       title: Text(
                         userName,

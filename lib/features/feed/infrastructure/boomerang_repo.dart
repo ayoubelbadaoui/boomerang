@@ -94,7 +94,7 @@ class BoomerangRepo {
     String? actorName,
     String? actorAvatar,
   }) async {
-    String _avatar(String? url, String seed) =>
+    String avatar(String? url, String seed) =>
         (url != null && url.isNotEmpty)
             ? url
             : 'https://picsum.photos/seed/$seed/200/200';
@@ -133,7 +133,7 @@ class BoomerangRepo {
               'boomerangImage': boomerangData!['imageUrl'],
               'senderId': userId,
               'actorName': actorName,
-              'actorAvatar': _avatar(actorAvatar, userId),
+              'actorAvatar': avatar(actorAvatar, userId),
               'read': false,
               'createdAt': FieldValue.serverTimestamp(),
             });

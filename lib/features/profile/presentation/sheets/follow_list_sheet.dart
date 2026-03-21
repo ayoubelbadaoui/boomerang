@@ -103,6 +103,10 @@ class FollowListSheet extends ConsumerWidget {
                                   : null,
                           onBackgroundImageError:
                               avatar != null ? (_, __) {} : null,
+                          backgroundColor: Colors.grey.shade200,
+                          child: avatar == null
+                              ? Icon(Icons.person, size: 22.r, color: Colors.grey.shade600)
+                              : null,
                         ),
                         title: Text(
                           name,

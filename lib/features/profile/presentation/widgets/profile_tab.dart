@@ -116,12 +116,12 @@ class ProfileTab extends ConsumerWidget {
                                     );
                                   }
                                   : null,
-                          backgroundColor: const Color(0xFFF2F2F2),
+                          backgroundColor: Colors.grey.shade200,
                           child:
                               p?.avatarUrl == null
-                                  ? const Icon(
+                                  ? Icon(
                                     Icons.person,
-                                    color: Colors.black26,
+                                    color: Colors.grey.shade600,
                                     size: 36,
                                   )
                                   : null,
@@ -164,7 +164,7 @@ class ProfileTab extends ConsumerWidget {
                     ),
                   SizedBox(height: 20.h),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       Builder(
                         builder: (_) {
@@ -322,17 +322,6 @@ class ProfileTab extends ConsumerWidget {
                           active: ref.watch(profileSectionIndexProvider) == 1,
                         ),
                       ),
-                      GestureDetector(
-                        onTap:
-                            () =>
-                                ref
-                                    .read(profileSectionIndexProvider.notifier)
-                                    .state = 2,
-                        child: ModeIcon(
-                          icon: Icons.favorite_border_rounded,
-                          active: ref.watch(profileSectionIndexProvider) == 2,
-                        ),
-                      ),
                     ],
                   ),
                   SizedBox(height: 12.h),
@@ -342,14 +331,7 @@ class ProfileTab extends ConsumerWidget {
                     builder: (_) {
                       final section = ref.watch(profileSectionIndexProvider);
                       if (section == 0) return const UserBoomerangsGrid();
-                      if (section == 1) return const SavedBoomerangsGrid();
-                      return const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text(
-                          'Likes coming soon',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                      );
+                      return const SavedBoomerangsGrid();
                     },
                   ),
                   SizedBox(height: 80.h),

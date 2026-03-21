@@ -60,11 +60,11 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
   }
 
   Future<void> _like() async {
-    final me = ref.read(currentUserProfileProvider).value;
-    if (me == null) return;
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid == null) return;
     await ref
         .read(boomerangRepoProvider)
-        .toggleLike(boomerangId: widget.id, userId: me.uid);
+        .toggleLike(boomerangId: widget.id, userId: uid);
   }
 
   void _onDoubleTap() async {
@@ -188,6 +188,10 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                             )
                             : null,
                     onBackgroundImageError: avatar != null ? (_, __) {} : null,
+                    backgroundColor: Colors.grey.shade200,
+                    child: avatar == null
+                        ? Icon(Icons.person, size: 14.r, color: Colors.grey.shade600)
+                        : null,
                   ),
                 ),
                 SizedBox(width: 8.w),
@@ -621,20 +625,22 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                   onTap: () async {
                     final text = _text.text.trim();
                     if (text.isEmpty) return;
-                    final profileAsync = ref.read(currentUserProfileProvider);
-                    final user = profileAsync.value;
+                    final authUser = ref.read(firebaseAuthProvider).currentUser;
+                    final uid = authUser?.uid;
+                    if (uid == null) return;
+                    final profile = ref.read(currentUserProfileProvider).value;
                     _text.clear();
                     FocusScope.of(context).unfocus();
                     await ref
                         .read(commentsRepoProvider)
                         .add(
                           boomerangId: widget.boomerangId,
-                          userId: user?.uid ?? 'anon',
+                          userId: uid,
                           userName:
-                              user?.nickname.isNotEmpty == true
-                                  ? user!.nickname
-                                  : (user?.fullName ?? 'User'),
-                          userAvatar: user?.avatarUrl,
+                              profile?.nickname.isNotEmpty == true
+                                  ? profile!.nickname
+                                  : (profile?.fullName ?? authUser?.displayName ?? 'User'),
+                          userAvatar: profile?.avatarUrl ?? authUser?.photoURL,
                           text: text,
                         );
                   },
@@ -695,6 +701,10 @@ class _CommentTile extends ConsumerWidget {
                         )
                         : null,
                 onBackgroundImageError: userAvatar != null ? (_, __) {} : null,
+                backgroundColor: Colors.grey.shade200,
+                child: userAvatar == null
+                    ? Icon(Icons.person, size: 22.r, color: Colors.grey.shade600)
+                    : null,
               ),
               SizedBox(width: 12.w),
               Expanded(
@@ -723,16 +733,17 @@ class _CommentTile extends ConsumerWidget {
                     Row(
                       children: [
                         InkWell(
-                          onTap:
-                              me == null
-                                  ? null
-                                  : () => ref
-                                      .read(commentsRepoProvider)
-                                      .toggleLike(
-                                        boomerangId: boomerangId,
-                                        commentId: commentId,
-                                        userId: me.uid,
-                                      ),
+                          onTap: () {
+                            final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+                            if (uid == null) return;
+                            ref
+                                .read(commentsRepoProvider)
+                                .toggleLike(
+                                  boomerangId: boomerangId,
+                                  commentId: commentId,
+                                  userId: uid,
+                                );
+                          },
                           customBorder: const CircleBorder(),
                           child: Row(
                             children: [

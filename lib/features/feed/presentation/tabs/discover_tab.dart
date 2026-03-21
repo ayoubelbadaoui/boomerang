@@ -175,6 +175,10 @@ class _UsersSearchList extends ConsumerWidget {
             return ListTile(
               leading: CircleAvatar(
                 backgroundImage: avatar != null ? NetworkImage(avatar) : null,
+                backgroundColor: Colors.grey.shade200,
+                child: avatar == null
+                    ? Icon(Icons.person, color: Colors.grey.shade600)
+                    : null,
               ),
               title: Text(nick.isNotEmpty ? nick : name),
               subtitle: Text(handle),
@@ -323,6 +327,10 @@ class _BmgGrid extends ConsumerWidget {
                       radius: 12.r,
                       backgroundImage:
                           avatar != null ? NetworkImage(avatar) : null,
+                      backgroundColor: Colors.grey.shade200,
+                      child: avatar == null
+                          ? Icon(Icons.person, size: 14.r, color: Colors.grey.shade600)
+                          : null,
                     ),
                     SizedBox(width: 8.w),
                     Expanded(

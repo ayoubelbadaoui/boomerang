@@ -20,7 +20,7 @@ class CommentsRepo {
     String? userAvatar,
     required String text,
   }) async {
-    String _avatar(String? url, String seed) =>
+    String avatar(String? url, String seed) =>
         (url != null && url.isNotEmpty)
             ? url
             : 'https://picsum.photos/seed/$seed/200/200';
@@ -39,7 +39,8 @@ class CommentsRepo {
         });
     // Notify owner of the boomerang about the new comment
     try {
-      final postSnap = await _fs.collection('boomerangs').doc(boomerangId).get();
+      final postSnap =
+          await _fs.collection('boomerangs').doc(boomerangId).get();
       if (!postSnap.exists) return;
       final data = postSnap.data() as Map<String, dynamic>;
       final ownerId = (data['userId'] ?? '') as String;
@@ -54,7 +55,7 @@ class CommentsRepo {
             'boomerangImage': data['imageUrl'],
             'senderId': userId,
             'actorName': userName,
-            'actorAvatar': _avatar(userAvatar, userId),
+            'actorAvatar': avatar(userAvatar, userId),
             'text': text,
             'read': false,
             'createdAt': FieldValue.serverTimestamp(),
@@ -72,7 +73,7 @@ class CommentsRepo {
     String? userAvatar,
     required String text,
   }) async {
-    String _avatar(String? url, String seed) =>
+    String avatar(String? url, String seed) =>
         (url != null && url.isNotEmpty)
             ? url
             : 'https://picsum.photos/seed/$seed/200/200';
@@ -94,16 +95,18 @@ class CommentsRepo {
     final replyId = replyRef.id;
     // Best-effort notify post owner and parent comment author.
     try {
-      final postSnap = await _fs.collection('boomerangs').doc(boomerangId).get();
+      final postSnap =
+          await _fs.collection('boomerangs').doc(boomerangId).get();
       if (!postSnap.exists) return;
       final data = postSnap.data() as Map<String, dynamic>;
       final ownerId = (data['userId'] ?? '') as String;
-      final parentSnap = await _fs
-          .collection('boomerangs')
-          .doc(boomerangId)
-          .collection('comments')
-          .doc(parentCommentId)
-          .get();
+      final parentSnap =
+          await _fs
+              .collection('boomerangs')
+              .doc(boomerangId)
+              .collection('comments')
+              .doc(parentCommentId)
+              .get();
       final parentAuthor = (parentSnap.data()?['userId'] ?? '') as String;
       final targets = <String>{};
       if (ownerId.isNotEmpty && ownerId != userId) targets.add(ownerId);
@@ -123,7 +126,7 @@ class CommentsRepo {
               'boomerangImage': data['imageUrl'],
               'senderId': userId,
               'actorName': userName,
-              'actorAvatar': _avatar(userAvatar, userId),
+              'actorAvatar': avatar(userAvatar, userId),
               'text': text,
               'read': false,
               'createdAt': FieldValue.serverTimestamp(),

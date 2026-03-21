@@ -7,6 +7,7 @@ import 'package:boomerang/features/profile/presentation/settings/security_page.d
 import 'package:boomerang/features/profile/presentation/settings/language_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/qr_code_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/help_center_page.dart';
+import 'package:boomerang/core/notifications/push_notifications_service.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -194,6 +195,16 @@ Future<void> _confirmLogout(BuildContext navigatorContext, WidgetRef ref) async 
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
+                        final uid = ref
+                            .read(firebaseAuthProvider)
+                            .currentUser
+                            ?.uid;
+                        if (uid != null && uid.isNotEmpty) {
+                          await removeCurrentDeviceTokenForUser(
+                            ref.read(firestoreProvider),
+                            uid,
+                          );
+                        }
                         await ref
                             .read(authControllerProvider.notifier)
                             .logout();

@@ -6,7 +6,9 @@ ThemeData buildAppTheme() {
   final base = ThemeData(
     fontFamily: 'Urbanist',
     colorScheme: ColorScheme.fromSeed(
-      seedColor: primaryTextColor,
+      seedColor: const Color(0xFF212121),
+      primary: const Color(0xFF212121),
+      onPrimary: Colors.white,
     ).copyWith(onSurface: const Color(0xFF212121)),
     useMaterial3: true,
   );

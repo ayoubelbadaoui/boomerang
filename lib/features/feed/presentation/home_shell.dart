@@ -191,12 +191,7 @@ class _CreateButton extends StatelessWidget {
         width: 56.h,
         decoration: BoxDecoration(color: Colors.black, shape: BoxShape.circle),
         child: Center(
-          child: SvgPicture.asset(
-            'assets/bottom_navigation/flash.svg',
-            height: 24.h,
-            width: 24.h,
-            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-          ),
+          child: Icon(Icons.add, size: 28.h, color: Colors.white),
         ),
       ),
     );

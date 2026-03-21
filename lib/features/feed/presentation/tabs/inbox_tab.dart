@@ -44,124 +44,137 @@ class InboxTab extends ConsumerWidget {
           uid == null
               ? const Center(child: Text('Sign in to see notifications'))
               : RefreshIndicator(
-                onRefresh: () async {},
-                child: StreamBuilder(
-                  stream: ref.watch(notificationsRepoProvider).watch(uid),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final docs = snapshot.data!.docs;
-                    final items =
-                        docs.map((doc) {
-                          final d = doc.data();
-                          final type = (d['type'] ?? '') as String;
-                          final rawTitle = (d['actorName'] ?? '') as String;
-                          final status = (d['status'] ?? '') as String;
-                          final senderId =
-                              ((d['senderId'] ?? d['actorUserId']) ?? '')
-                                  as String;
-                          final title =
-                              rawTitle.trim().isNotEmpty
-                                  ? rawTitle
-                                  : (senderId.isNotEmpty
-                                      ? 'user_${senderId.substring(0, senderId.length.clamp(0, 6))}'
-                                      : 'User');
-                          final avatar = d['actorAvatar'] as String?;
-                          final ts = d['createdAt'];
-                          final createdAt =
-                              ts is Timestamp ? ts.toDate() : DateTime.now();
-                          String subtitle = '';
-                          String? thumb;
-                          String? action;
-                          _ItemType itemType = _ItemType.other;
-                          final read = (d['read'] ?? false) as bool;
-                          if (type == 'follow') {
-                            subtitle = 'Started following you';
-                            action = 'Follow Back';
-                            itemType = _ItemType.follow;
-                          } else if (type == 'follow_request') {
-                            subtitle = 'Requested to follow you';
-                            itemType = _ItemType.followRequest;
-                          } else if (type == 'like') {
-                            subtitle = 'Liked your video';
-                            thumb = d['boomerangImage'] as String?;
-                            itemType = _ItemType.like;
-                          } else if (type == 'comment') {
-                            subtitle = 'Commented on your video';
-                            thumb = d['boomerangImage'] as String?;
-                            itemType = _ItemType.comment;
-                        } else if (type == 'reply') {
-                          subtitle = 'Replied to your comment';
-                          thumb = d['boomerangImage'] as String?;
-                          itemType = _ItemType.reply;
-                          } else {
-                            subtitle = 'Activity';
-                          }
-                          return _Item(
-                            id: doc.id,
-                            avatar:
-                                avatar ??
-                                'https://picsum.photos/seed/a${title.hashCode}/100/100',
-                            title: title,
-                            subtitle: subtitle,
-                            trailingThumb: thumb,
-                            actionLabel: action,
-                            createdAt: createdAt,
-                            actorId: senderId,
-                            boomerangId: d['boomerangId'] as String?,
-                          commentId: d['commentId'] as String?,
-                          parentCommentId: d['parentCommentId'] as String?,
-                          replyId: d['replyId'] as String?,
-                            type: itemType,
-                            read: read,
-                            status: status,
+                color: Colors.black,
+                onRefresh: () async {
+                  ref.invalidate(notificationsStreamProvider(uid));
+                },
+                child: ref
+                    .watch(notificationsStreamProvider(uid))
+                    .when(
+                      loading:
+                          () =>
+                              const Center(child: CircularProgressIndicator()),
+                      error: (e, _) => Center(child: Text('Error: $e')),
+                      data: (snapshot) {
+                        final docs = snapshot.docs;
+                        final items =
+                            docs.map((doc) {
+                              final d = doc.data();
+                              final type = (d['type'] ?? '') as String;
+                              final rawTitle = (d['actorName'] ?? '') as String;
+                              final status = (d['status'] ?? '') as String;
+                              final senderId =
+                                  ((d['senderId'] ?? d['actorUserId']) ?? '')
+                                      as String;
+                              final title =
+                                  rawTitle.trim().isNotEmpty
+                                      ? rawTitle
+                                      : (senderId.isNotEmpty
+                                          ? 'user_${senderId.substring(0, senderId.length.clamp(0, 6))}'
+                                          : 'User');
+                              final avatar = d['actorAvatar'] as String?;
+                              final ts = d['createdAt'];
+                              final createdAt =
+                                  ts is Timestamp
+                                      ? ts.toDate()
+                                      : DateTime.now();
+                              String subtitle = '';
+                              String? thumb;
+                              String? action;
+                              _ItemType itemType = _ItemType.other;
+                              final read = (d['read'] ?? false) as bool;
+                              if (type == 'follow') {
+                                subtitle = 'Started following you';
+                                action = 'Follow Back';
+                                itemType = _ItemType.follow;
+                              } else if (type == 'follow_request') {
+                                subtitle = 'Requested to follow you';
+                                itemType = _ItemType.followRequest;
+                              } else if (type == 'like') {
+                                subtitle = 'Liked your video';
+                                thumb = d['boomerangImage'] as String?;
+                                itemType = _ItemType.like;
+                              } else if (type == 'comment') {
+                                subtitle = 'Commented on your video';
+                                thumb = d['boomerangImage'] as String?;
+                                itemType = _ItemType.comment;
+                              } else if (type == 'reply') {
+                                subtitle = 'Replied to your comment';
+                                thumb = d['boomerangImage'] as String?;
+                                itemType = _ItemType.reply;
+                              } else {
+                                subtitle = 'Activity';
+                              }
+                              return _Item(
+                                id: doc.id,
+                                avatar:
+                                    avatar ??
+                                    'https://picsum.photos/seed/a${title.hashCode}/100/100',
+                                title: title,
+                                subtitle: subtitle,
+                                trailingThumb: thumb,
+                                actionLabel: action,
+                                createdAt: createdAt,
+                                actorId: senderId,
+                                boomerangId: d['boomerangId'] as String?,
+                                commentId: d['commentId'] as String?,
+                                parentCommentId:
+                                    d['parentCommentId'] as String?,
+                                replyId: d['replyId'] as String?,
+                                type: itemType,
+                                read: read,
+                                status: status,
+                              );
+                            }).toList();
+
+                        if (items.isEmpty) {
+                          return ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: const [
+                              SizedBox(height: 200),
+                              Center(child: Text('No notifications yet')),
+                            ],
                           );
-                        }).toList();
+                        }
 
-                    if (items.isEmpty) {
-                      return ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: const [
-                          SizedBox(height: 200),
-                          Center(child: Text('No notifications yet')),
-                        ],
-                      );
-                    }
-
-                    final sections = _groupSections(items);
-                    final children = <Widget>[];
-                    for (final section in sections) {
-                      children.add(
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 4.h),
-                          child: Text(
-                            section.label,
-                            style: TextStyle(
-                              fontSize: 22.sp,
-                              fontWeight: FontWeight.w800,
+                        final sections = _groupSections(items);
+                        final children = <Widget>[];
+                        for (final section in sections) {
+                          children.add(
+                            Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                16.w,
+                                12.h,
+                                16.w,
+                                4.h,
+                              ),
+                              child: Text(
+                                section.label,
+                                style: TextStyle(
+                                  fontSize: 22.sp,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      );
-                      for (final item in section.items) {
-                        children.add(
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16.w),
-                            child: _ActivityTile(item: item),
-                          ),
-                        );
-                      }
-                    }
+                          );
+                          for (final item in section.items) {
+                            children.add(
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                                child: _ActivityTile(item: item),
+                              ),
+                            );
+                          }
+                        }
 
-                    return ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.only(bottom: 24.h),
-                      itemCount: children.length,
-                      itemBuilder: (_, i) => children[i],
-                    );
-                  },
-                ),
+                        return ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.only(bottom: 24.h),
+                          itemCount: children.length,
+                          itemBuilder: (_, i) => children[i],
+                        );
+                      },
+                    ),
               ),
     );
   }
@@ -191,7 +204,7 @@ class _Item {
   final String subtitle;
   final DateTime createdAt;
   final String actorId;
-    final _ItemType type;
+  final _ItemType type;
   final bool read;
   final String? boomerangId;
   final String? commentId;
@@ -240,8 +253,9 @@ List<_Section> _groupSections(List<_Item> items) {
 
   final sections = <_Section>[];
   if (todayItems.isNotEmpty) sections.add(_Section('Today', todayItems));
-  if (yesterdayItems.isNotEmpty)
+  if (yesterdayItems.isNotEmpty) {
     sections.add(_Section('Yesterday', yesterdayItems));
+  }
   if (weekItems.isNotEmpty) sections.add(_Section('This Week', weekItems));
   if (earlierItems.isNotEmpty) sections.add(_Section('Earlier', earlierItems));
   return sections;
@@ -256,7 +270,8 @@ class _ActivityTile extends StatelessWidget {
       builder: (context, ref, _) {
         final isFollowing =
             ref.watch(isFollowingStreamProvider(item.actorId)).value ?? false;
-        final isPendingRequest = item.type == _ItemType.followRequest &&
+        final isPendingRequest =
+            item.type == _ItemType.followRequest &&
             (item.status?.isEmpty == true || item.status == 'pending') &&
             !item.read &&
             !isFollowing;
@@ -330,8 +345,12 @@ class _ActivityTile extends StatelessWidget {
                       width: 56.r,
                       height: 56.r,
                       fit: BoxFit.cover,
-                      cacheWidth: (56.r * MediaQuery.devicePixelRatioOf(context)).round(),
-                      cacheHeight: (56.r * MediaQuery.devicePixelRatioOf(context)).round(),
+                      cacheWidth:
+                          (56.r * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
+                      cacheHeight:
+                          (56.r * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
                     ),
                   ),
               ],
@@ -424,7 +443,9 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
       _resolved = true; // optimistic hide
     });
     try {
-      await ref.read(followRepoProvider).acceptRequest(
+      await ref
+          .read(followRepoProvider)
+          .acceptRequest(
             senderId: widget.item.actorId,
             notificationId: widget.item.id,
           );
@@ -441,7 +462,9 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
       _resolved = true; // optimistic hide
     });
     try {
-      await ref.read(followRepoProvider).rejectRequest(
+      await ref
+          .read(followRepoProvider)
+          .rejectRequest(
             senderId: widget.item.actorId,
             notificationId: widget.item.id,
           );
@@ -484,23 +507,24 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
               borderRadius: BorderRadius.circular(24.r),
             ),
           ),
-          child: _busy
-              ? SizedBox(
-                  width: 14.r,
-                  height: 14.r,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          child:
+              _busy
+                  ? SizedBox(
+                    width: 14.r,
+                    height: 14.r,
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                  : Text(
+                    'Accept',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.sp,
+                    ),
                   ),
-                )
-              : Text(
-                  'Accept',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.sp,
-                  ),
-                ),
         ),
       ],
     );
@@ -576,12 +600,13 @@ Future<void> _openPost(BuildContext context, WidgetRef ref, _Item item) async {
   if (!context.mounted) return;
   Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (_) => BoomerangPagerPage(
-        initialId: data.$1,
-        initialData: data.$2,
-        targetCommentId: item.parentCommentId ?? item.commentId,
-        targetReplyId: item.replyId,
-      ),
+      builder:
+          (_) => BoomerangPagerPage(
+            initialId: data.$1,
+            initialData: data.$2,
+            targetCommentId: item.parentCommentId ?? item.commentId,
+            targetReplyId: item.replyId,
+          ),
     ),
   );
 }

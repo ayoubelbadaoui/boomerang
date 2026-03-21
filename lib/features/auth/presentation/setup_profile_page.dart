@@ -81,12 +81,12 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                 icon: Icons.phone,
                 keyboardType: TextInputType.phone,
               ),
-              SizedBox(height: 12.h),
-              InputFilled(
-                controller: _address,
-                hint: 'Address',
-                icon: Icons.location_on,
-              ),
+              // SizedBox(height: 12.h),
+              // InputFilled(
+              //   controller: _address,
+              //   hint: 'Address',
+              //   icon: Icons.location_on,
+              // ),
               SizedBox(height: 24.h),
               Row(
                 children: [

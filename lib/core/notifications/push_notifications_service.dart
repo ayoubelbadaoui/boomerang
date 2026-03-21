@@ -12,6 +12,33 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 /// - Saves the FCM token under users/{uid}/deviceTokens/{token}
 /// - Keeps the token in sync on refresh
 /// - Hooks basic onMessage handler
+/// Removes this device's FCM token from the given user's document so the device
+/// stops receiving push notifications for that user. Call before logout.
+Future<void> removeCurrentDeviceTokenForUser(
+  FirebaseFirestore fs,
+  String uid,
+) async {
+  if (uid.isEmpty) return;
+  try {
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token == null || token.isEmpty) return;
+    final tokenRef = fs
+        .collection('users')
+        .doc(uid)
+        .collection('deviceTokens')
+        .doc(token);
+    await tokenRef.delete();
+    developer.log(
+      '[notification push] ✅ FCM token removed for user: $uid (logout)',
+    );
+  } catch (e) {
+    developer.log(
+      '[notification push] ⚠️ Could not remove FCM token: $e',
+      error: e,
+    );
+  }
+}
+
 final pushNotificationsProvider = Provider<void>((ref) {
   _PushNotificationsBootstrap(ref).initialize();
 });

@@ -104,7 +104,10 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           NetworkImage(widget.avatarUrl!),
                         )
                         : null,
-                backgroundColor: const Color(0xFFF2F2F2),
+                backgroundColor: Colors.grey.shade200,
+                child: widget.avatarUrl == null
+                    ? Icon(Icons.person, size: 44.r, color: Colors.grey.shade600)
+                    : null,
               ),
             ),
             SizedBox(height: 12.h),

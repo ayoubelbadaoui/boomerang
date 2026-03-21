@@ -32,6 +32,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   bool _saving = false;
   bool _lockNickname = false;
   File? _avatarFile;
+  _CountryCode _countryCode = _countryCodes.first;
 
   @override
   void initState() {
@@ -103,7 +104,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           fullName: _fullName.text.trim(),
           nickname: _nickname.text.trim(),
           email: _email.text.trim(),
-          phone: _phone.text.trim(),
+          phone: '${_countryCode.dialCode} ${_phone.text.trim()}',
           address: _address.text.trim(),
           avatarUrl: avatarUrl,
         );
@@ -208,6 +209,9 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                   address: _address,
                   onAvatarSelected: (f) => _avatarFile = f,
                   lockNickname: _lockNickname,
+                  countryCode: _countryCode,
+                  onCountryCodeChanged: (c) =>
+                      setState(() => _countryCode = c),
                 ),
                 const _FingerprintStep(),
               ],
@@ -266,6 +270,8 @@ class _FillProfileStep extends StatelessWidget {
     required this.email,
     required this.phone,
     required this.address,
+    required this.countryCode,
+    required this.onCountryCodeChanged,
     this.onAvatarSelected,
     this.lockNickname = false,
   });
@@ -277,6 +283,8 @@ class _FillProfileStep extends StatelessWidget {
   final TextEditingController address;
   final ValueChanged<File?>? onAvatarSelected;
   final bool lockNickname;
+  final _CountryCode countryCode;
+  final ValueChanged<_CountryCode> onCountryCodeChanged;
 
   static String? _required(String? v) =>
       (v == null || v.trim().isEmpty) ? 'This field is required' : null;
@@ -341,17 +349,20 @@ class _FillProfileStep extends StatelessWidget {
                 enabled: false,
               ),
               SizedBox(height: 12.h),
-              _FormInput(
-                label: 'Phone Number',
+              _PhoneInput(
                 controller: phone,
                 validator: _required,
-                prefix: const Text('🇺🇸  ▾'),
+                countryCode: countryCode,
+                onCountryCodeTap: () => _showCountryCodePicker(
+                  context,
+                  countryCode,
+                  onCountryCodeChanged,
+                ),
               ),
               SizedBox(height: 12.h),
               _FormInput(
                 label: 'Address',
                 controller: address,
-                validator: _required,
                 suffix: const Icon(Icons.location_on_outlined),
               ),
             ],
@@ -778,15 +789,13 @@ class _FormInput extends StatelessWidget {
   const _FormInput({
     required this.label,
     required this.controller,
-    required this.validator,
-    this.prefix,
+    this.validator,
     this.suffix,
     this.enabled = true,
   });
   final String label;
   final TextEditingController controller;
   final String? Function(String?)? validator;
-  final Widget? prefix;
   final Widget? suffix;
   final bool enabled;
 
@@ -801,14 +810,219 @@ class _FormInput extends StatelessWidget {
         filled: true,
         fillColor: const Color(0xFFF6F6F6),
         contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
-        prefixIcon:
-            prefix == null
-                ? null
-                : Padding(
-                  padding: EdgeInsets.only(left: 12.w, right: 8.w),
-                  child: prefix,
-                ),
         suffixIcon: suffix,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16.r),
+          borderSide: BorderSide.none,
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16.r),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
+      ),
+    );
+  }
+}
+
+class _CountryCode {
+  const _CountryCode(this.flag, this.dialCode, this.name);
+  final String flag;
+  final String dialCode;
+  final String name;
+}
+
+const _countryCodes = [
+  _CountryCode('🇺🇸', '+1', 'United States'),
+  _CountryCode('🇬🇧', '+44', 'United Kingdom'),
+  _CountryCode('🇨🇦', '+1', 'Canada'),
+  _CountryCode('🇦🇺', '+61', 'Australia'),
+  _CountryCode('🇮🇳', '+91', 'India'),
+  _CountryCode('🇩🇪', '+49', 'Germany'),
+  _CountryCode('🇫🇷', '+33', 'France'),
+  _CountryCode('🇪🇸', '+34', 'Spain'),
+  _CountryCode('🇮🇹', '+39', 'Italy'),
+  _CountryCode('🇧🇷', '+55', 'Brazil'),
+  _CountryCode('🇲🇽', '+52', 'Mexico'),
+  _CountryCode('🇯🇵', '+81', 'Japan'),
+  _CountryCode('🇰🇷', '+82', 'South Korea'),
+  _CountryCode('🇨🇳', '+86', 'China'),
+  _CountryCode('🇷🇺', '+7', 'Russia'),
+  _CountryCode('🇸🇦', '+966', 'Saudi Arabia'),
+  _CountryCode('🇦🇪', '+971', 'UAE'),
+  _CountryCode('🇪🇬', '+20', 'Egypt'),
+  _CountryCode('🇳🇬', '+234', 'Nigeria'),
+  _CountryCode('🇿🇦', '+27', 'South Africa'),
+  _CountryCode('🇹🇷', '+90', 'Turkey'),
+  _CountryCode('🇵🇰', '+92', 'Pakistan'),
+  _CountryCode('🇧🇩', '+880', 'Bangladesh'),
+  _CountryCode('🇮🇩', '+62', 'Indonesia'),
+  _CountryCode('🇵🇭', '+63', 'Philippines'),
+  _CountryCode('🇹🇭', '+66', 'Thailand'),
+  _CountryCode('🇻🇳', '+84', 'Vietnam'),
+  _CountryCode('🇲🇾', '+60', 'Malaysia'),
+  _CountryCode('🇸🇬', '+65', 'Singapore'),
+  _CountryCode('🇳🇿', '+64', 'New Zealand'),
+  _CountryCode('🇲🇦', '+212', 'Morocco'),
+  _CountryCode('🇩🇿', '+213', 'Algeria'),
+  _CountryCode('🇹🇳', '+216', 'Tunisia'),
+];
+
+void _showCountryCodePicker(
+  BuildContext context,
+  _CountryCode current,
+  ValueChanged<_CountryCode> onChanged,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => _CountryCodeSheet(
+      current: current,
+      onSelected: (c) {
+        onChanged(c);
+        Navigator.of(ctx).pop();
+      },
+    ),
+  );
+}
+
+class _CountryCodeSheet extends StatefulWidget {
+  const _CountryCodeSheet({required this.current, required this.onSelected});
+  final _CountryCode current;
+  final ValueChanged<_CountryCode> onSelected;
+
+  @override
+  State<_CountryCodeSheet> createState() => _CountryCodeSheetState();
+}
+
+class _CountryCodeSheetState extends State<_CountryCodeSheet> {
+  String _query = '';
+
+  List<_CountryCode> get _filtered => _query.isEmpty
+      ? _countryCodes
+      : _countryCodes.where((c) {
+          final q = _query.toLowerCase();
+          return c.name.toLowerCase().contains(q) ||
+              c.dialCode.contains(q);
+        }).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      minChildSize: 0.4,
+      expand: false,
+      builder: (context, scrollController) => Column(
+        children: [
+          SizedBox(height: 12.h),
+          Container(
+            width: 40.w,
+            height: 4.h,
+            decoration: BoxDecoration(
+              color: Colors.black26,
+              borderRadius: BorderRadius.circular(2.r),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
+            child: TextField(
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search country...',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: const Color(0xFFF6F6F6),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (v) => setState(() => _query = v),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: scrollController,
+              itemCount: _filtered.length,
+              itemBuilder: (context, i) {
+                final c = _filtered[i];
+                final selected = c.dialCode == widget.current.dialCode &&
+                    c.name == widget.current.name;
+                return ListTile(
+                  leading: Text(c.flag, style: TextStyle(fontSize: 24.sp)),
+                  title: Text(c.name),
+                  trailing: Text(
+                    c.dialCode,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Theme.of(context).primaryColor : Colors.black54,
+                    ),
+                  ),
+                  selected: selected,
+                  onTap: () => widget.onSelected(c),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhoneInput extends StatelessWidget {
+  const _PhoneInput({
+    required this.controller,
+    required this.validator,
+    required this.countryCode,
+    required this.onCountryCodeTap,
+  });
+  final TextEditingController controller;
+  final String? Function(String?)? validator;
+  final _CountryCode countryCode;
+  final VoidCallback onCountryCodeTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      validator: validator,
+      keyboardType: TextInputType.phone,
+      style: TextStyle(fontSize: 15.sp, color: Colors.black87),
+      decoration: InputDecoration(
+        hintText: 'Phone Number',
+        filled: true,
+        fillColor: const Color(0xFFF6F6F6),
+        contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 18.h),
+        prefixIcon: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onCountryCodeTap,
+          child: Padding(
+            padding: EdgeInsets.only(left: 16.w, right: 12.w),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(countryCode.flag, style: TextStyle(fontSize: 20.sp)),
+                SizedBox(width: 6.w),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20.r,
+                  color: Colors.black54,
+                ),
+              ],
+            ),
+          ),
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        prefixText: '${countryCode.dialCode} ',
+        prefixStyle: TextStyle(
+          fontSize: 15.sp,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16.r),
           borderSide: BorderSide.none,

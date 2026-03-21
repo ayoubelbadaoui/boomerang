@@ -176,6 +176,13 @@ final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
   return NotificationsRepo(fs);
 });
 
+/// Real-time stream of notification docs for the given user (stable per uid).
+final notificationsStreamProvider =
+    StreamProvider.family<QuerySnapshot<Map<String, dynamic>>, String>((ref, uid) {
+  if (uid.isEmpty) return const Stream.empty();
+  return ref.watch(notificationsRepoProvider).watch(uid);
+});
+
 final outgoingFollowRequestProvider =
     StreamProvider.family<FollowRequest?, String>((ref, targetId) {
   final me = ref.watch(currentUserProfileProvider).value;

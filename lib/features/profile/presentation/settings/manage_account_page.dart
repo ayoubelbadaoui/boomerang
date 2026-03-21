@@ -1,3 +1,4 @@
+import 'package:boomerang/core/notifications/push_notifications_service.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -9,9 +10,22 @@ import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 
 class ManageAccountPage extends ConsumerWidget {
   const ManageAccountPage({super.key});
+  String _formatDate(DateTime d) =>
+      '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
+
+  String _truncate(String s, int max) =>
+      s.length > max ? '${s.substring(0, max)}...' : s;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(currentUserProfileProvider).value;
+    final authEmail =
+        ref.watch(firebaseAuthProvider).currentUser?.email ?? '';
+    final displayEmail =
+        profile != null && profile.email.isNotEmpty ? profile.email : authEmail;
+    final displayPhone = profile?.phone ?? '';
+    final displayBirthday = profile?.birthday;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -31,50 +45,56 @@ class ManageAccountPage extends ConsumerWidget {
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18.sp),
           ),
           _Item(
-            icon: Icons.phone,
+            icon: Icons.phone_outlined,
             label: 'Phone Number',
-            value: '',
-            onTap:
-                () => _editText(
-                  context,
-                  ref,
-                  'Phone Number',
-                  initial: '',
-                  onSubmit: (v) {
-                    ref
-                        .read(userProfileRepoProvider)
-                        .updateCurrentUserProfile(phone: v.trim());
-                  },
-                ),
+            value: displayPhone.isNotEmpty
+                ? _truncate(displayPhone, 14)
+                : null,
+            onTap: () => _editText(
+              context,
+              ref,
+              'Phone Number',
+              initial: displayPhone,
+              onSubmit: (v) async {
+                await ref
+                    .read(userProfileRepoProvider)
+                    .updateCurrentUserProfile(phone: v.trim());
+              },
+            ),
           ),
           _Item(
-            icon: Icons.alternate_email,
+            icon: Icons.mail_outline_rounded,
             label: 'Email',
-            value: profile?.uid ?? '', // show partial or custom email if stored
-            onTap:
-                () => _editText(
-                  context,
-                  ref,
-                  'Email',
-                  initial: profile?.uid ?? '',
-                  onSubmit: (v) {
-                    ref
-                        .read(userProfileRepoProvider)
-                        .updateCurrentUserProfile();
-                  },
-                ),
+            value: displayEmail.isNotEmpty
+                ? _truncate(displayEmail, 14)
+                : null,
+            onTap: () => _editText(
+              context,
+              ref,
+              'Email',
+              initial: displayEmail,
+              onSubmit: (v) async {
+                await ref
+                    .read(userProfileRepoProvider)
+                    .updateCurrentUserProfile(email: v.trim());
+              },
+            ),
           ),
           _Item(
-            icon: Icons.calendar_today,
+            icon: Icons.calendar_today_outlined,
             label: 'Date of Birth',
-            value: '',
+            value: displayBirthday != null
+                ? _formatDate(displayBirthday)
+                : null,
+            trailing: const Icon(Icons.calendar_today, size: 20),
             onTap: () async {
               final now = DateTime.now();
               final d = await showDatePicker(
                 context: context,
                 firstDate: DateTime(now.year - 100),
                 lastDate: now,
-                initialDate: DateTime(now.year - 18, now.month, now.day),
+                initialDate: displayBirthday ??
+                    DateTime(now.year - 18, now.month, now.day),
               );
               if (d != null) {
                 await ref
@@ -101,6 +121,36 @@ class ManageAccountPage extends ConsumerWidget {
               style: TextStyle(color: Colors.red),
             ),
             onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete Account'),
+                  content: const Text(
+                    'Are you sure you want to delete your account? '
+                    'This action is permanent and cannot be undone.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed != true) return;
+              if (!context.mounted) return;
+              final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+              if (uid != null && uid.isNotEmpty) {
+                await removeCurrentDeviceTokenForUser(
+                  ref.read(firestoreProvider),
+                  uid,
+                );
+              }
               await ref.read(userProfileRepoProvider).deleteAccount();
               await ref.read(authControllerProvider.notifier).logout();
               final container = ProviderScope.containerOf(context, listen: false);
@@ -120,7 +170,7 @@ class ManageAccountPage extends ConsumerWidget {
     WidgetRef ref,
     String title, {
     String initial = '',
-    required ValueChanged<String> onSubmit,
+    required Future<void> Function(String) onSubmit,
   }) async {
     final controller = TextEditingController(text: initial);
     await showModalBottomSheet<void>(
@@ -129,10 +179,10 @@ class ManageAccountPage extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetCtx) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
+            bottom: MediaQuery.viewInsetsOf(sheetCtx).bottom,
           ),
           child: Container(
             padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
@@ -156,7 +206,7 @@ class ManageAccountPage extends ConsumerWidget {
                       ),
                     ),
                     onSubmitted: (v) {
-                      Navigator.pop(context);
+                      Navigator.pop(sheetCtx);
                       onSubmit(v);
                     },
                   ),
@@ -164,7 +214,7 @@ class ManageAccountPage extends ConsumerWidget {
                 SizedBox(width: 12.w),
                 InkWell(
                   onTap: () {
-                    Navigator.pop(context);
+                    Navigator.pop(sheetCtx);
                     onSubmit(controller.text);
                   },
                   child: CircleAvatar(
@@ -187,11 +237,13 @@ class _Item extends StatelessWidget {
     required this.icon,
     required this.label,
     this.value,
+    this.trailing,
     this.onTap,
   });
   final IconData icon;
   final String label;
   final String? value;
+  final Widget? trailing;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
@@ -204,7 +256,8 @@ class _Item extends StatelessWidget {
         children: [
           if (value != null && value!.isNotEmpty)
             Text(value!, style: const TextStyle(color: Colors.black54)),
-          const Icon(Icons.chevron_right),
+          SizedBox(width: 4.w),
+          trailing ?? const Icon(Icons.chevron_right),
         ],
       ),
       onTap: onTap,

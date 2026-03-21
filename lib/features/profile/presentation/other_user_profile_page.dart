@@ -58,11 +58,11 @@ class OtherUserProfilePage extends ConsumerWidget {
                           NetworkImage(p!.avatarUrl!),
                         )
                       : null,
-                  backgroundColor: const Color(0xFFF2F2F2),
+                  backgroundColor: Colors.grey.shade200,
                   child: p?.avatarUrl == null
-                      ? const Icon(
+                      ? Icon(
                           Icons.person,
-                          color: Colors.black26,
+                          color: Colors.grey.shade600,
                           size: 36,
                         )
                       : null,
@@ -85,7 +85,7 @@ class OtherUserProfilePage extends ConsumerWidget {
                   ),
                 SizedBox(height: 20.h),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     Consumer(
                       builder: (context, ref, _) {
