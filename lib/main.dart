@@ -94,7 +94,9 @@ class _BootstrapAppState extends State<_BootstrapApp> {
           );
         }
         return const MaterialApp(
-          home: Scaffold(body: Center(child: CircularProgressIndicator())),
+          home: Scaffold(
+            body: Center(child: CircularProgressIndicator(color: Colors.black)),
+          ),
         );
       },
     );

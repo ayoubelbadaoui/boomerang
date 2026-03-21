@@ -26,7 +26,7 @@ class OtherUserProfilePage extends ConsumerWidget {
         centerTitle: true,
         title: asyncProfile.maybeWhen(
           data: (p) => Text(
-            (p?.fullName.isNotEmpty == true ? p!.fullName : p?.nickname ?? ''),
+            (p?.nickname.isNotEmpty == true ? p!.nickname : p?.fullName ?? ''),
             style: TextStyle(
               color: Colors.black,
               fontSize: 18.sp,

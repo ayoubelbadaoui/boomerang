@@ -38,7 +38,10 @@ final router = GoRouter(
       builder: (c, s) => const SetupFlowPage(),
     ),
     GoRoute(path: HomeShell.routeName, builder: (c, s) => const HomeShell()),
-    GoRoute(path: SettingsPage.routeName, builder: (c, s) => const SettingsPage()),
+    GoRoute(
+      path: SettingsPage.routeName,
+      builder: (c, s) => const SettingsPage(),
+    ),
   ],
   redirect: (context, state) {
     final container = ProviderScope.containerOf(context, listen: false);
