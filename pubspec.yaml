@@ -65,17 +65,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^5.0.0
   build_runner: ^2.5.4
   freezed: ^3.1.0
   json_serializable: ^6.9.5
   riverpod_generator: ^2.6.5
   flutter_native_splash: ^2.4.1
+  flutter_launcher_icons: ^0.13.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -92,6 +88,9 @@ flutter:
     - assets/heart.svg
     - assets/onboarding/
     - assets/logo.png
+    - assets/branding/logo.png
+    - assets/branding/logo_dark.png
+    - assets/branding/logo_light.png
     - assets/bottom_navigation/
     - assets/bottom_navigation/active_light/
     - assets/bottom_navigation/inactive_light/
@@ -122,10 +121,22 @@ flutter:
 
 flutter_native_splash:
   color: "#FFFFFF"
-  image: assets/logo.png
+  image: assets/branding/logo_light.png
+  color_dark: "#000000"
+  image_dark: assets/branding/logo_dark.png
   android: true
   ios: true
   web: false
   android_12:
-    image: assets/logo.png
-    icon_background_color: "#FFFFFF"
+    image: assets/branding/logo_light.png
+    color: "#FFFFFF"
+    image_dark: assets/branding/logo_dark.png
+    color_dark: "#000000"
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/branding/icon_ios.png
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/branding/icon_foreground.png
+  remove_alpha_ios: true
