@@ -21,7 +21,10 @@ class SettingsRepo {
   }
 
   Stream<AppSettings> watch() {
-    return _doc().snapshots().map((e) => AppSettings.fromMap(e.data()));
+    return _doc()
+        .snapshots()
+        .map((e) => AppSettings.fromMap(e.data()))
+        .handleError((e, st) {});
   }
 
   Future<void> update(Map<String, dynamic> data) async {

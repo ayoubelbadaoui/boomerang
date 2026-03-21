@@ -9,6 +9,7 @@ import '../../profile/presentation/profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
+import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 import 'package:go_router/go_router.dart';
 
 final homeTabIndexProvider = StateProvider<int>((ref) => 0);
@@ -50,7 +51,14 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authStateProvider).value;
+    final authState = ref.watch(authStateProvider);
+    final user = authState.value;
+    if (authState.hasValue && user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go(OnboardingPage.routeName);
+      });
+      return const Scaffold();
+    }
     if (user == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),

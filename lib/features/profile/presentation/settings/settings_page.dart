@@ -17,6 +17,7 @@ import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
+  static const String routeName = '/settings';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -152,9 +153,32 @@ class _Section extends StatelessWidget {
   }
 }
 
-Future<void> _confirmLogout(BuildContext navigatorContext, WidgetRef ref) async {
+Future<void> _performLogout(WidgetRef ref, ProviderContainer container) async {
+  try {
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      await removeCurrentDeviceTokenForUser(
+        ref.read(firestoreProvider),
+        uid,
+      );
+    }
+  } catch (_) {}
+  try {
+    invalidateUserScopedProviders(container);
+    container.invalidate(profileControllerProvider);
+    container.invalidate(userBoomerangsControllerProvider);
+  } catch (_) {}
+  try {
+    await ref.read(authControllerProvider.notifier).logout();
+  } catch (_) {}
+}
+
+void _confirmLogout(BuildContext navigatorContext, WidgetRef ref) {
   final theme = Theme.of(navigatorContext);
-  await showModalBottomSheet<void>(
+  final goRouter = GoRouter.of(navigatorContext);
+  final container = ProviderScope.containerOf(navigatorContext, listen: false);
+
+  showModalBottomSheet<void>(
     context: navigatorContext,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -194,33 +218,12 @@ Future<void> _confirmLogout(BuildContext navigatorContext, WidgetRef ref) async 
                         backgroundColor: Colors.red.shade600,
                         foregroundColor: Colors.white,
                       ),
-                      onPressed: () async {
-                        final uid = ref
-                            .read(firebaseAuthProvider)
-                            .currentUser
-                            ?.uid;
-                        if (uid != null && uid.isNotEmpty) {
-                          await removeCurrentDeviceTokenForUser(
-                            ref.read(firestoreProvider),
-                            uid,
-                          );
-                        }
-                        await ref
-                            .read(authControllerProvider.notifier)
-                            .logout();
-                        if (!sheetContext.mounted) return;
-                        Navigator.of(sheetContext).pop();
-                        final container = ProviderScope.containerOf(
-                          navigatorContext,
-                          listen: false,
-                        );
-                        invalidateUserScopedProviders(container);
-                        container.invalidate(profileControllerProvider);
-                        container.invalidate(userBoomerangsControllerProvider);
-                        if (!navigatorContext.mounted) return;
-                        Navigator.of(navigatorContext).popUntil((route) => route.isFirst);
-                        if (!navigatorContext.mounted) return;
-                        navigatorContext.go(OnboardingPage.routeName);
+                      onPressed: () {
+                        _performLogout(ref, container).then((_) {
+                          goRouter.go(OnboardingPage.routeName);
+                        }).catchError((_) {
+                          goRouter.go(OnboardingPage.routeName);
+                        });
                       },
                       child: const Text('Logout'),
                     ),

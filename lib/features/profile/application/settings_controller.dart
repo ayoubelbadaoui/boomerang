@@ -19,12 +19,16 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   @override
   Future<AppSettings> build() async {
     final repo = ref.read(settingsRepoProvider);
-    // Keep state in sync with the Firestore stream
-    final sub = repo.watch().listen((value) {
-      state = AsyncData(value);
-    });
+    final sub = repo.watch().listen(
+      (value) => state = AsyncData(value),
+      onError: (_) {},
+    );
     ref.onDispose(() => sub.cancel());
-    return await repo.fetch();
+    try {
+      return await repo.fetch();
+    } catch (_) {
+      return const AppSettings(languageCode: 'en_US');
+    }
   }
 
   Future<void> setLanguage(String code) async {

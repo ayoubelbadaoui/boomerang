@@ -8,6 +8,7 @@ import 'features/auth/presentation/onboarding_page.dart';
 import 'features/auth/presentation/auth_choice_page.dart';
 import 'features/auth/presentation/setup_profile_page.dart';
 import 'features/auth/presentation/setup_flow_page.dart';
+import 'features/profile/presentation/settings/settings_page.dart';
 import 'infrastructure/providers.dart';
 
 final router = GoRouter(
@@ -37,6 +38,7 @@ final router = GoRouter(
       builder: (c, s) => const SetupFlowPage(),
     ),
     GoRoute(path: HomeShell.routeName, builder: (c, s) => const HomeShell()),
+    GoRoute(path: SettingsPage.routeName, builder: (c, s) => const SettingsPage()),
   ],
   redirect: (context, state) {
     final container = ProviderScope.containerOf(context, listen: false);

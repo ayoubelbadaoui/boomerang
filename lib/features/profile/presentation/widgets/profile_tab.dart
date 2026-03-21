@@ -11,6 +11,7 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'dart:developer' show log;
@@ -65,9 +66,7 @@ class ProfileTab extends ConsumerWidget {
         actions: [
           IconButton(
             onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+              context.push(SettingsPage.routeName);
             },
             icon: const Icon(Icons.settings_outlined, color: Colors.black),
           ),

@@ -135,19 +135,23 @@ final likedPostIdsProvider = StreamProvider<Set<String>>((ref) {
 
 final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
   final auth = ref.watch(firebaseAuthProvider);
-  // bridge auth changes
   await for (final u in auth.authStateChanges()) {
     if (u == null) {
       yield null;
       continue;
     }
     final fs = ref.read(firestoreProvider);
-    await for (final snap in fs.collection('users').doc(u.uid).snapshots()) {
-      if (!snap.exists || snap.data() == null) {
-        yield null;
-      } else {
-        yield UserProfile.fromMap(snap.id, snap.data()!);
+    try {
+      await for (final snap in fs.collection('users').doc(u.uid).snapshots()) {
+        if (!snap.exists || snap.data() == null) {
+          yield null;
+        } else {
+          yield UserProfile.fromMap(snap.id, snap.data()!);
+        }
       }
+    } catch (e) {
+      // Firestore listener may throw permission-denied after sign-out
+      yield null;
     }
   }
 });
@@ -180,7 +184,9 @@ final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
 final notificationsStreamProvider =
     StreamProvider.family<QuerySnapshot<Map<String, dynamic>>, String>((ref, uid) {
   if (uid.isEmpty) return const Stream.empty();
-  return ref.watch(notificationsRepoProvider).watch(uid);
+  return ref.watch(notificationsRepoProvider).watch(uid).handleError((e, st) {
+    debugPrint('notificationsStreamProvider error: $e');
+  });
 });
 
 final outgoingFollowRequestProvider =
@@ -189,7 +195,8 @@ final outgoingFollowRequestProvider =
   if (me == null) return const Stream.empty();
   return ref
       .watch(followRepoProvider)
-      .watchRequest(receiverId: targetId, senderId: me.uid);
+      .watchRequest(receiverId: targetId, senderId: me.uid)
+      .handleError((e, st) {});
 });
 
 final incomingFollowRequestProvider =
@@ -198,20 +205,26 @@ final incomingFollowRequestProvider =
   if (me == null) return const Stream.empty();
   return ref
       .watch(followRepoProvider)
-      .watchRequest(receiverId: me.uid, senderId: senderId);
+      .watchRequest(receiverId: me.uid, senderId: senderId)
+      .handleError((e, st) {});
 });
 
 final isFollowingStreamProvider =
     StreamProvider.family<bool, String>((ref, targetId) {
   final me = ref.watch(currentUserProfileProvider).value;
   if (me == null || me.uid == targetId) return const Stream.empty();
-  return ref.watch(followRepoProvider).watchIsFollowing(targetId);
+  return ref.watch(followRepoProvider).watchIsFollowing(targetId)
+      .handleError((e, st) {});
 });
 
 /// Unread notifications count for current user.
 final unreadCountProvider =
     StreamProvider.family<int, String>((ref, uid) async* {
-  yield* ref.watch(notificationsRepoProvider).watchUnreadCount(uid);
+  try {
+    yield* ref.watch(notificationsRepoProvider).watchUnreadCount(uid);
+  } catch (_) {
+    yield 0;
+  }
 });
 
 final savedRepoProvider = Provider<SavedRepo>((ref) {
@@ -243,7 +256,8 @@ final followersCountProvider = StreamProvider.family<int, String>((ref, uid) {
       .doc(uid)
       .collection('users')
       .snapshots()
-      .map((snap) => snap.size);
+      .map((snap) => snap.size)
+      .handleError((e, st) {});
 });
 
 final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
@@ -253,7 +267,8 @@ final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
       .doc(uid)
       .collection('users')
       .snapshots()
-      .map((snap) => snap.size);
+      .map((snap) => snap.size)
+      .handleError((e, st) {});
 });
 
 /// Number of boomerangs created by a user
@@ -266,7 +281,8 @@ final userBoomerangsCountProvider = StreamProvider.family<int, String>((
       .collection('boomerangs')
       .where('userId', isEqualTo: uid)
       .snapshots()
-      .map((snap) => snap.size);
+      .map((snap) => snap.size)
+      .handleError((e, st) {});
 });
 
 /// Total likes across a user's boomerangs
@@ -284,7 +300,8 @@ final userTotalLikesProvider = StreamProvider.family<int, String>((ref, uid) {
           if (likes is int) total += likes;
         }
         return total;
-      });
+      })
+      .handleError((e, st) {});
 });
 
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
