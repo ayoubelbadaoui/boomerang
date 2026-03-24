@@ -57,7 +57,22 @@ class _AccountSwitcherBodyState extends ConsumerState<_AccountSwitcherBody> {
         '[multi-account] switcher._ensure: alreadyStored=$alreadyStored '
         'accounts=${accounts.length}',
       );
-      if (alreadyStored) return;
+
+      if (alreadyStored) {
+        // Refresh display name / avatar from live Firestore profile
+        final profile = ref.read(currentUserProfileProvider).value;
+        if (profile != null) {
+          await manager.updateAccountProfile(
+            user.uid,
+            displayName: profile.fullName.isNotEmpty
+                ? profile.fullName
+                : profile.nickname,
+            photoUrl: profile.avatarUrl,
+          );
+          if (mounted) ref.invalidate(storedAccountsProvider);
+        }
+        return;
+      }
 
       final profile = ref.read(currentUserProfileProvider).value;
       dev.log('[multi-account] switcher._ensure: ADDING current user ${user.uid}');
@@ -197,10 +212,23 @@ class _AccountSwitcherBodyState extends ConsumerState<_AccountSwitcherBody> {
       return;
     }
 
+    // Snapshot the current account's live profile into storage before
+    // switching away, so the switcher shows the correct name/avatar later.
+    final currentUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    final currentProfile = ref.read(currentUserProfileProvider).value;
+    if (currentUid != null && currentProfile != null) {
+      await manager.updateAccountProfile(
+        currentUid,
+        displayName: currentProfile.fullName.isNotEmpty
+            ? currentProfile.fullName
+            : currentProfile.nickname,
+        photoUrl: currentProfile.avatarUrl,
+      );
+    }
+
     // Suppress auth guards during the transient signOut → signIn window
     ref.read(isSwitchingAccountProvider.notifier).state = true;
 
-    final currentUid = ref.read(firebaseAuthProvider).currentUser?.uid;
     if (currentUid != null && currentUid.isNotEmpty) {
       try {
         await removeCurrentDeviceTokenForUser(
