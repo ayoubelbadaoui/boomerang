@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
 import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
+import 'package:boomerang/features/chat/presentation/pages/conversations_page.dart';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:go_router/go_router.dart';
 
 final homeTabIndexProvider = StateProvider<int>((ref) => 0);
@@ -40,7 +42,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     const HomeTab(),
     const DiscoverTab(),
     const CreateTab(),
-    const _MessagingComingSoon(),
+    const ConversationsPage(),
     const ProfileTab(),
   ];
 
@@ -51,9 +53,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final isSwitching = ref.watch(isSwitchingAccountProvider);
     final authState = ref.watch(authStateProvider);
     final user = authState.value;
-    if (authState.hasValue && user == null) {
+    if (authState.hasValue && user == null && !isSwitching) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go(OnboardingPage.routeName);
       });
@@ -136,13 +139,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                     active: _currentIndex == 2,
                     onTap: () => _setTab(2),
                   ),
-                  _NavItem(
-                    label: 'Inbox',
+                  _ChatNavItem(
                     active: _currentIndex == 3,
-                    activeIcon:
-                        'assets/bottom_navigation/active_light/chat.svg',
-                    inactiveIcon:
-                        'assets/bottom_navigation/inactive_light/chat.svg',
                     onTap: () => _setTab(3),
                   ),
                   _NavItem(
@@ -219,16 +217,61 @@ class _CreateButton extends StatelessWidget {
   }
 }
 
-class _MessagingComingSoon extends StatelessWidget {
-  const _MessagingComingSoon();
+class _ChatNavItem extends ConsumerWidget {
+  const _ChatNavItem({required this.active, required this.onTap});
+  final bool active;
+  final VoidCallback onTap;
+
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text(
-          'Messaging coming soon',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          textAlign: TextAlign.center,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(totalUnreadProvider);
+    final double iconSize = 28.h;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: iconSize + 12.w,
+        height: iconSize + 8.h,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Center(
+              child: SizedBox(
+                width: iconSize,
+                height: iconSize,
+                child: SvgPicture.asset(
+                  active
+                      ? 'assets/bottom_navigation/active_light/chat.svg'
+                      : 'assets/bottom_navigation/inactive_light/chat.svg',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            if (unread > 0)
+              Positioned(
+                right: 0,
+                top: -2.h,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  constraints: BoxConstraints(minWidth: 16.w, minHeight: 16.w),
+                  child: Center(
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

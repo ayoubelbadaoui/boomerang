@@ -7,6 +7,18 @@ class FirebaseAuthRepo implements AuthRepo {
   final FirebaseAuth _auth;
 
   @override
+  AuthUser? get currentUser {
+    final u = _auth.currentUser;
+    if (u == null) return null;
+    return AuthUser(
+      uid: u.uid,
+      email: u.email,
+      name: u.displayName,
+      birthday: u.metadata.creationTime ?? DateTime.now(),
+    );
+  }
+
+  @override
   Stream<AuthUser?> watch() => _auth.authStateChanges().map(
     (u) =>
         u == null

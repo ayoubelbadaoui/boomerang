@@ -1,5 +1,6 @@
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
+import 'package:boomerang/features/profile/presentation/widgets/account_switcher_sheet.dart';
 import 'package:boomerang/features/profile/presentation/widgets/edit_profile_page.dart';
 import 'package:boomerang/features/profile/presentation/widgets/mode_icon.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid.dart';
@@ -8,6 +9,7 @@ import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet
 import 'package:boomerang/features/profile/presentation/settings/settings_page.dart';
 import 'package:boomerang/features/profile/presentation/widgets/saved_boomerangs_grid.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -33,35 +35,41 @@ class ProfileTab extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          onPressed: () {},
-          icon: const Icon(
+          onPressed: () => showAccountSwitcher(context, ref),
+          icon: Icon(
             Icons.person_add_alt_1_outlined,
-            color: Colors.black,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         centerTitle: true,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            profile.when(
-              data:
-                  (p) => Text(
-                    (p?.fullName.isNotEmpty == true
-                        ? p!.fullName
-                        : p?.nickname ?? ''),
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18.sp,
-                      fontWeight: FontWeight.w700,
+        title: GestureDetector(
+          onTap: () => showAccountSwitcher(context, ref),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              profile.when(
+                data:
+                    (p) => Text(
+                      (p?.fullName.isNotEmpty == true
+                          ? p!.fullName
+                          : p?.nickname ?? ''),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const Text('Profile'),
-            ),
-            const SizedBox(width: 6),
-            const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black),
-          ],
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const Text('Profile'),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ],
+          ),
         ),
         actions: [
           IconButton(
@@ -104,24 +112,7 @@ class ProfileTab extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(48.r),
                     child: Stack(
                       children: [
-                        CircleAvatar(
-                          radius: 48.r,
-                          backgroundImage:
-                              p?.avatarUrl != null
-                                  ? NetworkImage(p!.avatarUrl!)
-                                  : null,
-                          onBackgroundImageError:
-                              p?.avatarUrl != null ? (_, __) {} : null,
-                          backgroundColor: Colors.grey.shade200,
-                          child:
-                              p?.avatarUrl == null
-                                  ? Icon(
-                                    Icons.person,
-                                    color: Colors.grey.shade600,
-                                    size: 36,
-                                  )
-                                  : null,
-                        ),
+                        AppAvatar(url: p?.avatarUrl, size: 96.r),
                         Positioned(
                           right: 0,
                           bottom: 0,

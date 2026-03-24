@@ -39,7 +39,6 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     String? nickname,
     String? avatarUrl,
     String? phone,
-    String? address,
     String? bio,
     String? instagram,
     String? facebook,
@@ -51,11 +50,20 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
       nickname: nickname,
       avatarUrl: avatarUrl,
       phone: phone,
-      address: address,
       bio: bio,
       instagram: instagram,
       facebook: facebook,
       twitter: twitter,
     );
+
+    // Keep multi-account session data in sync for the switcher UI
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid != null && (fullName != null || avatarUrl != null)) {
+      await ref.read(multiAccountManagerProvider).updateAccountProfile(
+            uid,
+            displayName: fullName,
+            photoUrl: avatarUrl,
+          );
+    }
   }
 }

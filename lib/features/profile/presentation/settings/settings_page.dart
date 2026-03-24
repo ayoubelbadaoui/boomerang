@@ -8,6 +8,7 @@ import 'package:boomerang/features/profile/presentation/settings/language_page.d
 import 'package:boomerang/features/profile/presentation/settings/qr_code_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/help_center_page.dart';
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
+import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -167,6 +168,7 @@ Future<void> _performLogout(WidgetRef ref, ProviderContainer container) async {
     invalidateUserScopedProviders(container);
     container.invalidate(profileControllerProvider);
     container.invalidate(userBoomerangsControllerProvider);
+    container.invalidate(storedAccountsProvider);
   } catch (_) {}
   try {
     await ref.read(authControllerProvider.notifier).logout();
@@ -198,9 +200,11 @@ void _confirmLogout(BuildContext navigatorContext, WidgetRef ref) {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Are you sure you want to log out?',
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
               const SizedBox(height: 24),
               Row(
@@ -218,12 +222,38 @@ void _confirmLogout(BuildContext navigatorContext, WidgetRef ref) {
                         backgroundColor: Colors.red.shade600,
                         foregroundColor: Colors.white,
                       ),
-                      onPressed: () {
-                        _performLogout(ref, container).then((_) {
-                          goRouter.go(OnboardingPage.routeName);
-                        }).catchError((_) {
-                          goRouter.go(OnboardingPage.routeName);
-                        });
+                      onPressed: () async {
+                        Navigator.of(sheetContext).pop();
+                        final manager = ref.read(multiAccountManagerProvider);
+                        final uid =
+                            ref.read(firebaseAuthProvider).currentUser?.uid;
+
+                        if (uid != null) {
+                          final next =
+                              await manager.nextAccountAfterRemoval(uid);
+                          await manager.removeAccount(uid);
+
+                          if (next != null) {
+                            // Switch to remaining account
+                            await _performLogout(ref, container);
+                            final ok =
+                                await manager.switchAccount(next.uid);
+                            container.invalidate(storedAccountsProvider);
+                            if (ok) {
+                              invalidateUserScopedProviders(container);
+                              container.invalidate(profileControllerProvider);
+                              container.invalidate(
+                                userBoomerangsControllerProvider,
+                              );
+                              goRouter.go(HomeShell.routeName);
+                              return;
+                            }
+                          }
+                        }
+
+                        // No other accounts — full logout
+                        await _performLogout(ref, container);
+                        goRouter.go(OnboardingPage.routeName);
                       },
                       child: const Text('Logout'),
                     ),

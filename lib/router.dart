@@ -9,6 +9,8 @@ import 'features/auth/presentation/auth_choice_page.dart';
 import 'features/auth/presentation/setup_profile_page.dart';
 import 'features/auth/presentation/setup_flow_page.dart';
 import 'features/profile/presentation/settings/settings_page.dart';
+import 'features/chat/presentation/pages/conversations_page.dart';
+import 'features/chat/presentation/pages/chat_page.dart';
 import 'infrastructure/providers.dart';
 
 final router = GoRouter(
@@ -42,6 +44,16 @@ final router = GoRouter(
       path: SettingsPage.routeName,
       builder: (c, s) => const SettingsPage(),
     ),
+    GoRoute(
+      path: ConversationsPage.routeName,
+      builder: (c, s) => const ConversationsPage(),
+    ),
+    GoRoute(
+      path: '/chat/:conversationId',
+      builder: (c, s) => ChatPage(
+        conversationId: s.pathParameters['conversationId']!,
+      ),
+    ),
   ],
   redirect: (context, state) {
     final container = ProviderScope.containerOf(context, listen: false);
@@ -54,6 +66,11 @@ final router = GoRouter(
     final isSignup = state.fullPath == SignupPage.routeName;
     final isOnboarding = state.fullPath == OnboardingPage.routeName;
     final isSetupFlow = state.fullPath == SetupFlowPage.routeName;
+
+    // While an account switch is in progress, don't react to transient
+    // sign-out states — let the switch complete before applying guards.
+    final isSwitching = container.read(isSwitchingAccountProvider);
+    if (isSwitching) return null;
 
     if (auth.asData == null) return null; // wait until first frame resolves
     final user = auth.asData!.value;

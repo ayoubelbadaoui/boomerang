@@ -18,6 +18,9 @@ import 'package:boomerang/features/feed/infrastructure/notifications_repo.dart';
 import 'package:boomerang/features/profile/infrastructure/user_search_repo.dart';
 import 'package:boomerang/features/feed/infrastructure/hashtag_repo.dart';
 import 'package:boomerang/features/profile/infrastructure/saved_repo.dart';
+import 'package:boomerang/core/auth/session_storage.dart';
+import 'package:boomerang/core/auth/multi_account_manager.dart';
+import 'package:boomerang/core/auth/user_session.dart';
 // import 'package:path_provider/path_provider.dart';
 // import 'package:firebase_core/firebase_core.dart';
 
@@ -42,10 +45,31 @@ final authRepoProvider = Provider<AuthRepo>((ref) {
   return FirebaseAuthRepo(auth);
 });
 
+final sessionStorageProvider = Provider<SessionStorage>(
+  (_) => SessionStorage(),
+);
+
+final multiAccountManagerProvider = Provider<MultiAccountManager>((ref) {
+  return MultiAccountManager(
+    storage: ref.watch(sessionStorageProvider),
+    firebaseAuth: ref.watch(firebaseAuthProvider),
+  );
+});
+
+/// All stored account sessions (refreshable).
+final storedAccountsProvider = FutureProvider<List<UserSession>>((ref) {
+  return ref.watch(multiAccountManagerProvider).getAccounts();
+});
+
+/// Set to `true` while an account switch is in progress so auth guards
+/// (HomeShell, router redirect) don't react to the transient sign-out.
+final isSwitchingAccountProvider = StateProvider<bool>((ref) => false);
+
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   (ref) {
     final repo = ref.watch(authRepoProvider);
-    return AuthController(repo);
+    final manager = ref.watch(multiAccountManagerProvider);
+    return AuthController(repo, manager);
   },
 );
 
@@ -62,7 +86,7 @@ final userProfileExistsProvider = FutureProvider<bool>((ref) async {
 });
 
 /// Checks whether the user profile is fully completed with required fields
-/// birthday, phone, and address under `users/{uid}`.
+/// gender, birthday, and phone under `users/{uid}`.
 final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
   // Track auth state changes so this provider refreshes on sign-in/out
   final authState = ref.watch(authStateProvider);
@@ -75,8 +99,7 @@ final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
   if (data == null) return false;
   return (data['gender'] != null &&
       data['birthday'] != null &&
-      data['phone'] != null &&
-      data['address'] != null);
+      data['phone'] != null);
 });
 
 /// Does the current user have a valid nickname persisted?
@@ -214,6 +237,22 @@ final isFollowingStreamProvider =
   final me = ref.watch(currentUserProfileProvider).value;
   if (me == null || me.uid == targetId) return const Stream.empty();
   return ref.watch(followRepoProvider).watchIsFollowing(targetId)
+      .handleError((e, st) {});
+});
+
+/// Whether [userId] follows the current user.
+final isFollowedByProvider =
+    StreamProvider.family<bool, String>((ref, userId) {
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null || me.uid == userId) return Stream.value(false);
+  final fs = ref.watch(firestoreProvider);
+  return fs
+      .collection('followers')
+      .doc(me.uid)
+      .collection('users')
+      .doc(userId)
+      .snapshots()
+      .map((snap) => snap.exists)
       .handleError((e, st) {});
 });
 

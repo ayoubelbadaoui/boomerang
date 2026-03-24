@@ -150,6 +150,7 @@ class ManageAccountPage extends ConsumerWidget {
                   ref.read(firestoreProvider),
                   uid,
                 );
+                await ref.read(multiAccountManagerProvider).removeAccount(uid);
               }
               await ref.read(userProfileRepoProvider).deleteAccount();
               await ref.read(authControllerProvider.notifier).logout();
@@ -157,6 +158,7 @@ class ManageAccountPage extends ConsumerWidget {
               invalidateUserScopedProviders(container);
               container.invalidate(profileControllerProvider);
               container.invalidate(userBoomerangsControllerProvider);
+              container.invalidate(storedAccountsProvider);
               if (context.mounted) context.go(OnboardingPage.routeName);
             },
           ),

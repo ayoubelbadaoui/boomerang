@@ -1,10 +1,10 @@
+import 'package:boomerang/core/auth/user_session.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/core/widgets/ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
-// intl not needed after removing birthday from signup
 
 class SignupPage extends ConsumerStatefulWidget {
   const SignupPage({super.key});
@@ -92,9 +92,36 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   loading: state.loading,
                   onPressed: () async {
                     if (!_formKey.currentState!.validate()) return;
+
+                    final prevUser = ref.read(firebaseAuthProvider).currentUser;
+                    final prevProfile =
+                        ref.read(currentUserProfileProvider).value;
+                    UserSession? prevSession;
+                    if (prevUser != null) {
+                      prevSession = UserSession(
+                        uid: prevUser.uid,
+                        email: prevProfile?.email ??
+                            prevUser.email ??
+                            '',
+                        displayName: prevProfile?.fullName.isNotEmpty == true
+                            ? prevProfile!.fullName
+                            : prevProfile?.nickname ??
+                                prevUser.displayName ??
+                                '',
+                        photoUrl:
+                            prevProfile?.avatarUrl ?? prevUser.photoURL,
+                        lastLogin: DateTime.now(),
+                      );
+                    }
+
                     await ref
                         .read(authControllerProvider.notifier)
-                        .signup(_email.text, _password.text, _name.text);
+                        .signup(
+                          _email.text,
+                          _password.text,
+                          _name.text,
+                          previousAccount: prevSession,
+                        );
                     if (!mounted) return;
                     final result = ref.read(authControllerProvider);
                     if (result.error == null) {
