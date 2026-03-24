@@ -1,7 +1,9 @@
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/core/utils/image_precache.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
@@ -173,13 +175,7 @@ class _UsersSearchList extends ConsumerWidget {
             final avatar = d['avatarUrl'] as String?;
             final handle = '@${nick.replaceAll(' ', '_').toLowerCase()}';
             return ListTile(
-              leading: CircleAvatar(
-                backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                backgroundColor: Colors.grey.shade200,
-                child: avatar == null
-                    ? Icon(Icons.person, color: Colors.grey.shade600)
-                    : null,
-              ),
+              leading: AppAvatar(url: avatar),
               title: Text(nick.isNotEmpty ? nick : name),
               subtitle: Text(handle),
               onTap: () {
@@ -212,6 +208,7 @@ class _UsersSearchList extends ConsumerWidget {
 class _BmgGrid extends ConsumerWidget {
   const _BmgGrid({required this.query});
   final String query;
+  static int _lastWarmedHash = 0;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final trimmed = query.trim();
@@ -233,19 +230,20 @@ class _BmgGrid extends ConsumerWidget {
           return const Center(child: CircularProgressIndicator());
         }
         final docs = snapshot.data!.docs;
-        // Warm-cache first page posters to avoid black flashes when opening tiles.
-        try {
-          final toWarm =
-              docs
-                  .take(24)
-                  .map((d) => d.data()['imageUrl'])
-                  .whereType<String>();
-          // Kick off without blocking build.
-          for (final u in toWarm) {
+        // Warm-cache first page posters once per snapshot.
+        final snapHash = docs.length.hashCode ^ (docs.isNotEmpty ? docs.first.id.hashCode : 0);
+        if (snapHash != _lastWarmedHash) {
+          _lastWarmedHash = snapHash;
+          final toWarm = docs
+              .take(12)
+              .map((d) => d.data()['imageUrl'])
+              .whereType<String>()
+              .toList();
+          if (toWarm.isNotEmpty) {
             // ignore: discarded_futures
-            precacheImage(NetworkImage(u), context);
+            precacheImages(toWarm, context, concurrency: 4);
           }
-        } catch (_) {}
+        }
           return MasonryGridView.count(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
           crossAxisCount: 2,
@@ -323,15 +321,7 @@ class _BmgGrid extends ConsumerWidget {
                   SizedBox(height: 8.h),
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 12.r,
-                      backgroundImage:
-                          avatar != null ? NetworkImage(avatar) : null,
-                      backgroundColor: Colors.grey.shade200,
-                      child: avatar == null
-                          ? Icon(Icons.person, size: 14.r, color: Colors.grey.shade600)
-                          : null,
-                    ),
+                    AppAvatar(url: avatar, size: 24.r),
                     SizedBox(width: 8.w),
                     Expanded(
                       child: InkWell(

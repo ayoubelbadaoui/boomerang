@@ -1,10 +1,13 @@
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 
 /// Boots push notifications:
 /// - Requests permission (required on iOS)
@@ -99,6 +102,22 @@ class _PushNotificationsBootstrap {
       );
       await _showLocalNotification(message);
     });
+
+    // Background tap → navigate to conversation
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+    // App was terminated and opened via notification
+    _messaging.getInitialMessage().then((message) {
+      if (message != null) _handleNotificationTap(message);
+    });
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    final type = message.data['type'];
+    final conversationId = message.data['conversationId'];
+    if (type == 'chat_message' && conversationId != null) {
+      router.push('/chat/$conversationId');
+    }
   }
 
   Future<void> _initLocalNotifications() async {
@@ -108,7 +127,10 @@ class _PushNotificationsBootstrap {
       android: androidInit,
       iOS: iosInit,
     );
-    await _local.initialize(initSettings);
+    await _local.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: _onLocalNotificationTap,
+    );
 
     // Android channel setup
     const androidChannel = AndroidNotificationChannel(
@@ -212,30 +234,69 @@ class _PushNotificationsBootstrap {
     }
   }
 
+  void _onLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload != null && payload.startsWith('chat:')) {
+      final conversationId = payload.substring(5);
+      router.push('/chat/$conversationId');
+    }
+  }
+
+  Future<Uint8List?> _downloadImage(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(
+        const Duration(seconds: 5),
+      );
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        return response.bodyBytes;
+      }
+    } catch (e) {
+      developer.log('[notification push] Failed to download avatar: $e');
+    }
+    return null;
+  }
+
   Future<void> _showLocalNotification(RemoteMessage message) async {
     final title = message.notification?.title ?? 'Boomerang';
     final body = message.notification?.body ?? 'New notification';
-    const details = NotificationDetails(
+
+    final avatarUrl = message.data['avatarUrl'] as String?;
+    ByteArrayAndroidBitmap? largeIcon;
+    if (Platform.isAndroid &&
+        avatarUrl != null &&
+        avatarUrl.isNotEmpty) {
+      final bytes = await _downloadImage(avatarUrl);
+      if (bytes != null) largeIcon = ByteArrayAndroidBitmap(bytes);
+    }
+
+    final details = NotificationDetails(
       android: AndroidNotificationDetails(
         'boomerang_push',
         'Boomerang Notifications',
         importance: Importance.max,
         priority: Priority.high,
         icon: '@mipmap/ic_launcher',
+        largeIcon: largeIcon,
         playSound: true,
       ),
-      iOS: DarwinNotificationDetails(
+      iOS: const DarwinNotificationDetails(
         presentAlert: true,
         presentSound: true,
         presentBadge: true,
       ),
     );
+
+    String payload = message.data['resourceId'] ?? '';
+    if (message.data['type'] == 'chat_message') {
+      payload = 'chat:${message.data['conversationId'] ?? ''}';
+    }
+
     await _local.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
       body,
       details,
-      payload: message.data['resourceId'] ?? '',
+      payload: payload,
     );
   }
 }

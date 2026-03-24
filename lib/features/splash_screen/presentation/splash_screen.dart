@@ -1,4 +1,5 @@
 import 'package:boomerang/core/assets/shared_assets.dart';
+import 'package:boomerang/core/utils/image_precache.dart';
 import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -35,11 +36,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         if (u is String && u.isNotEmpty) urls.add(u);
       }
       if (!mounted || urls.isEmpty) return;
-      // Kick off precache; don't await all.
-      for (final u in urls) {
-        // ignore: discarded_futures
-        precacheImage(ResizeImage(NetworkImage(u), width: 400), context);
-      }
+      // ignore: discarded_futures
+      precacheImages(urls, context, concurrency: 4, cacheWidth: 400);
     } catch (_) {
       // Ignore warmup failures
     }

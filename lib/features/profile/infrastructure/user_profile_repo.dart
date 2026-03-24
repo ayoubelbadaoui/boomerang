@@ -17,7 +17,6 @@ class UserProfileRepo {
     required String nickname,
     required String email,
     required String phone,
-    required String address,
     String? avatarUrl,
   }) async {
     final uid = _auth.currentUser?.uid;
@@ -37,7 +36,6 @@ class UserProfileRepo {
       data['fullNameLower'] = fullNameLower;
       data['email'] = email;
       data['phone'] = phone;
-      data['address'] = address;
       if (avatarUrl != null) data['avatarUrl'] = avatarUrl;
       data['updatedAt'] = FieldValue.serverTimestamp();
       data['createdAt'] = data['createdAt'] ?? FieldValue.serverTimestamp();
@@ -150,7 +148,6 @@ class UserProfileRepo {
     String? avatarUrl,
     String? email,
     String? phone,
-    String? address,
     String? bio,
     String? instagram,
     String? facebook,
@@ -167,7 +164,6 @@ class UserProfileRepo {
       if (avatarUrl != null) 'avatarUrl': avatarUrl,
       if (email != null) 'email': email,
       if (phone != null) 'phone': phone,
-      if (address != null) 'address': address,
       if (bio != null) 'bio': bio,
       if (instagram != null) 'instagram': instagram,
       if (facebook != null) 'facebook': facebook,

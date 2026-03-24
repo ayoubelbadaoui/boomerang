@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,29 +53,14 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
             Center(
               child: Stack(
                 children: [
-                  CircleAvatar(
-                    radius: 68.r,
-                    backgroundImage:
-                        _selected != null
-                            ? FileImage(_selected!)
-                            : (p?.avatarUrl != null
-                                    ? NetworkImage(p!.avatarUrl!)
-                                    : null)
-                                as ImageProvider<Object>?,
-                    onBackgroundImageError:
-                        (_selected != null || p?.avatarUrl != null)
-                            ? (_, __) {}
-                            : null,
-                    backgroundColor: Colors.grey.shade200,
-                    child:
-                        (_selected == null && p?.avatarUrl == null)
-                            ? Icon(
-                              Icons.person,
-                              color: Colors.grey.shade600,
-                              size: 48,
-                            )
-                            : null,
-                  ),
+                  if (_selected != null)
+                    CircleAvatar(
+                      radius: 68.r,
+                      backgroundImage: FileImage(_selected!),
+                      backgroundColor: Colors.grey.shade200,
+                    )
+                  else
+                    AppAvatar(url: p?.avatarUrl, size: 136.r),
                   Positioned(
                     right: 8,
                     bottom: 8,

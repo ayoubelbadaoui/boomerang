@@ -28,7 +28,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   final TextEditingController _nickname = TextEditingController();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _phone = TextEditingController();
-  final TextEditingController _address = TextEditingController();
+  
   bool _saving = false;
   bool _lockNickname = false;
   File? _avatarFile;
@@ -105,7 +105,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           nickname: _nickname.text.trim(),
           email: _email.text.trim(),
           phone: '${_countryCode.dialCode} ${_phone.text.trim()}',
-          address: _address.text.trim(),
+          
           avatarUrl: avatarUrl,
         );
         if (!mounted) return;
@@ -155,10 +155,6 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     }
   }
 
-  void _skip() {
-    if (context.mounted) context.go(HomeShell.routeName);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -206,12 +202,10 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                   nickname: _nickname,
                   email: _email,
                   phone: _phone,
-                  address: _address,
                   onAvatarSelected: (f) => _avatarFile = f,
                   lockNickname: _lockNickname,
                   countryCode: _countryCode,
-                  onCountryCodeChanged: (c) =>
-                      setState(() => _countryCode = c),
+                  onCountryCodeChanged: (c) => setState(() => _countryCode = c),
                 ),
                 const _FingerprintStep(),
               ],
@@ -249,7 +243,6 @@ class _FillProfileStep extends StatelessWidget {
     required this.nickname,
     required this.email,
     required this.phone,
-    required this.address,
     required this.countryCode,
     required this.onCountryCodeChanged,
     this.onAvatarSelected,
@@ -260,7 +253,6 @@ class _FillProfileStep extends StatelessWidget {
   final TextEditingController nickname;
   final TextEditingController email;
   final TextEditingController phone;
-  final TextEditingController address;
   final ValueChanged<File?>? onAvatarSelected;
   final bool lockNickname;
   final _CountryCode countryCode;
@@ -311,15 +303,12 @@ class _FillProfileStep extends StatelessWidget {
               ),
               SizedBox(height: 12.h),
               lockNickname
-                  ? _ReadOnlyField(
-                      label: 'Nickname',
-                      value: nickname.text,
-                    )
+                  ? _ReadOnlyField(label: 'Nickname', value: nickname.text)
                   : _FormInput(
-                      label: 'Nickname',
-                      controller: nickname,
-                      validator: _required,
-                    ),
+                    label: 'Nickname',
+                    controller: nickname,
+                    validator: _required,
+                  ),
               SizedBox(height: 12.h),
               _FormInput(
                 label: 'Email',
@@ -333,18 +322,14 @@ class _FillProfileStep extends StatelessWidget {
                 controller: phone,
                 validator: _required,
                 countryCode: countryCode,
-                onCountryCodeTap: () => _showCountryCodePicker(
-                  context,
-                  countryCode,
-                  onCountryCodeChanged,
-                ),
+                onCountryCodeTap:
+                    () => _showCountryCodePicker(
+                      context,
+                      countryCode,
+                      onCountryCodeChanged,
+                    ),
               ),
-              SizedBox(height: 12.h),
-              _FormInput(
-                label: 'Address',
-                controller: address,
-                suffix: const Icon(Icons.location_on_outlined),
-              ),
+              
             ],
           ),
         ),
@@ -858,13 +843,14 @@ void _showCountryCodePicker(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => _CountryCodeSheet(
-      current: current,
-      onSelected: (c) {
-        onChanged(c);
-        Navigator.of(ctx).pop();
-      },
-    ),
+    builder:
+        (ctx) => _CountryCodeSheet(
+          current: current,
+          onSelected: (c) {
+            onChanged(c);
+            Navigator.of(ctx).pop();
+          },
+        ),
   );
 }
 
@@ -880,13 +866,13 @@ class _CountryCodeSheet extends StatefulWidget {
 class _CountryCodeSheetState extends State<_CountryCodeSheet> {
   String _query = '';
 
-  List<_CountryCode> get _filtered => _query.isEmpty
-      ? _countryCodes
-      : _countryCodes.where((c) {
-          final q = _query.toLowerCase();
-          return c.name.toLowerCase().contains(q) ||
-              c.dialCode.contains(q);
-        }).toList();
+  List<_CountryCode> get _filtered =>
+      _query.isEmpty
+          ? _countryCodes
+          : _countryCodes.where((c) {
+            final q = _query.toLowerCase();
+            return c.name.toLowerCase().contains(q) || c.dialCode.contains(q);
+          }).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -895,60 +881,65 @@ class _CountryCodeSheetState extends State<_CountryCodeSheet> {
       maxChildSize: 0.9,
       minChildSize: 0.4,
       expand: false,
-      builder: (context, scrollController) => Column(
-        children: [
-          SizedBox(height: 12.h),
-          Container(
-            width: 40.w,
-            height: 4.h,
-            decoration: BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.circular(2.r),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
-            child: TextField(
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'Search country...',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: const Color(0xFFF6F6F6),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                  borderSide: BorderSide.none,
+      builder:
+          (context, scrollController) => Column(
+            children: [
+              SizedBox(height: 12.h),
+              Container(
+                width: 40.w,
+                height: 4.h,
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(2.r),
                 ),
               ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: scrollController,
-              itemCount: _filtered.length,
-              itemBuilder: (context, i) {
-                final c = _filtered[i];
-                final selected = c.dialCode == widget.current.dialCode &&
-                    c.name == widget.current.name;
-                return ListTile(
-                  leading: Text(c.flag, style: TextStyle(fontSize: 24.sp)),
-                  title: Text(c.name),
-                  trailing: Text(
-                    c.dialCode,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: selected ? Theme.of(context).primaryColor : Colors.black54,
+              Padding(
+                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
+                child: TextField(
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Search country...',
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: const Color(0xFFF6F6F6),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                      borderSide: BorderSide.none,
                     ),
                   ),
-                  selected: selected,
-                  onTap: () => widget.onSelected(c),
-                );
-              },
-            ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: _filtered.length,
+                  itemBuilder: (context, i) {
+                    final c = _filtered[i];
+                    final selected =
+                        c.dialCode == widget.current.dialCode &&
+                        c.name == widget.current.name;
+                    return ListTile(
+                      leading: Text(c.flag, style: TextStyle(fontSize: 24.sp)),
+                      title: Text(c.name),
+                      trailing: Text(
+                        c.dialCode,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color:
+                              selected
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.black54,
+                        ),
+                      ),
+                      selected: selected,
+                      onTap: () => widget.onSelected(c),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

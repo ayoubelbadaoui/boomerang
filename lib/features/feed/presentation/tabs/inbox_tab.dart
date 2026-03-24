@@ -107,9 +107,9 @@ class InboxTab extends ConsumerWidget {
                               }
                               return _Item(
                                 id: doc.id,
-                                avatar:
-                                    avatar ??
-                                    'https://picsum.photos/seed/a${title.hashCode}/100/100',
+                                avatar: (avatar != null && avatar.isNotEmpty)
+                                    ? avatar
+                                    : '',
                                 title: title,
                                 subtitle: subtitle,
                                 trailingThumb: thumb,

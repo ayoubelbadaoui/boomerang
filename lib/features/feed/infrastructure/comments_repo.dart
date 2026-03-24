@@ -21,9 +21,7 @@ class CommentsRepo {
     required String text,
   }) async {
     String avatar(String? url, String seed) =>
-        (url != null && url.isNotEmpty)
-            ? url
-            : 'https://picsum.photos/seed/$seed/200/200';
+        (url != null && url.isNotEmpty) ? url : '';
     await _fs
         .collection('boomerangs')
         .doc(boomerangId)
@@ -74,9 +72,7 @@ class CommentsRepo {
     required String text,
   }) async {
     String avatar(String? url, String seed) =>
-        (url != null && url.isNotEmpty)
-            ? url
-            : 'https://picsum.photos/seed/$seed/200/200';
+        (url != null && url.isNotEmpty) ? url : '';
     final replyRef = await _fs
         .collection('boomerangs')
         .doc(boomerangId)

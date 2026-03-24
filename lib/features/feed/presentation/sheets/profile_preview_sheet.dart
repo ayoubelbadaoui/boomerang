@@ -1,7 +1,10 @@
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
@@ -56,12 +59,16 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
     final outgoing =
         ref.watch(outgoingFollowRequestProvider(widget.userId)).value;
     final requested = _optimisticRequested || (outgoing?.isPending == true);
+    final theyFollowMe =
+        ref.watch(isFollowedByProvider(widget.userId)).value ?? false;
     final followLabel =
         isFollowing
             ? 'Following'
             : requested
                 ? 'Pending'
-                : 'Follow';
+                : theyFollowMe
+                    ? 'Follow back'
+                    : 'Follow';
     final followIcon =
         isFollowing
             ? Icons.check
@@ -92,19 +99,7 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 );
               },
               customBorder: const CircleBorder(),
-              child: CircleAvatar(
-                radius: 44.r,
-                backgroundImage:
-                    widget.avatarUrl != null
-                        ? NetworkImage(widget.avatarUrl!)
-                        : null,
-                onBackgroundImageError:
-                    widget.avatarUrl != null ? (_, __) {} : null,
-                backgroundColor: Colors.grey.shade200,
-                child: widget.avatarUrl == null
-                    ? Icon(Icons.person, size: 44.r, color: Colors.grey.shade600)
-                    : null,
-              ),
+              child: AppAvatar(url: widget.avatarUrl, size: 88.r),
             ),
             SizedBox(height: 12.h),
             InkWell(
@@ -272,7 +267,17 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 if (!isSelf) SizedBox(width: 12.w),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {},
+                    onPressed: () async {
+                      final me = ref.read(currentUserProfileProvider).value;
+                      if (me == null) return;
+                      final repo = ref.read(chatRepoProvider);
+                      final convId = await repo.getOrCreateConversation(
+                        [me.uid, widget.userId],
+                      );
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                      context.push('/chat/$convId');
+                    },
                     icon: const Icon(Icons.chat_bubble_outline),
                     label: const Text('Message'),
                     style: OutlinedButton.styleFrom(

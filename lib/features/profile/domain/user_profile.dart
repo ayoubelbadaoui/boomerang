@@ -7,7 +7,6 @@ class UserProfile {
     this.bio = '',
     this.email = '',
     this.phone = '',
-    this.address = '',
     this.birthday,
     this.instagram = '',
     this.facebook = '',
@@ -21,7 +20,6 @@ class UserProfile {
   final String bio;
   final String email;
   final String phone;
-  final String address;
   final DateTime? birthday;
   final String instagram;
   final String facebook;
@@ -46,7 +44,6 @@ class UserProfile {
       bio: (data['bio'] ?? '') as String,
       email: (data['email'] ?? '') as String,
       phone: (data['phone'] ?? '') as String,
-      address: (data['address'] ?? '') as String,
       birthday: _parseBirthday(data['birthday']),
       instagram: (data['instagram'] ?? '') as String,
       facebook: (data['facebook'] ?? '') as String,

@@ -1,3 +1,4 @@
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:flutter/material.dart';
@@ -75,34 +76,12 @@ class FollowListSheet extends ConsumerWidget {
                       final handle =
                           '@${name.replaceAll(' ', '_').toLowerCase()}';
                       final userId = (d['userId'] ?? '') as String;
-                      return ListTile(
-                        onTap:
-                            () => _showProfilePreview(
-                              context,
-                              handle,
-                              avatar,
-                              userId,
-                            ),
-                        leading: CircleAvatar(
-                          radius: 22.r,
-                          backgroundImage:
-                              avatar != null ? NetworkImage(avatar) : null,
-                          onBackgroundImageError:
-                              avatar != null ? (_, __) {} : null,
-                          backgroundColor: Colors.grey.shade200,
-                          child: avatar == null
-                              ? Icon(Icons.person, size: 22.r, color: Colors.grey.shade600)
-                              : null,
-                        ),
-                        title: Text(
-                          name,
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          handle,
-                          style: const TextStyle(color: Colors.black54),
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
+                      return _FollowListTile(
+                        name: name,
+                        handle: handle,
+                        avatar: avatar,
+                        userId: userId,
+                        showFollowBack: mode == FollowMode.followers,
                       );
                     },
                   );
@@ -112,6 +91,93 @@ class FollowListSheet extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FollowListTile extends ConsumerStatefulWidget {
+  const _FollowListTile({
+    required this.name,
+    required this.handle,
+    required this.avatar,
+    required this.userId,
+    required this.showFollowBack,
+  });
+
+  final String name;
+  final String handle;
+  final String? avatar;
+  final String userId;
+  final bool showFollowBack;
+
+  @override
+  ConsumerState<_FollowListTile> createState() => _FollowListTileState();
+}
+
+class _FollowListTileState extends ConsumerState<_FollowListTile> {
+  bool _loading = false;
+
+  Future<void> _followBack() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(followRepoProvider).followOrRequest(widget.userId);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final iFollow = widget.userId.isNotEmpty
+        ? (ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false)
+        : false;
+    final canFollowBack = widget.showFollowBack && !iFollow;
+
+    return ListTile(
+      onTap: () => _showProfilePreview(
+        context,
+        widget.handle,
+        widget.avatar,
+        widget.userId,
+      ),
+      leading: AppAvatar(url: widget.avatar, size: 44.r),
+      title: Text(
+        widget.name,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(
+        widget.handle,
+        style: const TextStyle(color: Colors.black54),
+      ),
+      trailing: canFollowBack
+          ? SizedBox(
+              height: 30.h,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _followBack,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 14.w),
+                  shape: const StadiumBorder(),
+                  textStyle: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                child: _loading
+                    ? SizedBox(
+                        width: 14.w,
+                        height: 14.w,
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Follow back'),
+              ),
+            )
+          : const Icon(Icons.chevron_right),
     );
   }
 }

@@ -19,7 +19,7 @@ class FollowRepo {
   String pickAvatar(Map<String, dynamic> data, String seed) {
     final avatar = (data['avatarUrl'] ?? '') as String;
     if (avatar.trim().isNotEmpty) return avatar;
-    return 'https://picsum.photos/seed/$seed/200/200';
+    return '';
   }
 
   Stream<bool> watchIsFollowing(String targetUserId) {

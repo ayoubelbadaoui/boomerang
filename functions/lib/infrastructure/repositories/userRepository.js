@@ -7,9 +7,14 @@ async function fetchUserProfile(userId) {
     if (!snap.exists)
         return undefined;
     const data = snap.data() ?? {};
+    const name = data.nickname ??
+        data.fullName ??
+        data.username ??
+        data.handle;
     return {
         id: userId,
-        username: data.username ?? data.handle,
+        username: name,
+        avatarUrl: data.avatarUrl ?? undefined,
         pushEnabled: data.pushEnabled,
     };
 }

@@ -37,7 +37,7 @@ async function processNotification(targetUserId, raw) {
         return;
     }
     const template = (0, templates_1.renderTemplate)(payload, actorUser);
-    const message = buildPushMessage(payload, template);
+    const message = buildPushMessage(payload, template, actorUser);
     await (0, pushSender_1.sendToUserDevices)(targetUserId, deviceTokens, message);
 }
 function normalizePayload(targetUserId, raw) {
@@ -56,7 +56,7 @@ function normalizePayload(targetUserId, raw) {
 function isSupportedType(type) {
     return ['follow', 'follow_back', 'follow_request', 'like', 'comment', 'reply'].includes(type);
 }
-function buildPushMessage(payload, template) {
+function buildPushMessage(payload, template, actorUser) {
     const data = {
         type: payload.type,
     };
@@ -66,10 +66,14 @@ function buildPushMessage(payload, template) {
         data.resourceId = payload.resourceId;
     if (payload.resourceType)
         data.resourceType = payload.resourceType;
+    if (actorUser?.avatarUrl)
+        data.avatarUrl = actorUser.avatarUrl;
+    const imageUrl = actorUser?.avatarUrl;
     return {
         notification: {
             title: template.title || constants_1.APP_NAME,
             body: template.body,
+            ...(imageUrl ? { image: imageUrl } : {}),
         },
         data,
         apns: {
@@ -77,6 +81,7 @@ function buildPushMessage(payload, template) {
                 aps: {
                     sound: 'default',
                     badge: 1,
+                    'mutable-content': 1,
                 },
             },
         },
@@ -84,6 +89,7 @@ function buildPushMessage(payload, template) {
             priority: 'high',
             notification: {
                 sound: 'default',
+                ...(imageUrl ? { image: imageUrl } : {}),
             },
         },
         tokens: [],

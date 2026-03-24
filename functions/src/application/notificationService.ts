@@ -45,7 +45,7 @@ export async function processNotification(targetUserId: string, raw: RawNotifica
   }
 
   const template = renderTemplate(payload, actorUser);
-  const message = buildPushMessage(payload, template);
+  const message = buildPushMessage(payload, template, actorUser);
   await sendToUserDevices(targetUserId, deviceTokens, message);
 }
 
@@ -70,6 +70,7 @@ function isSupportedType(type: string): type is NotificationType {
 function buildPushMessage(
   payload: NotificationPayload,
   template: { title: string; body: string },
+  actorUser?: { avatarUrl?: string },
 ): admin.messaging.MulticastMessage {
   const data: Record<string, string> = {
     type: payload.type,
@@ -77,11 +78,15 @@ function buildPushMessage(
   if (payload.actorUserId) data.actorUserId = payload.actorUserId;
   if (payload.resourceId) data.resourceId = payload.resourceId;
   if (payload.resourceType) data.resourceType = payload.resourceType;
+  if (actorUser?.avatarUrl) data.avatarUrl = actorUser.avatarUrl;
+
+  const imageUrl = actorUser?.avatarUrl;
 
   return {
     notification: {
       title: template.title || APP_NAME,
       body: template.body,
+      ...(imageUrl ? { image: imageUrl } : {}),
     },
     data,
     apns: {
@@ -89,6 +94,7 @@ function buildPushMessage(
         aps: {
           sound: 'default',
           badge: 1,
+          'mutable-content': 1,
         },
       },
     },
@@ -96,6 +102,7 @@ function buildPushMessage(
       priority: 'high',
       notification: {
         sound: 'default',
+        ...(imageUrl ? { image: imageUrl } : {}),
       },
     },
     tokens: [],

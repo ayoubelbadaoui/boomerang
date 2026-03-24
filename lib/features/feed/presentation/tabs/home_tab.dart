@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -234,17 +235,7 @@ class _BoomerangCard extends ConsumerWidget {
                               data['userId'] as String,
                             ),
                         customBorder: const CircleBorder(),
-                        child: CircleAvatar(
-                          radius: 14.r,
-                          backgroundImage:
-                              avatar != null ? NetworkImage(avatar) : null,
-                          onBackgroundImageError:
-                              avatar != null ? (_, __) {} : null,
-                          backgroundColor: Colors.grey.shade200,
-                          child: avatar == null
-                              ? Icon(Icons.person, size: 14.r, color: Colors.grey.shade600)
-                              : null,
-                        ),
+                        child: AppAvatar(url: avatar, size: 28.r),
                       ),
                       SizedBox(width: 8.w),
                       InkWell(

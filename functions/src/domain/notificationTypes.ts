@@ -25,6 +25,7 @@ export interface NotificationPayload {
 export interface UserProfile {
   id: string;
   username?: string;
+  avatarUrl?: string;
   pushEnabled?: boolean;
 }
 

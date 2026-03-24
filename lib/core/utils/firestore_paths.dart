@@ -6,4 +6,8 @@ class FP {
   static String following(String uid, String followedUid) =>
       'following/$uid/users/$followedUid';
   static String notifications(String uid) => 'notifications/$uid';
+  static String conversation(String conversationId) =>
+      'conversations/$conversationId';
+  static String message(String conversationId, String messageId) =>
+      'conversations/$conversationId/messages/$messageId';
 }

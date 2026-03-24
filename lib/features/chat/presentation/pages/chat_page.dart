@@ -1,0 +1,383 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+
+import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
+import 'package:boomerang/features/chat/domain/conversation_entity.dart';
+import 'package:boomerang/features/chat/domain/message_entity.dart';
+import 'package:boomerang/features/chat/presentation/widgets/message_bubble.dart';
+import 'package:boomerang/features/chat/presentation/widgets/chat_input_field.dart';
+import 'package:boomerang/features/chat/presentation/widgets/date_separator.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
+
+class ChatPage extends ConsumerStatefulWidget {
+  const ChatPage({super.key, required this.conversationId});
+
+  final String conversationId;
+
+  @override
+  ConsumerState<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends ConsumerState<ChatPage> {
+  final _scrollController = ScrollController();
+  final _inputKey = GlobalKey<ChatInputFieldState>();
+  bool _emojiOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      ref
+          .read(chatControllerProvider(widget.conversationId).notifier)
+          .loadMore();
+    }
+  }
+
+  void _toggleEmoji() {
+    if (_emojiOpen) {
+      setState(() => _emojiOpen = false);
+      _inputKey.currentState?.focusNode.requestFocus();
+    } else {
+      _inputKey.currentState?.focusNode.unfocus();
+      setState(() => _emojiOpen = true);
+    }
+  }
+
+  void _onEmojiSelected(Category? category, Emoji emoji) {
+    final controller = _inputKey.currentState?.controller;
+    if (controller == null) return;
+    final text = controller.text;
+    final selection = controller.selection;
+    final start = selection.baseOffset < 0 ? text.length : selection.baseOffset;
+    final newText = text.replaceRange(start, start, emoji.emoji);
+    controller
+      ..text = newText
+      ..selection = TextSelection.collapsed(
+        offset: start + emoji.emoji.length,
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatState =
+        ref.watch(chatControllerProvider(widget.conversationId));
+    final currentUser = ref.watch(currentUserProfileProvider).value;
+    final uid = currentUser?.uid ?? '';
+
+    final otherUid = _resolveOtherUid(ref, uid);
+    final otherProfile = otherUid.isNotEmpty
+        ? ref.watch(userProfileByIdProvider(otherUid)).value
+        : null;
+
+    return Scaffold(
+      appBar: _ChatAppBar(profile: otherProfile),
+      body: Column(
+        children: [
+          if (otherUid.isNotEmpty)
+            _FollowBackBanner(otherUid: otherUid),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                _inputKey.currentState?.focusNode.unfocus();
+                if (_emojiOpen) setState(() => _emojiOpen = false);
+              },
+              child: _MessageList(
+                messages: chatState.messages,
+                currentUid: uid,
+                isLoadingMore: chatState.isLoadingMore,
+                scrollController: _scrollController,
+              ),
+            ),
+          ),
+          ChatInputField(
+            key: _inputKey,
+            isSending: chatState.isSending,
+            emojiOpen: _emojiOpen,
+            onToggleEmoji: _toggleEmoji,
+            onSendText: (text) => ref
+                .read(
+                    chatControllerProvider(widget.conversationId).notifier)
+                .sendMessage(text),
+            onSendImage: (path) => ref
+                .read(
+                    chatControllerProvider(widget.conversationId).notifier)
+                .sendImageMessage(path),
+          ),
+          if (_emojiOpen)
+            SizedBox(
+              height: 280.h,
+              child: EmojiPicker(
+                onEmojiSelected: _onEmojiSelected,
+                onBackspacePressed: () {
+                  final controller = _inputKey.currentState?.controller;
+                  if (controller == null || controller.text.isEmpty) return;
+                  final text = controller.text;
+                  controller
+                    ..text = text.characters.skipLast(1).toString()
+                    ..selection = TextSelection.collapsed(
+                      offset: controller.text.length,
+                    );
+                },
+                config: Config(
+                  height: 280.h,
+                  emojiViewConfig: EmojiViewConfig(
+                    columns: 8,
+                    emojiSizeMax: 28.sp,
+                    backgroundColor: Colors.white,
+                  ),
+                  categoryViewConfig: const CategoryViewConfig(
+                    indicatorColor: Colors.black,
+                    iconColorSelected: Colors.black,
+                    iconColor: Colors.grey,
+                    backgroundColor: Colors.white,
+                  ),
+                  bottomActionBarConfig: const BottomActionBarConfig(
+                    enabled: false,
+                  ),
+                  searchViewConfig: SearchViewConfig(
+                    backgroundColor: Colors.white,
+                    buttonIconColor: Colors.black,
+                    hintText: 'Search emoji...',
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _resolveOtherUid(WidgetRef ref, String myUid) {
+    final conversations =
+        ref.watch(conversationsStreamProvider).value ?? [];
+    final conv = conversations.cast<ConversationEntity?>().firstWhere(
+          (c) => c?.id == widget.conversationId,
+          orElse: () => null,
+        );
+    return conv?.otherParticipantId(myUid) ?? '';
+  }
+}
+
+// ── App bar ─────────────────────────────────────────────────────────────
+
+class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _ChatAppBar({required this.profile});
+
+  final UserProfile? profile;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppBar(
+      leading: const BackButton(),
+      title: GestureDetector(
+        onTap: profile != null
+            ? () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        OtherUserProfilePage(userId: profile!.uid),
+                  ),
+                )
+            : null,
+        child: Text(
+          profile?.fullName ?? profile?.nickname ?? '',
+          style: theme.textTheme.titleMedium,
+        ),
+      ),
+      actions: [
+        IconButton(icon: const Icon(Icons.phone_outlined), onPressed: () {}),
+        IconButton(icon: const Icon(Icons.more_horiz), onPressed: () {}),
+      ],
+    );
+  }
+}
+
+// ── Follow-back banner ──────────────────────────────────────────────────
+
+class _FollowBackBanner extends ConsumerStatefulWidget {
+  const _FollowBackBanner({required this.otherUid});
+  final String otherUid;
+
+  @override
+  ConsumerState<_FollowBackBanner> createState() => _FollowBackBannerState();
+}
+
+class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
+  bool _loading = false;
+
+  Future<void> _followBack() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(followRepoProvider).followOrRequest(widget.otherUid);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final iFollow =
+        ref.watch(isFollowingStreamProvider(widget.otherUid)).value ?? false;
+    final theyFollowMe =
+        ref.watch(isFollowedByProvider(widget.otherUid)).value ?? false;
+
+    if (iFollow || !theyFollowMe) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final otherProfile =
+        ref.watch(userProfileByIdProvider(widget.otherUid)).value;
+    final name = otherProfile?.fullName ?? otherProfile?.nickname ?? 'This user';
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F8),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.person_add_alt_1, size: 18.sp, color: Colors.black54),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Text(
+              '$name follows you',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.black54,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          SizedBox(width: 8.w),
+          SizedBox(
+            height: 32.h,
+            child: ElevatedButton(
+              onPressed: _loading ? null : _followBack,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                shape: const StadiumBorder(),
+                textStyle: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: _loading
+                  ? SizedBox(
+                      width: 14.w,
+                      height: 14.w,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Follow back'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Message list with date separators ───────────────────────────────────
+
+class _MessageList extends StatelessWidget {
+  const _MessageList({
+    required this.messages,
+    required this.currentUid,
+    required this.isLoadingMore,
+    required this.scrollController,
+  });
+
+  final List<MessageEntity> messages;
+  final String currentUid;
+  final bool isLoadingMore;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    if (messages.isEmpty) {
+      return Center(
+        child: Text(
+          'Say hello!',
+          style: Theme.of(context)
+              .textTheme
+              .bodyLarge
+              ?.copyWith(color: Colors.grey),
+        ),
+      );
+    }
+
+    final items = _buildItemsWithSeparators();
+
+    return ListView.builder(
+      controller: scrollController,
+      reverse: true,
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      itemCount: items.length + (isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (isLoadingMore && index == items.length) {
+          return Padding(
+            padding: EdgeInsets.all(16.h),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        final item = items[index];
+        if (item is DateTime) {
+          return DateSeparator(date: item);
+        }
+        final message = item as MessageEntity;
+        return MessageBubble(
+          message: message,
+          isMine: message.senderId == currentUid,
+        );
+      },
+    );
+  }
+
+  /// Interleaves date separators between messages from different days.
+  /// Messages are newest-first; separators appear *after* the last message
+  /// of each day (which is visually *above* in a reversed list).
+  List<Object> _buildItemsWithSeparators() {
+    final items = <Object>[];
+    for (int i = 0; i < messages.length; i++) {
+      items.add(messages[i]);
+      final isLast = i == messages.length - 1;
+      if (isLast ||
+          !_sameDay(messages[i].createdAt, messages[i + 1].createdAt)) {
+        items.add(messages[i].createdAt);
+      }
+    }
+    return items;
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+}

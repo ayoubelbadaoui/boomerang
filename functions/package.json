@@ -1,28 +1,19 @@
 {
   "name": "boomerang-functions",
-  "private": true,
+  "description": "Cloud Functions for Boomerang",
+  "scripts": {
+    "build": "npx tsc"
+  },
   "engines": {
     "node": "20"
   },
-  "main": "lib/index.js",
-  "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "deploy": "npm run build && firebase deploy --only functions",
-    "serve": "npm run build && firebase emulators:start --only functions",
-    "lint": "eslint ."
-  },
+  "main": "index.js",
   "dependencies": {
-    "express": "^4.19.2",
-    "firebase-admin": "^12.6.0",
-    "firebase-functions": "^6.1.1"
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0"
   },
+  "private": true,
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "typescript": "^5.6.3"
+    "typescript": "^5.9.3"
   }
 }
-
-
-
-

@@ -1,8 +1,11 @@
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid_for_user.dart';
+import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 
 class OtherUserProfilePage extends ConsumerWidget {
@@ -47,22 +50,7 @@ class OtherUserProfilePage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(height: 8.h),
-                CircleAvatar(
-                  radius: 48.r,
-                  backgroundImage: p?.avatarUrl != null
-                      ? NetworkImage(p!.avatarUrl!)
-                      : null,
-                  onBackgroundImageError:
-                      p?.avatarUrl != null ? (_, __) {} : null,
-                  backgroundColor: Colors.grey.shade200,
-                  child: p?.avatarUrl == null
-                      ? Icon(
-                          Icons.person,
-                          color: Colors.grey.shade600,
-                          size: 36,
-                        )
-                      : null,
-                ),
+                AppAvatar(url: p?.avatarUrl, size: 96.r),
                 SizedBox(height: 12.h),
                 if (p != null && p.nickname.isNotEmpty)
                   Text(
@@ -131,12 +119,19 @@ class OtherUserProfilePage extends ConsumerWidget {
                 ),
                 SizedBox(height: 16.h),
                 if (!isSelf)
-                  SizedBox(
-                    width: double.infinity,
-                    child: _FollowButton(
-                      userId: userId,
-                      isPrivate: p?.isPrivate ?? false,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _FollowButton(
+                          userId: userId,
+                          isPrivate: p?.isPrivate ?? false,
+                        ),
+                      ),
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: _MessageButton(userId: userId),
+                      ),
+                    ],
                   ),
                 if (!isSelf)
                   Consumer(
@@ -240,12 +235,16 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     final outgoing =
         ref.watch(outgoingFollowRequestProvider(widget.userId)).value;
     final requested = _optimisticRequested || (outgoing?.isPending == true);
+    final theyFollowMe =
+        ref.watch(isFollowedByProvider(widget.userId)).value ?? false;
 
     final label = isFollowing
         ? 'Following'
         : requested
             ? 'Pending'
-            : (widget.isPrivate ? 'Request' : 'Follow');
+            : theyFollowMe
+                ? 'Follow back'
+                : (widget.isPrivate ? 'Request' : 'Follow');
     final onPressed = (requested || _loading)
         ? null
         : () => _toggleFollow(isFollowing: isFollowing);
@@ -270,6 +269,55 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
         foregroundColor: isFollowing ? Colors.black : Colors.white,
         disabledForegroundColor: Colors.black45,
         disabledBackgroundColor: Colors.grey.shade200,
+      ),
+    );
+  }
+}
+
+class _MessageButton extends ConsumerStatefulWidget {
+  const _MessageButton({required this.userId});
+  final String userId;
+
+  @override
+  ConsumerState<_MessageButton> createState() => _MessageButtonState();
+}
+
+class _MessageButtonState extends ConsumerState<_MessageButton> {
+  bool _loading = false;
+
+  Future<void> _openChat() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      final me = ref.read(currentUserProfileProvider).value;
+      if (me == null) return;
+      final repo = ref.read(chatRepoProvider);
+      final convId = await repo.getOrCreateConversation(
+        [me.uid, widget.userId],
+      );
+      if (!mounted) return;
+      context.push('/chat/$convId');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: _loading ? null : _openChat,
+      icon: _loading
+          ? SizedBox(
+              width: 16.r,
+              height: 16.r,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.chat_bubble_outline),
+      label: const Text('Message'),
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Colors.black, width: 1),
+        padding: EdgeInsets.symmetric(vertical: 14.h),
+        shape: const StadiumBorder(),
       ),
     );
   }

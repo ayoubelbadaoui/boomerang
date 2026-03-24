@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// A simple avatar widget that falls back to a gray circle with an icon when no URL.
 class AppAvatar extends StatelessWidget {
   const AppAvatar({
     super.key,
@@ -16,21 +15,33 @@ class AppAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasUrl = url != null && url!.trim().isNotEmpty;
-    if (hasUrl) {
-      return CircleAvatar(
-        radius: size / 2,
-        backgroundImage: NetworkImage(url!),
-        onBackgroundImageError: (_, __) {},
-        backgroundColor: Colors.grey.shade200,
-      );
-    }
-    return CircleAvatar(
+    final placeholder = CircleAvatar(
       radius: size / 2,
       backgroundColor: Colors.grey.shade300,
       child: Icon(
         Icons.person,
         color: Colors.grey.shade600,
         size: iconSize ?? size * 0.55,
+      ),
+    );
+
+    if (!hasUrl) return placeholder;
+
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Image.network(
+          url!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) return child;
+            return placeholder;
+          },
+          errorBuilder: (_, __, ___) => placeholder,
+        ),
       ),
     );
   }

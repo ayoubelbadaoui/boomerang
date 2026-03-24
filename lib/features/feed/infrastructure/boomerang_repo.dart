@@ -95,9 +95,7 @@ class BoomerangRepo {
     String? actorAvatar,
   }) async {
     String avatar(String? url, String seed) =>
-        (url != null && url.isNotEmpty)
-            ? url
-            : 'https://picsum.photos/seed/$seed/200/200';
+        (url != null && url.isNotEmpty) ? url : '';
     final ref = _fs.collection('boomerangs').doc(boomerangId);
     bool addedLike = false;
     Map<String, dynamic>? boomerangData;
