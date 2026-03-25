@@ -200,7 +200,6 @@ void _showProfilePreview(
           userId: userId,
           handle: handle,
           avatarUrl: avatar,
-          subtitle: '',
         ),
   );
 }

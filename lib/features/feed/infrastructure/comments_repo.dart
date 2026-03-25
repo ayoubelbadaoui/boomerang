@@ -35,6 +35,9 @@ class CommentsRepo {
           'likes': 0,
           'likedBy': <String>[],
         });
+    await _fs.collection('boomerangs').doc(boomerangId).update({
+      'commentsCount': FieldValue.increment(1),
+    });
     // Notify owner of the boomerang about the new comment
     try {
       final postSnap =
@@ -88,6 +91,9 @@ class CommentsRepo {
           'likes': 0,
           'likedBy': <String>[],
         });
+    await _fs.collection('boomerangs').doc(boomerangId).update({
+      'commentsCount': FieldValue.increment(1),
+    });
     final replyId = replyRef.id;
     // Best-effort notify post owner and parent comment author.
     try {

@@ -28,7 +28,7 @@ class BoomerangOverlay extends ConsumerWidget {
     final likes = (data['likes'] ?? 0) as int;
     final userId = (data['userId'] ?? '') as String;
     final caption = (data['caption'] ?? '') as String;
-    final commentsCount = (data['commentsCount'] ?? 0) as int;
+    final initialCommentsCount = ((data['commentsCount'] ?? 0) as num).toInt();
     final topInset = MediaQuery.viewPaddingOf(context).top;
     final me = ref.watch(currentUserProfileProvider).value;
 
@@ -85,13 +85,19 @@ class BoomerangOverlay extends ConsumerWidget {
                     color: Colors.white, size: 24.r),
               ),
               SizedBox(height: 4.h),
-              Text(
-                '$commentsCount',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w600,
-                ),
+              StreamBuilder(
+                stream: ref.watch(commentsRepoProvider).watch(boomerangId),
+                builder: (context, snapshot) {
+                  final count = snapshot.data?.docs.length ?? initialCommentsCount;
+                  return Text(
+                    '$count',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  );
+                },
               ),
               SizedBox(height: 16.h),
               if (me != null)
@@ -277,7 +283,6 @@ void _showProfilePreview(
       userId: userId,
       handle: handle,
       avatarUrl: avatar,
-      subtitle: '',
     ),
   );
 }

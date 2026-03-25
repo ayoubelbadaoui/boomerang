@@ -566,7 +566,6 @@ Future<void> _openProfile(
         userId: item.actorId,
         handle: '@${item.title.replaceAll(' ', '').toLowerCase()}',
         avatarUrl: item.avatar,
-        subtitle: item.subtitle,
       );
     },
   );

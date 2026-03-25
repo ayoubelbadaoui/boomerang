@@ -15,12 +15,10 @@ class ProfilePreviewSheet extends ConsumerStatefulWidget {
     required this.userId,
     required this.handle,
     required this.avatarUrl,
-    this.subtitle,
   });
   final String userId;
   final String handle;
   final String? avatarUrl;
-  final String? subtitle;
 
   @override
   ConsumerState<ProfilePreviewSheet> createState() =>
@@ -115,13 +113,23 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
               ),
             ),
-            if (widget.subtitle != null && widget.subtitle!.isNotEmpty) ...[
-              SizedBox(height: 6.h),
-              Text(
-                widget.subtitle!,
-                style: TextStyle(color: Colors.black54, fontSize: 14.sp),
-              ),
-            ],
+            Consumer(
+              builder: (context, ref, _) {
+                final profile = ref.watch(userProfileByIdProvider(widget.userId)).value;
+                final bio = profile?.bio ?? '';
+                if (bio.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: EdgeInsets.only(top: 6.h),
+                  child: Text(
+                    bio,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.black54, fontSize: 14.sp),
+                  ),
+                );
+              },
+            ),
             SizedBox(height: 16.h),
             const Divider(),
             SizedBox(height: 12.h),

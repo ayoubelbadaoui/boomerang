@@ -30,6 +30,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   bool _hasMore = true;
   dynamic _last;
   late final PageController _pageController;
+  int _currentPage = 0;
 
   @override
   void initState() {
@@ -82,6 +83,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         controller: _pageController,
         scrollDirection: Axis.vertical,
         onPageChanged: (i) {
+          setState(() => _currentPage = i);
           if (_docs.length - i <= 3) _fetchNext();
         },
         itemCount: _docs.length + (_hasMore ? 1 : 0),
@@ -90,7 +92,11 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
             return const Center(child: CircularProgressIndicator());
           }
           final it = _docs[i];
-          return _PostPage(id: it.id, data: it.data);
+          return _PostPage(
+            id: it.id,
+            data: it.data,
+            isActive: i == _currentPage,
+          );
         },
       ),
     );
@@ -98,9 +104,14 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
 }
 
 class _PostPage extends ConsumerStatefulWidget {
-  const _PostPage({required this.id, required this.data});
+  const _PostPage({
+    required this.id,
+    required this.data,
+    required this.isActive,
+  });
   final String id;
   final Map<String, dynamic> data;
+  final bool isActive;
   @override
   ConsumerState<_PostPage> createState() => _PostPageState();
 }
@@ -108,6 +119,7 @@ class _PostPage extends ConsumerStatefulWidget {
 class _PostPageState extends ConsumerState<_PostPage> {
   VideoPlayerController? _controller;
   bool _showPosterOverlay = true;
+  bool _initialized = false;
 
   @override
   void initState() {
@@ -117,12 +129,25 @@ class _PostPageState extends ConsumerState<_PostPage> {
       _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
         ..initialize().then((_) {
           if (!mounted) return;
+          _initialized = true;
           setState(() {});
           _controller?.setLooping(true);
           _controller?.setVolume(0.0);
-          _controller?.play();
+          if (widget.isActive) _controller?.play();
           _controller?.addListener(_onVideoTickForPoster);
         });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _PostPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive && _initialized) {
+      if (widget.isActive) {
+        _controller?.play();
+      } else {
+        _controller?.pause();
+      }
     }
   }
 

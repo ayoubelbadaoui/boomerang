@@ -39,6 +39,7 @@ class BoomerangRepo {
       'videoUrl': videoUrl,
       'imageUrl': imageUrl,
       'likes': rand.nextInt(1000),
+      'commentsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -182,6 +183,7 @@ class BoomerangRepo {
       if (normalizedTags.isNotEmpty) 'hashtags': normalizedTags,
       'likes': 0,
       'likedBy': <String>[],
+      'commentsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
     });
     // Increment hashtags usage counters (best-effort)

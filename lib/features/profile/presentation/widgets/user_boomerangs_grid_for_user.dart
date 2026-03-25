@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
-import 'package:video_player/video_player.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class UserBoomerangsGridForUser extends ConsumerStatefulWidget {
@@ -125,62 +124,21 @@ class _UserBoomerangsGridForUserState
   }
 }
 
-class _GridTile extends StatefulWidget {
+class _GridTile extends StatelessWidget {
   const _GridTile({required this.imageUrl, required this.videoUrl});
   final String? imageUrl;
   final String? videoUrl;
 
   @override
-  State<_GridTile> createState() => _GridTileState();
-}
-
-class _GridTileState extends State<_GridTile> {
-  VideoPlayerController? _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(
-          Uri.parse(widget.videoUrl!),
-        )
-        ..initialize().then((_) {
-          if (!mounted) return;
-          setState(() {});
-          _controller?.setLooping(true);
-          _controller?.setVolume(0.0);
-          _controller?.play();
-        });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final String? imageUrl = widget.imageUrl;
-    final String? videoUrl = widget.videoUrl;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12.r),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (_controller != null && _controller!.value.isInitialized)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller!.value.size.width,
-                height: _controller!.value.size.height,
-                child: VideoPlayer(_controller!),
-              ),
-            )
-          else if (imageUrl != null && imageUrl.isNotEmpty)
+          if (imageUrl != null && imageUrl!.isNotEmpty)
             Image.network(
-              imageUrl,
+              imageUrl!,
               fit: BoxFit.cover,
               cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
               errorBuilder:
@@ -188,32 +146,33 @@ class _GridTileState extends State<_GridTile> {
             )
           else
             Container(color: const Color(0xFFF2F2F2)),
-          Positioned(
-            left: 8.w,
-            bottom: 8.h,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.fade(0.55),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.play_circle_filled,
-                    size: 14,
-                    color: Colors.white70,
-                  ),
-                  SizedBox(width: 4.w),
-                  Text(
-                    videoUrl != null ? 'Preview' : 'Post',
-                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
-                  ),
-                ],
+          if (videoUrl != null && videoUrl!.isNotEmpty)
+            Positioned(
+              left: 8.w,
+              bottom: 8.h,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.fade(0.55),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.play_circle_filled,
+                      size: 14,
+                      color: Colors.white70,
+                    ),
+                    SizedBox(width: 4.w),
+                    Text(
+                      'Preview',
+                      style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

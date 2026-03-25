@@ -193,7 +193,6 @@ class _UsersSearchList extends ConsumerWidget {
                         userId: uid,
                         handle: handle,
                         avatarUrl: avatar,
-                        subtitle: '',
                       ),
                 );
               },

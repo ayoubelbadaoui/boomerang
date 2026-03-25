@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
@@ -218,7 +219,7 @@ class _BoomerangCard extends ConsumerWidget {
                       final nextLikes = liked ? likes + 1 : likes - 1;
                       onToggleLike?.call(liked, nextLikes);
                     },
-                    child: _BoomerangMedia(videoUrl: video, posterUrl: image),
+                    child: _BoomerangMedia(videoUrl: video, posterUrl: image, postId: id),
                   ),
                 ),
                 Positioned(
@@ -268,9 +269,9 @@ class _BoomerangCard extends ConsumerWidget {
                   bottom: 20.h,
                   child: Row(
                     children: [
-                      _SvgCircleBtn(
-                        asset: 'assets/svgs/comment.svg',
-                        onTap: () => _showCommentsSheet(context, id, data),
+                      _CommentButton(
+                        boomerangId: id,
+                        data: data,
                       ),
                       SizedBox(width: 8.w),
                       _SvgCircleBtn(
@@ -366,6 +367,61 @@ class _SvgCircleBtn extends StatelessWidget {
           height: 20.r,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
+      ),
+    );
+  }
+}
+
+class _CommentButton extends ConsumerWidget {
+  const _CommentButton({required this.boomerangId, required this.data});
+  final String boomerangId;
+  final Map<String, dynamic> data;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final commentsCount = ((data['commentsCount'] ?? 0) as num).toInt();
+    return GestureDetector(
+      onTap: () => _showCommentsSheet(context, boomerangId, data),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              shape: BoxShape.circle,
+            ),
+            padding: EdgeInsets.all(10.r),
+            child: SvgPicture.asset(
+              'assets/svgs/comment.svg',
+              width: 20.r,
+              height: 20.r,
+              colorFilter:
+                  const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            ),
+          ),
+          if (commentsCount > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 1.h),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+                constraints: BoxConstraints(minWidth: 18.r),
+                child: Text(
+                  commentsCount > 99 ? '99+' : '$commentsCount',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -594,7 +650,6 @@ void _showProfilePreview(
           userId: userId,
           handle: handle,
           avatarUrl: avatar,
-          subtitle: 'Dancer & Singer',
         ),
   );
 }
@@ -870,9 +925,14 @@ class _ShareItem {
 }
 
 class _BoomerangMedia extends StatefulWidget {
-  const _BoomerangMedia({required this.videoUrl, required this.posterUrl});
+  const _BoomerangMedia({
+    required this.videoUrl,
+    required this.posterUrl,
+    required this.postId,
+  });
   final String? videoUrl;
   final String? posterUrl;
+  final String postId;
 
   @override
   State<_BoomerangMedia> createState() => _BoomerangMediaState();
@@ -881,24 +941,31 @@ class _BoomerangMedia extends StatefulWidget {
 class _BoomerangMediaState extends State<_BoomerangMedia> {
   VideoPlayerController? _controller;
   bool _videoReady = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Delay video init slightly so the widget tree settles first and the
-    // poster is visible immediately. This prevents all visible cards from
-    // racing to download + decode video simultaneously during scroll.
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _initController();
-    });
-  }
+  bool _visible = false;
+  bool _initialized = false;
 
   @override
   void didUpdateWidget(covariant _BoomerangMedia oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.videoUrl != oldWidget.videoUrl) {
       _disposeController();
-      _initController();
+      if (_visible) _initController();
+    }
+  }
+
+  void _onVisibilityChanged(VisibilityInfo info) {
+    final nowVisible = info.visibleFraction >= 0.5;
+    if (nowVisible == _visible) return;
+    _visible = nowVisible;
+
+    if (_visible) {
+      if (!_initialized) {
+        _initController();
+      } else {
+        _controller?.play();
+      }
+    } else {
+      _controller?.pause();
     }
   }
 
@@ -911,14 +978,11 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     try {
       await controller.initialize();
       if (!mounted) return;
+      _initialized = true;
       await controller.setLooping(true);
       await controller.setVolume(0.0);
-      await controller.play();
-      if (mounted) {
-        setState(() {
-          _videoReady = true;
-        });
-      }
+      if (_visible) await controller.play();
+      if (mounted) setState(() => _videoReady = true);
     } catch (_) {}
   }
 
@@ -926,6 +990,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     _controller?.dispose();
     _controller = null;
     _videoReady = false;
+    _initialized = false;
   }
 
   @override
@@ -948,7 +1013,6 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
           cacheWidth: cacheW,
         );
       }
-      // Lightweight placeholder while video buffers/initializes or if poster is missing.
       return Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -965,28 +1029,32 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
     final hasVideo = _controller != null && _controller!.value.isInitialized;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        AnimatedOpacity(
-          opacity: _videoReady ? 0.0 : 1.0,
-          duration: const Duration(milliseconds: 220),
-          child: posterLayer(),
-        ),
-        if (hasVideo)
+    return VisibilityDetector(
+      key: Key('bmg-media-${widget.postId}'),
+      onVisibilityChanged: _onVisibilityChanged,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
           AnimatedOpacity(
-            opacity: _videoReady ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 260),
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller!.value.size.width,
-                height: _controller!.value.size.height,
-                child: VideoPlayer(_controller!),
+            opacity: _videoReady ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 220),
+            child: posterLayer(),
+          ),
+          if (hasVideo)
+            AnimatedOpacity(
+              opacity: _videoReady ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 260),
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.size.width,
+                  height: _controller!.value.size.height,
+                  child: VideoPlayer(_controller!),
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
