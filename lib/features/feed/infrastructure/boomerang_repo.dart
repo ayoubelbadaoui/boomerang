@@ -95,16 +95,11 @@ class BoomerangRepo {
     String? actorName,
     String? actorAvatar,
   }) async {
-    String avatar(String? url, String seed) =>
-        (url != null && url.isNotEmpty) ? url : '';
     final ref = _fs.collection('boomerangs').doc(boomerangId);
-    bool addedLike = false;
-    Map<String, dynamic>? boomerangData;
     await _fs.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) return;
       final data = snap.data() as Map<String, dynamic>;
-      boomerangData = data;
       final List likedBy = (data['likedBy'] as List?) ?? <String>[];
       final bool isLiked = likedBy.contains(userId);
       tx.update(ref, {
@@ -114,30 +109,9 @@ class BoomerangRepo {
                 : FieldValue.arrayUnion([userId]),
         'likes': FieldValue.increment(isLiked ? -1 : 1),
       });
-      if (!isLiked) {
-        addedLike = true;
-      }
     });
-    // Add notification outside transaction on like add
-    if (addedLike && boomerangData != null) {
-      final ownerId = (boomerangData!['userId'] ?? '') as String;
-      if (ownerId.isNotEmpty && ownerId != userId) {
-        await _fs
-            .collection('users')
-            .doc(ownerId)
-            .collection('notifications')
-            .add({
-              'type': 'like',
-              'boomerangId': boomerangId,
-              'boomerangImage': boomerangData!['imageUrl'],
-              'senderId': userId,
-              'actorName': actorName,
-              'actorAvatar': avatar(actorAvatar, userId),
-              'read': false,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-      }
-    }
+    // Push notification is handled server-side by Cloud Functions
+    // (onBoomerangLikeUpdated trigger).
   }
 
   Future<String> createBoomerangPost({

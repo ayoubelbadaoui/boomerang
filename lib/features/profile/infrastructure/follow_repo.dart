@@ -85,18 +85,8 @@ class FollowRepo {
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
-      await _fs
-          .collection('users')
-          .doc(targetUserId)
-          .collection('notifications')
-          .add({
-            'type': 'follow_request',
-            'senderId': me,
-            'actorName': pickName(meData),
-            'actorAvatar': pickAvatar(meData, me),
-            'read': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+      // Push notification is handled server-side by Cloud Functions
+      // (onFollowRequestCreated trigger).
       return FollowOutcome.requested;
     }
 
@@ -128,20 +118,8 @@ class FollowRepo {
 
     await batch.commit();
 
-    // Add a notification for the target user (new path + fields)
-    final actorName = pickName(meData);
-    await _fs
-        .collection('users')
-        .doc(targetUserId)
-        .collection('notifications')
-        .add({
-          'type': 'follow',
-          'senderId': me,
-          'actorName': actorName,
-          'actorAvatar': pickAvatar(meData, me),
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+    // Push notification is handled server-side by Cloud Functions
+    // (onFollowerAdded trigger).
     return FollowOutcome.followed;
   }
 

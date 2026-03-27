@@ -113,10 +113,15 @@ class _PushNotificationsBootstrap {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    final type = message.data['type'];
-    final conversationId = message.data['conversationId'];
+    final type = message.data['type'] as String?;
+    final conversationId = message.data['conversationId'] as String?;
     if (type == 'chat_message' && conversationId != null) {
       router.push('/chat/$conversationId');
+      return;
+    }
+    const socialTypes = {'like', 'comment', 'reply', 'follow', 'follow_back', 'follow_request'};
+    if (type != null && socialTypes.contains(type)) {
+      router.go('/home');
     }
   }
 
@@ -236,9 +241,14 @@ class _PushNotificationsBootstrap {
 
   void _onLocalNotificationTap(NotificationResponse response) {
     final payload = response.payload;
-    if (payload != null && payload.startsWith('chat:')) {
+    if (payload == null || payload.isEmpty) return;
+    if (payload.startsWith('chat:')) {
       final conversationId = payload.substring(5);
       router.push('/chat/$conversationId');
+      return;
+    }
+    if (payload.startsWith('social:')) {
+      router.go('/home');
     }
   }
 
@@ -286,9 +296,12 @@ class _PushNotificationsBootstrap {
       ),
     );
 
-    String payload = message.data['resourceId'] ?? '';
-    if (message.data['type'] == 'chat_message') {
+    final type = message.data['type'] as String? ?? '';
+    String payload = '';
+    if (type == 'chat_message') {
       payload = 'chat:${message.data['conversationId'] ?? ''}';
+    } else if (const {'like', 'comment', 'reply', 'follow', 'follow_back', 'follow_request'}.contains(type)) {
+      payload = 'social:${message.data['resourceId'] ?? ''}';
     }
 
     await _local.show(

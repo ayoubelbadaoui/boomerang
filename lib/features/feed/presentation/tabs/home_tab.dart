@@ -668,11 +668,9 @@ void _showViewersSheet(BuildContext context) {
 
 void _showShareSheet(BuildContext context, Map<String, dynamic> data) {
   final videoUrl = data['videoUrl'] as String?;
-  final handle =
-      '@${(data['userName'] ?? 'user').toString().replaceAll(' ', '_').toLowerCase()}';
+  final shareText = videoUrl ?? 'Check out this Boomerang!';
   showModalBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -680,36 +678,58 @@ void _showShareSheet(BuildContext context, Map<String, dynamic> data) {
     builder: (context) {
       return SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 24.h),
+          padding: EdgeInsets.fromLTRB(24.w, 8.h, 24.w, 24.h),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  margin: EdgeInsets.only(bottom: 12.h),
-                  decoration: BoxDecoration(
-                    color: Colors.black12,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
+              Container(
+                width: 44,
+                height: 5,
+                margin: EdgeInsets.only(bottom: 16.h),
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
-              Text(
-                'Send to',
-                style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w800),
+              _ShareOption(
+                icon: Icons.share_outlined,
+                label: 'Share',
+                onTap: () {
+                  Navigator.pop(context);
+                  // ignore: deprecated_member_use
+                  Share.share(shareText);
+                },
               ),
-              SizedBox(height: 12.h),
-              const Divider(),
-              SizedBox(height: 12.h),
-              _QuickRow(handle: handle, videoUrl: videoUrl),
-              SizedBox(height: 16.h),
-              _ShareGrid(videoUrl: videoUrl),
-              SizedBox(height: 12.h),
-              const Divider(),
-              SizedBox(height: 12.h),
-              _SecondaryGrid(videoUrl: videoUrl),
+              _ShareOption(
+                icon: Icons.link_rounded,
+                label: 'Copy link',
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: shareText));
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link copied')),
+                    );
+                  }
+                },
+              ),
+              _ShareOption(
+                icon: Icons.download_outlined,
+                label: 'Save',
+                onTap: () async {
+                  if (videoUrl != null && videoUrl.isNotEmpty) {
+                    await Clipboard.setData(ClipboardData(text: videoUrl));
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Video link copied')),
+                      );
+                    }
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
+              ),
             ],
           ),
         ),
@@ -746,182 +766,48 @@ void _showCommentsSheet(
   );
 }
 
-class _QuickRow extends StatelessWidget {
-  const _QuickRow({required this.handle, required this.videoUrl});
-  final String handle;
-  final String? videoUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _QuickItem(
-          icon: Icons.upload_rounded,
-          label: 'Repost',
-          // ignore: deprecated_member_use
-          onTap: () => Share.share(videoUrl ?? handle),
-        ),
-        _QuickItem(
-          avatar: const CircleAvatar(
-            backgroundImage: AssetImage('assets/logo.png'),
-          ),
-          label: handle.length > 10 ? '${handle.substring(0, 10)}…' : handle,
-          // ignore: deprecated_member_use
-          onTap: () => Share.share(videoUrl ?? handle),
-        ),
-        _QuickItem(
-          icon: Icons.search,
-          label: 'Search',
-          onTap: () => Navigator.pop(context),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickItem extends StatelessWidget {
-  const _QuickItem({
-    this.icon,
-    this.avatar,
+class _ShareOption extends StatelessWidget {
+  const _ShareOption({
+    required this.icon,
     required this.label,
     required this.onTap,
   });
-  final IconData? icon;
-  final Widget? avatar;
+  final IconData icon;
   final String label;
   final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Container(
-            height: 64.r,
-            width: 64.r,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              shape: BoxShape.circle,
-            ),
-            child: Center(child: avatar ?? Icon(icon, color: Colors.white)),
-          ),
-        ),
-        SizedBox(height: 6.h),
-        Text(label, style: TextStyle(fontSize: 12.sp)),
-      ],
-    );
-  }
-}
 
-class _ShareGrid extends StatelessWidget {
-  const _ShareGrid({required this.videoUrl});
-  final String? videoUrl;
   @override
   Widget build(BuildContext context) {
-    final items = [
-      _ShareItem('WhatsApp', Icons.chat),
-      _ShareItem('Twitter', Icons.alternate_email),
-      _ShareItem('Facebook', Icons.facebook),
-      _ShareItem('Instagram', Icons.camera_alt_outlined),
-      _ShareItem('Yahoo', Icons.mail_outline),
-      _ShareItem('Chat', Icons.chat_bubble_outline),
-      _ShareItem('WeChat', Icons.wechat),
-      _ShareItem('Slack', Icons.message_outlined),
-    ];
-    return GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      itemCount: items.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 12.h,
-        crossAxisSpacing: 12.w,
-        childAspectRatio: 0.82,
-      ),
-      itemBuilder: (context, i) {
-        final it = items[i];
-        return Column(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12.r),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 14.h),
+        child: Row(
           children: [
-            InkWell(
-              // ignore: deprecated_member_use
-              onTap: () => Share.share(videoUrl ?? 'Check this!'),
-              customBorder: const CircleBorder(),
-              child: CircleAvatar(radius: 28.r, child: Icon(it.icon)),
+            Container(
+              width: 44.r,
+              height: 44.r,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF2F2F2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.black, size: 22.r),
             ),
-            SizedBox(height: 6.h),
-            Text(it.label, style: TextStyle(fontSize: 12.sp)),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SecondaryGrid extends StatelessWidget {
-  const _SecondaryGrid({required this.videoUrl});
-  final String? videoUrl;
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      _ShareItem('Report', Icons.flag_outlined),
-      _ShareItem('Not Intere..', Icons.favorite_border),
-      _ShareItem('Save Vid..', Icons.download_outlined),
-      _ShareItem('Set as W..', Icons.video_stable_outlined),
-      _ShareItem('Duet', Icons.group_outlined),
-      _ShareItem('Stitch', Icons.content_cut),
-      _ShareItem('Add to Fa..', Icons.bookmark_border),
-      _ShareItem('GIF', Icons.gif_box_outlined),
-    ];
-    return GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      itemCount: items.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 16.h,
-        crossAxisSpacing: 12.w,
-        childAspectRatio: 0.82,
-      ),
-      itemBuilder: (context, i) {
-        final it = items[i];
-        return Column(
-          children: [
-            InkWell(
-              onTap: () async {
-                if (i == 2 && (videoUrl != null && videoUrl!.isNotEmpty)) {
-                  // Copy link as simple "save" placeholder
-                  await Clipboard.setData(ClipboardData(text: videoUrl!));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Video link copied')),
-                    );
-                  }
-                } else {
-                  Navigator.pop(context);
-                }
-              },
-              customBorder: const CircleBorder(),
-              child: CircleAvatar(
-                radius: 28.r,
-                backgroundColor: const Color(0xFFF2F2F2),
-                child: Icon(it.icon, color: Colors.black87),
+            SizedBox(width: 16.w),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
               ),
             ),
-            SizedBox(height: 6.h),
-            Text(it.label, style: TextStyle(fontSize: 12.sp)),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
-}
-
-class _ShareItem {
-  _ShareItem(this.label, this.icon);
-  final String label;
-  final IconData icon;
 }
 
 class _BoomerangMedia extends StatefulWidget {

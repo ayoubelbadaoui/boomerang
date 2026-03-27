@@ -20,8 +20,6 @@ class CommentsRepo {
     String? userAvatar,
     required String text,
   }) async {
-    String avatar(String? url, String seed) =>
-        (url != null && url.isNotEmpty) ? url : '';
     await _fs
         .collection('boomerangs')
         .doc(boomerangId)
@@ -38,32 +36,8 @@ class CommentsRepo {
     await _fs.collection('boomerangs').doc(boomerangId).update({
       'commentsCount': FieldValue.increment(1),
     });
-    // Notify owner of the boomerang about the new comment
-    try {
-      final postSnap =
-          await _fs.collection('boomerangs').doc(boomerangId).get();
-      if (!postSnap.exists) return;
-      final data = postSnap.data() as Map<String, dynamic>;
-      final ownerId = (data['userId'] ?? '') as String;
-      if (ownerId.isEmpty || ownerId == userId) return;
-      await _fs
-          .collection('users')
-          .doc(ownerId)
-          .collection('notifications')
-          .add({
-            'type': 'comment',
-            'boomerangId': boomerangId,
-            'boomerangImage': data['imageUrl'],
-            'senderId': userId,
-            'actorName': userName,
-            'actorAvatar': avatar(userAvatar, userId),
-            'text': text,
-            'read': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-    } catch (_) {
-      // ignore notification failure
-    }
+    // Push notification is handled server-side by Cloud Functions
+    // (onCommentCreated trigger).
   }
 
   Future<void> addReply({
@@ -74,9 +48,7 @@ class CommentsRepo {
     String? userAvatar,
     required String text,
   }) async {
-    String avatar(String? url, String seed) =>
-        (url != null && url.isNotEmpty) ? url : '';
-    final replyRef = await _fs
+    await _fs
         .collection('boomerangs')
         .doc(boomerangId)
         .collection('comments')
@@ -94,49 +66,8 @@ class CommentsRepo {
     await _fs.collection('boomerangs').doc(boomerangId).update({
       'commentsCount': FieldValue.increment(1),
     });
-    final replyId = replyRef.id;
-    // Best-effort notify post owner and parent comment author.
-    try {
-      final postSnap =
-          await _fs.collection('boomerangs').doc(boomerangId).get();
-      if (!postSnap.exists) return;
-      final data = postSnap.data() as Map<String, dynamic>;
-      final ownerId = (data['userId'] ?? '') as String;
-      final parentSnap =
-          await _fs
-              .collection('boomerangs')
-              .doc(boomerangId)
-              .collection('comments')
-              .doc(parentCommentId)
-              .get();
-      final parentAuthor = (parentSnap.data()?['userId'] ?? '') as String;
-      final targets = <String>{};
-      if (ownerId.isNotEmpty && ownerId != userId) targets.add(ownerId);
-      if (parentAuthor.isNotEmpty && parentAuthor != userId) {
-        targets.add(parentAuthor);
-      }
-      for (final target in targets) {
-        await _fs
-            .collection('users')
-            .doc(target)
-            .collection('notifications')
-            .add({
-              'type': target == ownerId ? 'comment' : 'reply',
-              'boomerangId': boomerangId,
-              'parentCommentId': parentCommentId,
-              'replyId': replyId,
-              'boomerangImage': data['imageUrl'],
-              'senderId': userId,
-              'actorName': userName,
-              'actorAvatar': avatar(userAvatar, userId),
-              'text': text,
-              'read': false,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-      }
-    } catch (_) {
-      // ignore notification failure
-    }
+    // Push notification is handled server-side by Cloud Functions
+    // (onReplyCreated trigger).
   }
 
   Future<void> toggleLike({
