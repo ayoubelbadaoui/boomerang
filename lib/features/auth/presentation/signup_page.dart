@@ -20,13 +20,14 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   final _email = TextEditingController();
   final _name = TextEditingController();
   final _password = TextEditingController();
-  // Removed birthday; will be collected in setup
+  final _confirmPassword = TextEditingController();
 
   @override
   void dispose() {
     _email.dispose();
     _name.dispose();
     _password.dispose();
+    _confirmPassword.dispose();
     super.dispose();
   }
 
@@ -86,7 +87,18 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   obscure: true,
                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
-                // Birthday removed from signup; handled in post-signup setup
+                SizedBox(height: 16.h),
+                InputFilled(
+                  controller: _confirmPassword,
+                  hint: 'Confirm Password',
+                  icon: Icons.lock_rounded,
+                  obscure: true,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if (v != _password.text) return 'Passwords do not match';
+                    return null;
+                  },
+                ),
                 SizedBox(height: 24.h),
                 PrimaryButton(
                   loading: state.loading,

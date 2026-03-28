@@ -45,42 +45,40 @@ class OnboardingPage extends StatelessWidget {
               ),
             ),
           ),
-          // Text + indicators + button
-          Positioned(
-            left: 24.w,
-            right: 24.w,
-            bottom: 48.h,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IgnorePointer(
-                  ignoring: true,
-                  child: AnimatedBuilder(
-                    animation: pageController,
-                    builder: (context, _) {
-                      final index =
-                          pageController.hasClients
-                              ? (pageController.page ??
-                                      pageController.initialPage.toDouble())
-                                  .round()
-                              : 0;
-                      final item = pages[index];
-                      return Text(
-                        item.title,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 33.sp,
-                          height: 1.2,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    },
+          // Text + indicators + button — centered on screen
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24.w),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IgnorePointer(
+                    ignoring: true,
+                    child: AnimatedBuilder(
+                      animation: pageController,
+                      builder: (context, _) {
+                        final index =
+                            pageController.hasClients
+                                ? (pageController.page ??
+                                        pageController.initialPage.toDouble())
+                                    .round()
+                                : 0;
+                        final item = pages[index];
+                        return Text(
+                          item.title,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 33.sp,
+                            height: 1.2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-                SizedBox(height: 24.h),
-                Center(
-                  child: IgnorePointer(
+                  SizedBox(height: 24.h),
+                  IgnorePointer(
                     ignoring: true,
                     child: SmoothPageIndicator(
                       controller: pageController,
@@ -95,11 +93,8 @@ class OnboardingPage extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
-                SizedBox(height: 24.h),
-                Align(
-                  alignment: Alignment.center,
-                  child: AnimatedBuilder(
+                  SizedBox(height: 24.h),
+                  AnimatedBuilder(
                     animation: pageController,
                     builder: (context, _) {
                       final currentIndex =
@@ -123,8 +118,8 @@ class OnboardingPage extends StatelessWidget {
                       );
                     },
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // Skip button top-right

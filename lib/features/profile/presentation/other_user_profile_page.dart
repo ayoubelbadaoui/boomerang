@@ -144,15 +144,6 @@ class OtherUserProfilePage extends ConsumerWidget {
                     },
                   ),
                 SizedBox(height: 16.h),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: const [
-                    _ModeIcon(icon: Icons.grid_on_rounded, active: true),
-                    _ModeIcon(icon: Icons.bookmark_border_rounded),
-                    _ModeIcon(icon: Icons.favorite_border_rounded),
-                  ],
-                ),
-                SizedBox(height: 12.h),
                 Divider(height: 1.h, color: Colors.black12),
                 SizedBox(height: 12.h),
                 UserBoomerangsGridForUser(userId: userId),
@@ -182,16 +173,6 @@ class _Stat extends StatelessWidget {
         Text(label, style: TextStyle(fontSize: 12.sp, color: Colors.black54)),
       ],
     );
-  }
-}
-
-class _ModeIcon extends StatelessWidget {
-  const _ModeIcon({required this.icon, this.active = false});
-  final IconData icon;
-  final bool active;
-  @override
-  Widget build(BuildContext context) {
-    return Icon(icon, color: active ? Colors.black : Colors.black38);
   }
 }
 

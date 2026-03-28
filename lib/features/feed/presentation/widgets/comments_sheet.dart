@@ -304,7 +304,7 @@ class _CommentTile extends ConsumerWidget {
                   ],
                 ),
               ),
-              Icon(Icons.more_horiz, color: Colors.black54),
+              SizedBox(width: 8.w),
             ],
           ),
           _RepliesList(

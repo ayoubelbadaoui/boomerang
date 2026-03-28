@@ -13,7 +13,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
-import 'package:boomerang/features/feed/presentation/sheets/viewers_sheet.dart';
 // import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
@@ -604,7 +603,7 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
         );
       },
       onDoubleTap: _onDoubleTap,
-      onLongPress: () => _showViewersSheet(context),
+      onLongPress: null,
       behavior: HitTestBehavior.opaque,
       child: Stack(
         fit: StackFit.expand,
@@ -651,18 +650,6 @@ void _showProfilePreview(
           handle: handle,
           avatarUrl: avatar,
         ),
-  );
-}
-
-void _showViewersSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (_) => const ViewersSheet(),
   );
 }
 

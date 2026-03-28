@@ -27,6 +27,7 @@ class AppAvatar extends StatelessWidget {
 
     if (!hasUrl) return placeholder;
 
+    final cacheSize = (size * MediaQuery.devicePixelRatioOf(context)).round();
     return ClipOval(
       child: SizedBox(
         width: size,
@@ -36,6 +37,8 @@ class AppAvatar extends StatelessWidget {
           width: size,
           height: size,
           fit: BoxFit.cover,
+          cacheWidth: cacheSize,
+          cacheHeight: cacheSize,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) return child;
             return placeholder;

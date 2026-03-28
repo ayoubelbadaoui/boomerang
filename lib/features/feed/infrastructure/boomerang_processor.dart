@@ -9,13 +9,13 @@ class BoomerangProcessor {
   static List<List<String>> get _encoderCandidates {
     if (Platform.isIOS || Platform.isMacOS) {
       return [
-        ['-c:v', 'h264_videotoolbox'],
-        ['-c:v', 'mpeg4', '-q:v', '3'],
+        ['-c:v', 'h264_videotoolbox', '-b:v', '6M'],
+        ['-c:v', 'mpeg4', '-q:v', '2'],
       ];
     }
     return [
-      ['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'],
-      ['-c:v', 'mpeg4', '-q:v', '3'],
+      ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18'],
+      ['-c:v', 'mpeg4', '-q:v', '2'],
     ];
   }
 
@@ -26,7 +26,7 @@ class BoomerangProcessor {
 
   Future<String> generatePoster(
     String inputPath, {
-    int targetWidth = 360,
+    int targetWidth = 720,
   }) async {
     _assertExists(inputPath);
     final outPath = await _tmpPath('poster', 'jpg');
@@ -37,7 +37,7 @@ class BoomerangProcessor {
       '-i', inputPath,
       '-vf', 'scale=$targetWidth:-1',
       '-frames:v', '1',
-      '-q:v', '6',
+      '-q:v', '2',
       outPath,
     ]);
     if (!ReturnCode.isSuccess(await session.getReturnCode()) ||
@@ -140,7 +140,7 @@ class BoomerangProcessor {
         '-frames:v', '$maxFrames',
         '-vsync', '0',
         if (scaleWidth != null) ...['-vf', 'scale=$scaleWidth:-2'],
-        '-q:v', '4',
+        '-q:v', '2',
         framePattern,
       ];
 

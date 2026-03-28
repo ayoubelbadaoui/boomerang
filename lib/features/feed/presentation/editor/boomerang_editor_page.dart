@@ -148,12 +148,10 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
       final task = await storage.ref(path).putFile(File(outPath));
       final url = await task.ref.getDownloadURL();
 
-      // Generate and upload a tiny poster for instant previews (non-blocking if it fails)
       String? posterUrl;
       try {
         final posterPath = await processor.generatePoster(
           widget.inputFile.path,
-          targetWidth: 360,
         );
         final posterRef = storage.ref(
           'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',

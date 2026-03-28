@@ -93,10 +93,7 @@ class _DiscoverTabState extends ConsumerState<DiscoverTab>
                       ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.tune_rounded),
-                  ),
+                  SizedBox(width: 12.w),
                 ],
               ),
             ),

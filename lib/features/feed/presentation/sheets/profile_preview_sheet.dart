@@ -273,27 +273,28 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     ),
                   ),
                 if (!isSelf) SizedBox(width: 12.w),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final me = ref.read(currentUserProfileProvider).value;
-                      if (me == null) return;
-                      final repo = ref.read(chatRepoProvider);
-                      final convId = await repo.getOrCreateConversation(
-                        [me.uid, widget.userId],
-                      );
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
-                      context.push('/chat/$convId');
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    label: const Text('Message'),
-                    style: OutlinedButton.styleFrom(
-                      shape: const StadiumBorder(),
-                      padding: EdgeInsets.symmetric(vertical: 14.h),
+                if (!isSelf)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final me = ref.read(currentUserProfileProvider).value;
+                        if (me == null) return;
+                        final repo = ref.read(chatRepoProvider);
+                        final convId = await repo.getOrCreateConversation(
+                          [me.uid, widget.userId],
+                        );
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        context.push('/chat/$convId');
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Message'),
+                      style: OutlinedButton.styleFrom(
+                        shape: const StadiumBorder(),
+                        padding: EdgeInsets.symmetric(vertical: 14.h),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ],
