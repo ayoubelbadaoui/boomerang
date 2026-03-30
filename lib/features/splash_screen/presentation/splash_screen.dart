@@ -28,7 +28,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Future<void> _warmPreviews() async {
     try {
       final repo = ref.read(boomerangRepoProvider);
-      final snap = await repo.fetchBoomerangsPage(limit: 24);
+      final snap = await repo.fetchBoomerangsPage(limit: 6);
       final urls = <String>[];
       for (final d in snap.docs) {
         final data = d.data();
@@ -36,11 +36,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         if (u is String && u.isNotEmpty) urls.add(u);
       }
       if (!mounted || urls.isEmpty) return;
-      // ignore: discarded_futures
-      precacheImages(urls, context, concurrency: 4, cacheWidth: 400);
-    } catch (_) {
-      // Ignore warmup failures
-    }
+      precacheImages(urls, context, concurrency: 2, cacheWidth: 400)
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
+    } catch (_) {}
   }
 
   @override
