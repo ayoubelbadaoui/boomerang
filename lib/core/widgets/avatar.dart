@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppAvatar extends StatelessWidget {
-  const AppAvatar({
-    super.key,
-    this.url,
-    this.size = 40,
-    this.iconSize,
-  });
+  const AppAvatar({super.key, this.url, this.size = 40, this.iconSize});
 
   final String? url;
   final double size;
@@ -17,6 +12,7 @@ class AppAvatar extends StatelessWidget {
     final hasUrl = url != null && url!.trim().isNotEmpty;
     final placeholder = CircleAvatar(
       radius: size / 2,
+
       backgroundColor: Colors.grey.shade300,
       child: Icon(
         Icons.person,

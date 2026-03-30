@@ -11,8 +11,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
 class BoomerangEditorPage extends ConsumerStatefulWidget {
-  const BoomerangEditorPage({super.key, required this.inputFile});
+  const BoomerangEditorPage({
+    super.key,
+    required this.inputFile,
+    this.initialSpeed = 1.0,
+    this.videoFilter,
+    this.previewFilter,
+    this.mirrorVideo = false,
+  });
   final File inputFile;
+  final double initialSpeed;
+  final String? videoFilter;
+  final ColorFilter? previewFilter;
+  final bool mirrorVideo;
 
   @override
   ConsumerState<BoomerangEditorPage> createState() =>
@@ -27,13 +38,14 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
 
   double _segmentSeconds = 1.6;
   double _totalSeconds = 6.0;
-  double _speed = 1.0;
+  late double _speed;
   String? _posterPath;
   bool _showPosterOverlay = true;
 
   @override
   void initState() {
     super.initState();
+    _speed = widget.initialSpeed;
     _controller = VideoPlayerController.file(widget.inputFile)
       ..initialize().then((_) {
         if (!mounted) return;
@@ -136,11 +148,22 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
     setState(() => _processing = true);
     try {
       final processor = ref.read(boomerangProcessorProvider);
+      final colorFilter = _buildColorFilter();
+
+      // Pre-flip the input file for front camera selfies.
+      // This creates a clean mirrored MP4 with resolved metadata,
+      // avoiding any interaction between hflip and iOS auto-rotation.
+      String inputPath = widget.inputFile.path;
+      if (widget.mirrorVideo) {
+        inputPath = await processor.mirrorInput(inputPath);
+      }
+
       final outPath = await processor.makeBoomerang(
-        widget.inputFile.path,
+        inputPath,
         segmentSeconds: _segmentSeconds,
         totalDurationSeconds: _totalSeconds,
         speed: _speed,
+        videoFilter: colorFilter,
       );
 
       final storage = ref.read(storageProvider);
@@ -151,7 +174,8 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
       String? posterUrl;
       try {
         final posterPath = await processor.generatePoster(
-          widget.inputFile.path,
+          inputPath,
+          videoFilter: colorFilter,
         );
         final posterRef = storage.ref(
           'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
@@ -218,6 +242,22 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
     }
   }
 
+  String? _buildColorFilter() {
+    if (widget.videoFilter == null || widget.videoFilter!.isEmpty) return null;
+    return widget.videoFilter;
+  }
+
+  Widget _applyPreviewFilter({required Widget child}) {
+    Widget result = child;
+    if (widget.mirrorVideo) {
+      result = Transform.flip(flipX: true, child: result);
+    }
+    if (widget.previewFilter != null) {
+      result = ColorFiltered(colorFilter: widget.previewFilter!, child: result);
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ready = _controller?.value.isInitialized == true;
@@ -232,10 +272,10 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
         children: [
           Expanded(
             child: Center(
-              child: Stack(
+              child: _applyPreviewFilter(
+                child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Video at the back when initialized
                   if (ready)
                     FittedBox(
                       fit: BoxFit.cover,
@@ -246,7 +286,6 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
                         child: VideoPlayer(_controller!),
                       ),
                     ),
-                  // Poster overlay while loading/first frames
                   if (_showPosterOverlay)
                     Positioned.fill(
                       child:
@@ -273,6 +312,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
                       child: CircularProgressIndicator(color: Colors.white),
                     ),
                 ],
+              ),
               ),
             ),
           ),

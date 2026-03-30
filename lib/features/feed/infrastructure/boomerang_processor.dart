@@ -27,15 +27,21 @@ class BoomerangProcessor {
   Future<String> generatePoster(
     String inputPath, {
     int targetWidth = 720,
+    String? videoFilter,
   }) async {
     _assertExists(inputPath);
     final outPath = await _tmpPath('poster', 'jpg');
+
+    final vf = [
+      'scale=$targetWidth:-1',
+      if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
+    ].join(',');
 
     final session = await FFmpegKit.executeWithArguments([
       '-y',
       '-ss', '0.1',
       '-i', inputPath,
-      '-vf', 'scale=$targetWidth:-1',
+      '-vf', vf,
       '-frames:v', '1',
       '-q:v', '2',
       outPath,
@@ -46,6 +52,33 @@ class BoomerangProcessor {
       throw Exception('Poster failed\n$logs');
     }
     return outPath;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mirror — creates a horizontally flipped copy with all metadata resolved.
+  // ---------------------------------------------------------------------------
+
+  Future<String> mirrorInput(String inputPath) async {
+    _assertExists(inputPath);
+    final outPath = await _tmpPath('mirrored', 'mp4');
+    for (final enc in _encoderCandidates) {
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        '-noautorotate',
+        '-i', inputPath,
+        '-vf', 'hflip',
+        '-metadata:s:v', 'rotate=0',
+        '-an',
+        ...enc,
+        '-movflags', '+faststart',
+        outPath,
+      ]);
+      if (ReturnCode.isSuccess(await session.getReturnCode()) &&
+          await _hasVideoContent(outPath)) {
+        return outPath;
+      }
+    }
+    return inputPath;
   }
 
   // ---------------------------------------------------------------------------
@@ -77,6 +110,7 @@ class BoomerangProcessor {
     int fps = 30,
     double totalDurationSeconds = 6.0,
     double speed = 1.0,
+    String? videoFilter,
   }) async {
     _assertExists(inputPath);
 
@@ -84,6 +118,7 @@ class BoomerangProcessor {
       inputPath,
       segmentSeconds: segmentSeconds,
       speed: speed,
+      videoFilter: videoFilter,
     );
 
     final cycleDuration = (2 * segmentSeconds) / (speed <= 0 ? 1.0 : speed);
@@ -120,6 +155,7 @@ class BoomerangProcessor {
     required double segmentSeconds,
     required double speed,
     int? scaleWidth,
+    String? videoFilter,
   }) async {
     final tempDir = await getTemporaryDirectory();
     final ts = DateTime.now().millisecondsSinceEpoch;
@@ -133,13 +169,17 @@ class BoomerangProcessor {
       // fails with VFR timestamps).
       final maxFrames = (segmentSeconds * 60).ceil();
       final framePattern = '${tempDir.path}/$framePrefix%05d.jpg';
+      final vfParts = <String>[
+        if (scaleWidth != null) 'scale=$scaleWidth:-2',
+        if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
+      ];
       final extractArgs = <String>[
         '-y',
         '-ss', '0',
         '-i', inputPath,
         '-frames:v', '$maxFrames',
         '-vsync', '0',
-        if (scaleWidth != null) ...['-vf', 'scale=$scaleWidth:-2'],
+        if (vfParts.isNotEmpty) ...['-vf', vfParts.join(',')],
         '-q:v', '2',
         framePattern,
       ];

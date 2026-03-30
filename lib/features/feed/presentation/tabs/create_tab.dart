@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
+import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 
 class CreateTab extends ConsumerStatefulWidget {
   const CreateTab({super.key});
@@ -16,26 +17,24 @@ class CreateTab extends ConsumerStatefulWidget {
 class _CreateTabState extends ConsumerState<CreateTab> {
   bool _isProcessing = false;
 
-  Future<File?> _pickVideoFrom(ImageSource source) async {
-    final picker = ImagePicker();
-    final XFile? file = await picker.pickVideo(source: source);
-    if (file == null) return null;
-    return File(file.path);
+  Future<void> _openCamera() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BoomerangCameraPage()),
+    );
   }
 
-  // Upload moved to editor page
-
-  Future<void> _onCreate(ImageSource source) async {
+  Future<void> _importFromGallery() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
     try {
-      final input = await _pickVideoFrom(source);
-      if (input == null) return;
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
+      if (file == null) return;
 
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BoomerangEditorPage(inputFile: input),
+          builder: (_) => BoomerangEditorPage(inputFile: File(file.path)),
         ),
       );
     } catch (e) {
@@ -89,10 +88,7 @@ class _CreateTabState extends ConsumerState<CreateTab> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed:
-                        _isProcessing
-                            ? null
-                            : () => _onCreate(ImageSource.camera),
+                    onPressed: _isProcessing ? null : _openCamera,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
@@ -108,10 +104,7 @@ class _CreateTabState extends ConsumerState<CreateTab> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed:
-                        _isProcessing
-                            ? null
-                            : () => _onCreate(ImageSource.gallery),
+                    onPressed: _isProcessing ? null : _importFromGallery,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.black,
                       side: const BorderSide(color: Colors.black, width: 1.5),
