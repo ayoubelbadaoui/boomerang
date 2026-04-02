@@ -9,6 +9,12 @@ class MessageDto {
     required this.type,
     required this.createdAt,
     required this.status,
+    this.isUnsent = false,
+    this.replyToMessageId,
+    this.replyToText,
+    this.replyToSenderId,
+    this.replyToType,
+    this.audioDurationMs,
   });
 
   final String id;
@@ -17,6 +23,12 @@ class MessageDto {
   final String type;
   final Timestamp createdAt;
   final String status;
+  final bool isUnsent;
+  final String? replyToMessageId;
+  final String? replyToText;
+  final String? replyToSenderId;
+  final String? replyToType;
+  final int? audioDurationMs;
 
   factory MessageDto.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -29,6 +41,12 @@ class MessageDto {
       type: data['type'] as String? ?? 'text',
       createdAt: data['createdAt'] as Timestamp? ?? Timestamp.now(),
       status: data['status'] as String? ?? 'sent',
+      isUnsent: data['isUnsent'] as bool? ?? false,
+      replyToMessageId: data['replyToMessageId'] as String?,
+      replyToText: data['replyToText'] as String?,
+      replyToSenderId: data['replyToSenderId'] as String?,
+      replyToType: data['replyToType'] as String?,
+      audioDurationMs: (data['audioDurationMs'] as num?)?.toInt(),
     );
   }
 
@@ -37,9 +55,15 @@ class MessageDto {
       id: id,
       senderId: senderId,
       text: text,
-      type: type == 'image' ? MessageType.image : MessageType.text,
+      type: _parseType(type),
       createdAt: createdAt.toDate(),
       status: _parseStatus(status),
+      isUnsent: isUnsent,
+      replyToMessageId: replyToMessageId,
+      replyToText: replyToText,
+      replyToSenderId: replyToSenderId,
+      replyToType: replyToType != null ? _parseType(replyToType!) : null,
+      audioDurationMs: audioDurationMs,
     );
   }
 
@@ -50,7 +74,26 @@ class MessageDto {
       'type': type,
       'createdAt': createdAt,
       'status': status,
+      'isUnsent': isUnsent,
+      if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      if (replyToText != null) 'replyToText': replyToText,
+      if (replyToSenderId != null) 'replyToSenderId': replyToSenderId,
+      if (replyToType != null) 'replyToType': replyToType,
+      if (audioDurationMs != null) 'audioDurationMs': audioDurationMs,
     };
+  }
+
+  static MessageType _parseType(String value) {
+    switch (value) {
+      case 'image':
+        return MessageType.image;
+      case 'gif':
+        return MessageType.gif;
+      case 'audio':
+        return MessageType.audio;
+      default:
+        return MessageType.text;
+    }
   }
 
   static MessageStatus _parseStatus(String value) {
@@ -61,6 +104,19 @@ class MessageDto {
         return MessageStatus.seen;
       default:
         return MessageStatus.sent;
+    }
+  }
+
+  static String typeToString(MessageType type) {
+    switch (type) {
+      case MessageType.image:
+        return 'image';
+      case MessageType.gif:
+        return 'gif';
+      case MessageType.audio:
+        return 'audio';
+      case MessageType.text:
+        return 'text';
     }
   }
 

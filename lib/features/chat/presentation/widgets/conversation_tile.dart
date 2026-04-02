@@ -15,12 +15,16 @@ class ConversationTile extends ConsumerWidget {
     required this.otherUser,
     required this.currentUserId,
     required this.onTap,
+    this.isPinned = false,
+    this.onLongPress,
   });
 
   final ConversationEntity conversation;
   final UserProfile? otherUser;
   final String currentUserId;
   final VoidCallback onTap;
+  final bool isPinned;
+  final VoidCallback? onLongPress;
 
   String get _formattedTime {
     final now = DateTime.now();
@@ -54,6 +58,7 @@ class ConversationTile extends ConsumerWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
         child: Row(
@@ -119,11 +124,25 @@ class ConversationTile extends ConsumerWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  _formattedTime,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isPinned)
+                      Padding(
+                        padding: EdgeInsets.only(right: 4.w),
+                        child: Icon(
+                          Icons.push_pin,
+                          size: 12.sp,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    Text(
+                      _formattedTime,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
                 if (hasUnread) ...[
                   SizedBox(height: 6.h),

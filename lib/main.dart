@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:boomerang/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
@@ -16,7 +18,22 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   PaintingBinding.instance.imageCache.maximumSizeBytes = 200 * 1024 * 1024;
+
+  // Let background music (Spotify, Apple Music, etc.) keep playing.
+  // Videos in this app are muted, so we use ambient/mixWithOthers.
+  final session = await AudioSession.instance;
+  await session.configure(const AudioSessionConfiguration(
+    avAudioSessionCategory: AVAudioSessionCategory.ambient,
+    avAudioSessionMode: AVAudioSessionMode.defaultMode,
+    androidAudioAttributes: AndroidAudioAttributes(
+      contentType: AndroidAudioContentType.movie,
+      usage: AndroidAudioUsage.media,
+    ),
+    androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+  ));
+
   // Register the background message handler before initializing the app
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const ProviderScope(child: _BootstrapApp()));
@@ -95,7 +112,8 @@ class _BootstrapAppState extends State<_BootstrapApp> {
         }
         return const MaterialApp(
           home: Scaffold(
-            body: Center(child: CircularProgressIndicator(color: Colors.black)),
+            backgroundColor: Colors.black,
+            body: SizedBox.shrink(),
           ),
         );
       },

@@ -6,7 +6,7 @@ import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
+import 'package:boomerang/core/utils/avatar_crop.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 
@@ -76,8 +76,53 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     }
   }
 
+  int _ageFromBirthday(DateTime birthday) {
+    final now = DateTime.now();
+    int age = now.year - birthday.year;
+    if (now.month < birthday.month ||
+        (now.month == birthday.month && now.day < birthday.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  void _showAgeRestrictionDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('Age Requirement'),
+        content: const Text(
+          'You must be at least 13 years old to use Boomerang. '
+          'This is required by the Children\'s Online Privacy '
+          'Protection Act (COPPA).\n\n'
+          'If you believe this is an error, please update your '
+          'date of birth.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _next() async {
     if (_saving) return;
+
+    if (_index == 1) {
+      final age = _ageFromBirthday(_birthday);
+      if (age < 13) {
+        _showAgeRestrictionDialog();
+        return;
+      }
+    }
+
     if (_index == 2) {
       if (!_profileFormKey.currentState!.validate()) return;
     }
@@ -342,8 +387,21 @@ class _BirthdayStep extends StatelessWidget {
   const _BirthdayStep({required this.birthday, required this.onChanged});
   final DateTime birthday;
   final ValueChanged<DateTime> onChanged;
+
+  int _calculatedAge() {
+    final now = DateTime.now();
+    int age = now.year - birthday.year;
+    if (now.month < birthday.month ||
+        (now.month == birthday.month && now.day < birthday.day)) {
+      age--;
+    }
+    return age;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final age = _calculatedAge();
+    final isUnder13 = age < 13;
     return Padding(
       padding: EdgeInsets.all(20.w),
       child: Column(
@@ -359,6 +417,33 @@ class _BirthdayStep extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
+          if (isUnder13) ...[
+            SizedBox(height: 8.h),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8.r),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.red.shade400, size: 18.r),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'You must be at least 13 years old to use Boomerang.',
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           SizedBox(height: 24.h),
           Center(
             child: Image.asset('assets/cake.png', width: 160.r, height: 160.r),
@@ -458,28 +543,10 @@ class _AvatarPickerState extends State<_AvatarPicker> {
   String? _path;
 
   Future<void> _pick(ImageSource source) async {
-    final picker = ImagePicker();
-    final xFile = await picker.pickImage(
-      source: source,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 90,
-    );
-    if (xFile == null) return;
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: xFile.path,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Crop Image',
-          toolbarColor: Colors.black,
-          toolbarWidgetColor: Colors.white,
-        ),
-        IOSUiSettings(title: 'Crop Image'),
-      ],
-    );
-    if (cropped == null) return;
-    setState(() => _path = cropped.path);
-    widget.onSelected?.call(File(cropped.path));
+    final file = await pickAndCropAvatar(source);
+    if (file == null) return;
+    setState(() => _path = file.path);
+    widget.onSelected?.call(file);
   }
 
   void _showSheet() {

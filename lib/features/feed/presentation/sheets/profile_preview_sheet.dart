@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
+import 'package:boomerang/features/moderation/presentation/widgets/block_confirmation_dialog.dart';
+import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
@@ -52,6 +55,17 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
   Widget build(BuildContext context) {
     final me = ref.watch(currentUserProfileProvider).value;
     final isSelf = me?.uid == widget.userId;
+    final blockedList = ref.watch(blockedUsersProvider).value ?? const [];
+    final isBlocked = blockedList.contains(widget.userId);
+
+    if (isBlocked) {
+      return _BlockedPreview(
+        userId: widget.userId,
+        handle: widget.handle,
+        avatarUrl: widget.avatarUrl,
+      );
+    }
+
     final isFollowing =
         ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false;
     final outgoing =
@@ -279,6 +293,24 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       onPressed: () async {
                         final me = ref.read(currentUserProfileProvider).value;
                         if (me == null) return;
+                        final modRepo = ref.read(moderationRepoProvider);
+                        final iBlocked = await modRepo.isBlocked(
+                          checkerUid: me.uid,
+                          targetUid: widget.userId,
+                        );
+                        final theyBlocked = await modRepo.isBlocked(
+                          checkerUid: widget.userId,
+                          targetUid: me.uid,
+                        );
+                        if (!context.mounted) return;
+                        if (iBlocked || theyBlocked) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Unable to message this user'),
+                            ),
+                          );
+                          return;
+                        }
                         final repo = ref.read(chatRepoProvider);
                         final convId = await repo.getOrCreateConversation(
                           [me.uid, widget.userId],
@@ -296,6 +328,156 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     ),
                   ),
               ],
+            ),
+            if (!isSelf) ...[
+              SizedBox(height: 8.h),
+              Consumer(
+                builder: (context, ref, _) {
+                  final blockedList =
+                      ref.watch(blockedUsersProvider).value ?? const [];
+                  final isBlocked = blockedList.contains(widget.userId);
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          showReportSheet(
+                            context,
+                            reportedUid: widget.userId,
+                          );
+                        },
+                        icon: Icon(Icons.flag_outlined,
+                            size: 18.r, color: Colors.redAccent),
+                        label: Text(
+                          'Report',
+                          style: TextStyle(
+                            fontSize: 13.sp,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 16.w),
+                      TextButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          if (isBlocked) {
+                            await showUnblockDialog(
+                              context,
+                              ref: ref,
+                              blockedUid: widget.userId,
+                              handle: widget.handle,
+                            );
+                          } else {
+                            await showBlockDialog(
+                              context,
+                              ref: ref,
+                              blockedUid: widget.userId,
+                              handle: widget.handle,
+                            );
+                          }
+                        },
+                        icon: Icon(
+                          isBlocked
+                              ? Icons.lock_open_rounded
+                              : Icons.block_rounded,
+                          size: 18.r,
+                          color: isBlocked
+                              ? Colors.blueAccent
+                              : Colors.redAccent,
+                        ),
+                        label: Text(
+                          isBlocked ? 'Unblock' : 'Block',
+                          style: TextStyle(
+                            fontSize: 13.sp,
+                            color: isBlocked
+                                ? Colors.blueAccent
+                                : Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BlockedPreview extends ConsumerWidget {
+  const _BlockedPreview({
+    required this.userId,
+    required this.handle,
+    required this.avatarUrl,
+  });
+  final String userId;
+  final String handle;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 5,
+              margin: EdgeInsets.only(bottom: 16.h),
+              decoration: BoxDecoration(
+                color: Colors.black12,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            AppAvatar(url: avatarUrl, size: 88.r),
+            SizedBox(height: 12.h),
+            Text(
+              handle,
+              style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w800),
+            ),
+            SizedBox(height: 20.h),
+            Icon(Icons.block_rounded, size: 32.r, color: Colors.black26),
+            SizedBox(height: 8.h),
+            Text(
+              'You blocked this user',
+              style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  showUnblockDialog(
+                    context,
+                    ref: ref,
+                    blockedUid: userId,
+                    handle: handle,
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.black, width: 1),
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                  shape: const StadiumBorder(),
+                ),
+                child: Text(
+                  'Unblock',
+                  style: TextStyle(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
           ],
         ),

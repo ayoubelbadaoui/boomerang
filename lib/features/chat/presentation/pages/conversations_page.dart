@@ -247,11 +247,21 @@ class _ConversationList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Sort: pinned conversations first, then by lastMessageAt (already sorted)
+    final sorted = List<ConversationEntity>.from(conversations);
+    sorted.sort((a, b) {
+      final aPinned = a.isPinnedBy(currentUid);
+      final bPinned = b.isPinnedBy(currentUid);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0; // preserve existing lastMessageAt ordering within each group
+    });
+
     return ListView.builder(
       padding: EdgeInsets.zero,
-      itemCount: conversations.length,
+      itemCount: sorted.length,
       itemBuilder: (context, index) {
-        final conv = conversations[index];
+        final conv = sorted[index];
         final otherId = conv.otherParticipantId(currentUid);
         if (otherId.isEmpty) return const SizedBox.shrink();
         final profile = ref.watch(userProfileByIdProvider(otherId)).value;
@@ -264,13 +274,136 @@ class _ConversationList extends ConsumerWidget {
           }
         }
 
+        final isPinned = conv.isPinnedBy(currentUid);
+
         return ConversationTile(
           conversation: conv,
           otherUser: profile,
           currentUserId: currentUid,
+          isPinned: isPinned,
           onTap: () => onTap(conv.id),
+          onLongPress: () => _showConversationActions(
+            context,
+            ref,
+            conv,
+            isPinned,
+          ),
         );
       },
+    );
+  }
+
+  void _showConversationActions(
+    BuildContext context,
+    WidgetRef ref,
+    ConversationEntity conv,
+    bool isPinned,
+  ) {
+    final theme = Theme.of(context);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40.w,
+                height: 4.h,
+                margin: EdgeInsets.only(bottom: 16.h),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2.r),
+                ),
+              ),
+              ListTile(
+                leading: Icon(
+                  isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+                  size: 22.sp,
+                ),
+                title: Text(
+                  isPinned ? 'Unpin chat' : 'Pin chat',
+                  style: theme.textTheme.bodyLarge,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                dense: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  final repo = ref.read(chatRepoProvider);
+                  if (isPinned) {
+                    repo.unpinConversation(
+                      conversationId: conv.id,
+                      userId: currentUid,
+                    );
+                  } else {
+                    repo.pinConversation(
+                      conversationId: conv.id,
+                      userId: currentUid,
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 22.sp,
+                  color: theme.colorScheme.error,
+                ),
+                title: Text(
+                  'Delete chat',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                dense: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Delete chat?'),
+                      content: const Text(
+                        'This will permanently delete all messages for both users.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  ).then((confirmed) {
+                    if (confirmed == true) {
+                      ref.read(chatRepoProvider)
+                          .deleteConversation(conversationId: conv.id);
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

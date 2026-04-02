@@ -12,6 +12,7 @@ class ChatState {
     this.hasMore = true,
     this.isSending = false,
     this.error,
+    this.replyingTo,
   });
 
   final List<MessageEntity> messages;
@@ -19,6 +20,7 @@ class ChatState {
   final bool hasMore;
   final bool isSending;
   final String? error;
+  final MessageEntity? replyingTo;
 
   ChatState copyWith({
     List<MessageEntity>? messages,
@@ -26,6 +28,8 @@ class ChatState {
     bool? hasMore,
     bool? isSending,
     String? error,
+    MessageEntity? replyingTo,
+    bool clearReply = false,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
@@ -33,6 +37,7 @@ class ChatState {
       hasMore: hasMore ?? this.hasMore,
       isSending: isSending ?? this.isSending,
       error: error,
+      replyingTo: clearReply ? null : (replyingTo ?? this.replyingTo),
     );
   }
 }
@@ -100,6 +105,18 @@ class ChatController extends StateNotifier<ChatState> {
     }
   }
 
+  // ── Reply ──────────────────────────────────────────────────────────────
+
+  void setReplyTo(MessageEntity message) {
+    state = state.copyWith(replyingTo: message);
+  }
+
+  void clearReply() {
+    state = state.copyWith(clearReply: true);
+  }
+
+  // ── Send messages ─────────────────────────────────────────────────────
+
   Future<void> sendMessage(
     String text, {
     MessageType type = MessageType.text,
@@ -108,13 +125,24 @@ class ChatController extends StateNotifier<ChatState> {
 
     state = state.copyWith(isSending: true, error: null);
     try {
+      final reply = state.replyingTo;
       await _repo.sendMessage(
         conversationId,
         senderId: currentUserId,
         text: text.trim(),
         type: type,
+        replyToMessageId: reply?.id,
+        replyToText: reply?.isImage == true
+            ? '📷 Photo'
+            : reply?.isGif == true
+                ? 'GIF'
+                : reply?.isAudio == true
+                    ? '🎤 Voice message'
+                    : reply?.text,
+        replyToSenderId: reply?.senderId,
+        replyToType: reply?.type,
       );
-      state = state.copyWith(isSending: false);
+      state = state.copyWith(isSending: false, clearReply: true);
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }
@@ -123,18 +151,130 @@ class ChatController extends StateNotifier<ChatState> {
   Future<void> sendImageMessage(String localPath) async {
     state = state.copyWith(isSending: true, error: null);
     try {
+      final reply = state.replyingTo;
       final url = await _repo.uploadChatImage(conversationId, localPath);
       await _repo.sendMessage(
         conversationId,
         senderId: currentUserId,
         text: url,
         type: MessageType.image,
+        replyToMessageId: reply?.id,
+        replyToText: reply?.isImage == true
+            ? '📷 Photo'
+            : reply?.isGif == true
+                ? 'GIF'
+                : reply?.isAudio == true
+                    ? '🎤 Voice message'
+                    : reply?.text,
+        replyToSenderId: reply?.senderId,
+        replyToType: reply?.type,
       );
-      state = state.copyWith(isSending: false);
+      state = state.copyWith(isSending: false, clearReply: true);
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }
   }
+
+  Future<void> sendGifMessage(String gifUrl) async {
+    state = state.copyWith(isSending: true, error: null);
+    try {
+      final reply = state.replyingTo;
+      await _repo.sendMessage(
+        conversationId,
+        senderId: currentUserId,
+        text: gifUrl,
+        type: MessageType.gif,
+        replyToMessageId: reply?.id,
+        replyToText: reply?.isImage == true
+            ? '📷 Photo'
+            : reply?.isGif == true
+                ? 'GIF'
+                : reply?.isAudio == true
+                    ? '🎤 Voice message'
+                    : reply?.text,
+        replyToSenderId: reply?.senderId,
+        replyToType: reply?.type,
+      );
+      state = state.copyWith(isSending: false, clearReply: true);
+    } catch (e) {
+      state = state.copyWith(isSending: false, error: e.toString());
+    }
+  }
+
+  Future<void> sendAudioMessage(String localPath, int durationMs) async {
+    state = state.copyWith(isSending: true, error: null);
+    try {
+      final reply = state.replyingTo;
+      final url = await _repo.uploadChatAudio(conversationId, localPath);
+      await _repo.sendMessage(
+        conversationId,
+        senderId: currentUserId,
+        text: url,
+        type: MessageType.audio,
+        audioDurationMs: durationMs,
+        replyToMessageId: reply?.id,
+        replyToText: reply?.isImage == true
+            ? '📷 Photo'
+            : reply?.isGif == true
+                ? 'GIF'
+                : reply?.isAudio == true
+                    ? '🎤 Voice message'
+                    : reply?.text,
+        replyToSenderId: reply?.senderId,
+        replyToType: reply?.type,
+      );
+      state = state.copyWith(isSending: false, clearReply: true);
+    } catch (e) {
+      state = state.copyWith(isSending: false, error: e.toString());
+    }
+  }
+
+  // ── Unsend ─────────────────────────────────────────────────────────────
+
+  Future<void> unsendMessage(String messageId) async {
+    final message = state.messages.firstWhere(
+      (m) => m.id == messageId,
+      orElse: () => throw Exception('Message not found'),
+    );
+
+    if (message.senderId != currentUserId) {
+      throw Exception('Can only unsend your own messages');
+    }
+
+    final age = DateTime.now().difference(message.createdAt);
+    if (age.inHours >= 1) {
+      throw Exception('Can only unsend messages less than 1 hour old');
+    }
+
+    await _repo.unsendMessage(
+      conversationId: conversationId,
+      messageId: messageId,
+    );
+  }
+
+  // ── Pin / Unpin conversation ─────────────────────────────────────────
+
+  Future<void> pinConversation() async {
+    await _repo.pinConversation(
+      conversationId: conversationId,
+      userId: currentUserId,
+    );
+  }
+
+  Future<void> unpinConversation() async {
+    await _repo.unpinConversation(
+      conversationId: conversationId,
+      userId: currentUserId,
+    );
+  }
+
+  // ── Delete conversation ────────────────────────────────────────────────
+
+  Future<void> deleteConversation() async {
+    await _repo.deleteConversation(conversationId: conversationId);
+  }
+
+  // ── Seen ───────────────────────────────────────────────────────────────
 
   void markAsSeen() {
     _repo.markMessagesAsSeen(conversationId, currentUserId);

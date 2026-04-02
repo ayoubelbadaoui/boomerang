@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:boomerang/core/utils/avatar_crop.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
@@ -199,13 +200,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final res = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 90,
-    );
-    if (res == null) return;
-    setState(() => _selected = File(res.path));
+    final file = await pickAndCropAvatar(ImageSource.gallery);
+    if (file == null) return;
+    setState(() => _selected = file);
     final url = await ref
         .read(profileControllerProvider.notifier)
         .uploadAvatar(_selected!);

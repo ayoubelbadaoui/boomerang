@@ -59,6 +59,7 @@ class FirestoreChatRepo implements ChatRepo {
       'lastMessageSenderId': '',
       'unreadCount': unreadCount,
       'createdAt': now,
+      'pinnedBy': <String>[],
     });
     return doc.id;
   }
@@ -88,13 +89,33 @@ class FirestoreChatRepo implements ChatRepo {
     required String senderId,
     required String text,
     required MessageType type,
+    String? replyToMessageId,
+    String? replyToText,
+    String? replyToSenderId,
+    MessageType? replyToType,
+    int? audioDurationMs,
   }) async {
     final messageRef = _messages(conversationId).doc();
     final conversationRef = _conversations.doc(conversationId);
 
     final now = FieldValue.serverTimestamp();
-    final typeStr = type == MessageType.image ? 'image' : 'text';
-    final previewText = type == MessageType.image ? '📷 Photo' : text;
+    final typeStr = MessageDto.typeToString(type);
+
+    String previewText;
+    switch (type) {
+      case MessageType.image:
+        previewText = '📷 Photo';
+        break;
+      case MessageType.gif:
+        previewText = 'GIF';
+        break;
+      case MessageType.audio:
+        previewText = '🎤 Voice message';
+        break;
+      case MessageType.text:
+        previewText = text;
+        break;
+    }
 
     final messageData = <String, dynamic>{
       'senderId': senderId,
@@ -102,6 +123,13 @@ class FirestoreChatRepo implements ChatRepo {
       'type': typeStr,
       'createdAt': now,
       'status': 'sent',
+      'isUnsent': false,
+      if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      if (replyToText != null) 'replyToText': replyToText,
+      if (replyToSenderId != null) 'replyToSenderId': replyToSenderId,
+      if (replyToType != null)
+        'replyToType': MessageDto.typeToString(replyToType),
+      if (audioDurationMs != null) 'audioDurationMs': audioDurationMs,
     };
 
     final conversationSnap = await conversationRef.get();
@@ -132,6 +160,11 @@ class FirestoreChatRepo implements ChatRepo {
       type: type,
       createdAt: DateTime.now(),
       status: MessageStatus.sent,
+      replyToMessageId: replyToMessageId,
+      replyToText: replyToText,
+      replyToSenderId: replyToSenderId,
+      replyToType: replyToType,
+      audioDurationMs: audioDurationMs,
     );
   }
 
@@ -181,7 +214,93 @@ class FirestoreChatRepo implements ChatRepo {
     await batch.commit();
   }
 
-  // ── Image Upload ──────────────────────────────────────────────────────
+  // ── Unsend ─────────────────────────────────────────────────────────────
+
+  @override
+  Future<void> unsendMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final messageRef = _messages(conversationId).doc(messageId);
+    final conversationRef = _conversations.doc(conversationId);
+
+    await messageRef.update({
+      'text': '',
+      'type': 'text',
+      'isUnsent': true,
+      'replyToMessageId': FieldValue.delete(),
+      'replyToText': FieldValue.delete(),
+      'replyToSenderId': FieldValue.delete(),
+      'replyToType': FieldValue.delete(),
+      'audioDurationMs': FieldValue.delete(),
+    });
+
+    final convSnap = await conversationRef.get();
+    final convData = convSnap.data();
+    if (convData != null) {
+      final latestMsg = await _messages(conversationId)
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+
+      if (latestMsg.docs.isNotEmpty &&
+          latestMsg.docs.first.id == messageId) {
+        await conversationRef.update({'lastMessage': 'Message unsent'});
+      }
+    }
+  }
+
+  // ── Pin / Unpin conversation ─────────────────────────────────────────
+
+  @override
+  Future<void> pinConversation({
+    required String conversationId,
+    required String userId,
+  }) async {
+    await _conversations.doc(conversationId).update({
+      'pinnedBy': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  @override
+  Future<void> unpinConversation({
+    required String conversationId,
+    required String userId,
+  }) async {
+    await _conversations.doc(conversationId).update({
+      'pinnedBy': FieldValue.arrayRemove([userId]),
+    });
+  }
+
+  // ── Delete conversation ────────────────────────────────────────────────
+
+  @override
+  Future<void> deleteConversation({required String conversationId}) async {
+    final messagesSnap = await _messages(conversationId).get();
+
+    final batchOps = <WriteBatch>[];
+    var currentBatch = _firestore.batch();
+    var count = 0;
+
+    for (final doc in messagesSnap.docs) {
+      currentBatch.delete(doc.reference);
+      count++;
+      if (count >= 500) {
+        batchOps.add(currentBatch);
+        currentBatch = _firestore.batch();
+        count = 0;
+      }
+    }
+    if (count > 0) batchOps.add(currentBatch);
+
+    for (final batch in batchOps) {
+      await batch.commit();
+    }
+
+    await _conversations.doc(conversationId).delete();
+  }
+
+  // ── Media uploads ──────────────────────────────────────────────────────
 
   @override
   Future<String> uploadChatImage(
@@ -190,6 +309,17 @@ class FirestoreChatRepo implements ChatRepo {
   ) async {
     final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
     final ref = _storage.ref('chat_images/$conversationId/$fileName');
+    await ref.putFile(File(localPath));
+    return ref.getDownloadURL();
+  }
+
+  @override
+  Future<String> uploadChatAudio(
+    String conversationId,
+    String localPath,
+  ) async {
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final ref = _storage.ref('chat_audio/$conversationId/$fileName');
     await ref.putFile(File(localPath));
     return ref.getDownloadURL();
   }

@@ -7,6 +7,7 @@ class ConversationEntity {
     required this.lastMessageSenderId,
     required this.unreadCount,
     required this.createdAt,
+    this.pinnedBy = const [],
   });
 
   final String id;
@@ -16,6 +17,7 @@ class ConversationEntity {
   final String lastMessageSenderId;
   final Map<String, int> unreadCount;
   final DateTime createdAt;
+  final List<String> pinnedBy;
 
   int unreadCountFor(String userId) => unreadCount[userId] ?? 0;
 
@@ -25,6 +27,8 @@ class ConversationEntity {
       orElse: () => '',
     );
   }
+
+  bool isPinnedBy(String userId) => pinnedBy.contains(userId);
 
   @override
   bool operator ==(Object other) =>

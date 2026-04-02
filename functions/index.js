@@ -40,7 +40,30 @@ exports.onNewChatMessage = onDocumentCreated(
       senderData.nickname || senderData.fullName || "Someone";
     const senderAvatar = senderData.avatarUrl || "";
 
-    const body = type === "image" ? "📷 Sent a photo" : text || "New message";
+    const replyToText = messageData.replyToText || null;
+
+    let body;
+    switch (type) {
+      case "image":
+        body = "📷 Sent a photo";
+        break;
+      case "gif":
+        body = "Sent a GIF";
+        break;
+      case "audio":
+        body = "🎤 Sent a voice message";
+        break;
+      default:
+        body = text || "New message";
+    }
+
+    if (replyToText) {
+      const truncated =
+        replyToText.length > 30
+          ? replyToText.substring(0, 30) + "…"
+          : replyToText;
+      body = `Replied to "${truncated}": ${body}`;
+    }
 
     const tokens = [];
     for (const receiverId of receivers) {

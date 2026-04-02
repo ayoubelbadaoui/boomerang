@@ -339,18 +339,48 @@ class _ActivityTile extends StatelessWidget {
                   _FollowBackButton(item: item)
                 else if (item.trailingThumb != null)
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: BorderRadius.circular(6.r),
                     child: Image.network(
                       item.trailingThumb!,
-                      width: 56.r,
-                      height: 56.r,
+                      width: 48.r,
+                      height: 48.r,
                       fit: BoxFit.cover,
-                      cacheWidth:
-                          (56.r * MediaQuery.devicePixelRatioOf(context))
-                              .round(),
-                      cacheHeight:
-                          (56.r * MediaQuery.devicePixelRatioOf(context))
-                              .round(),
+                      filterQuality: FilterQuality.medium,
+                      cacheWidth: 150,
+                      cacheHeight: 150,
+                      frameBuilder: (_, child, frame, sync) {
+                        if (sync) return child;
+                        return AnimatedOpacity(
+                          opacity: frame == null ? 0.0 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          child: child,
+                        );
+                      },
+                      loadingBuilder: (_, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          width: 48.r,
+                          height: 48.r,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0F0F0),
+                            borderRadius: BorderRadius.circular(6.r),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 48.r,
+                        height: 48.r,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0F0F0),
+                          borderRadius: BorderRadius.circular(6.r),
+                        ),
+                        child: Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                      ),
                     ),
                   ),
               ],

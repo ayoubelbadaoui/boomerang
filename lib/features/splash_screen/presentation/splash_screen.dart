@@ -5,7 +5,6 @@ import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -17,12 +16,20 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  bool _navigated = false;
+  bool _minDelayPassed = false;
+
   @override
   void initState() {
     super.initState();
-    // Warm up first-page previews; do not block navigation.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _warmPreviews());
-    // Defer to build to avoid ref.listen restriction
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmPreviews();
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        _minDelayPassed = true;
+        _tryNavigate();
+      });
+    });
   }
 
   Future<void> _warmPreviews() async {
@@ -41,35 +48,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     } catch (_) {}
   }
 
+  void _tryNavigate() {
+    if (_navigated || !mounted || !_minDelayPassed) return;
+    final auth = ref.read(authStateProvider);
+    if (auth.isLoading) return;
+    _navigated = true;
+    auth.when(
+      data: (user) => context.go(
+        user != null ? HomeShell.routeName : OnboardingPage.routeName,
+      ),
+      error: (_, __) => context.go(OnboardingPage.routeName),
+      loading: () {},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authStateProvider);
-    // wait 2 seconds and then navigate to the home screen
-    Future.delayed(const Duration(seconds: 2), () {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (auth.isLoading) return;
-        auth.when(
-          data:
-              (user) => context.go(
-                user != null ? HomeShell.routeName : OnboardingPage.routeName,
-              ),
-          error: (_, __) => context.go(OnboardingPage.routeName),
-          loading: () {},
-        );
-      });
-    });
+    ref.listen(authStateProvider, (_, __) => _tryNavigate());
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.black,
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(Assets.logo, cacheWidth: 240),
-            SizedBox(height: 16.h),
-            CircularProgressIndicator(color: Colors.black),
-          ],
-        ),
+        child: Image.asset(Assets.logoDark, cacheWidth: 240),
       ),
     );
   }

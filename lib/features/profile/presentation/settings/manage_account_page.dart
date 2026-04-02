@@ -1,7 +1,10 @@
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
+import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
+import 'package:boomerang/features/profile/presentation/widgets/account_switcher_sheet.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -105,13 +108,33 @@ class ManageAccountPage extends ConsumerWidget {
           ),
           SizedBox(height: 16.h),
           Text(
+            'Privacy & Data',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18.sp),
+          ),
+          _Item(
+            icon: Icons.download_outlined,
+            label: 'Download My Data',
+            onTap: () => _requestDataExport(context, ref),
+          ),
+          _Item(
+            icon: Icons.policy_outlined,
+            label: 'Privacy Policy',
+            onTap: () => showPrivacyPolicy(context),
+          ),
+          _Item(
+            icon: Icons.remove_circle_outline,
+            label: 'Withdraw Consent',
+            onTap: () => _withdrawConsent(context, ref),
+          ),
+          SizedBox(height: 16.h),
+          Text(
             'Account Control',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18.sp),
           ),
           _Item(
-            icon: Icons.swap_vert,
-            label: 'Switch to Business Account',
-            onTap: () {},
+            icon: Icons.switch_account_outlined,
+            label: 'Switch Account',
+            onTap: () => showAccountSwitcher(context, ref),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -232,6 +255,98 @@ class ManageAccountPage extends ConsumerWidget {
       },
     );
   }
+}
+
+void _requestDataExport(BuildContext context, WidgetRef ref) {
+  final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+  if (uid == null) return;
+
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Download Your Data'),
+      content: const Text(
+        'We will prepare a copy of your personal data, including your '
+        'profile information, content, and activity history.\n\n'
+        'A download request will be submitted and you will receive '
+        'your data export via email within 30 days, as required by GDPR.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.of(ctx).pop();
+            await ref
+                .read(firestoreProvider)
+                .collection('data_export_requests')
+                .add({
+              'uid': uid,
+              'requestedAt': FieldValue.serverTimestamp(),
+              'status': 'pending',
+              'email': ref.read(firebaseAuthProvider).currentUser?.email ?? '',
+            });
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Data export requested. You\'ll receive it via email.',
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          },
+          child: const Text('Request Export'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _withdrawConsent(BuildContext context, WidgetRef ref) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Withdraw Consent'),
+      content: const Text(
+        'Withdrawing consent means we will stop processing your personal '
+        'data for non-essential purposes.\n\n'
+        'Note: Some data processing is necessary to provide the service. '
+        'To fully remove your data, use the "Delete Account" option.\n\n'
+        'This action does not delete your account.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          onPressed: () async {
+            Navigator.of(ctx).pop();
+            final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+            if (uid == null) return;
+            await ref.read(firestoreProvider).collection('users').doc(uid).set({
+              'consentWithdrawnAt': DateTime.now().toIso8601String(),
+            }, SetOptions(merge: true));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Consent withdrawn successfully.'),
+                ),
+              );
+            }
+          },
+          child: const Text('Withdraw'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Item extends StatelessWidget {

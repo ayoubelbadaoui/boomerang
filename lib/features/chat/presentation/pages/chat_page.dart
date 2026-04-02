@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
@@ -10,6 +11,7 @@ import 'package:boomerang/features/chat/domain/message_entity.dart';
 import 'package:boomerang/features/chat/presentation/widgets/message_bubble.dart';
 import 'package:boomerang/features/chat/presentation/widgets/chat_input_field.dart';
 import 'package:boomerang/features/chat/presentation/widgets/date_separator.dart';
+import 'package:boomerang/features/chat/presentation/widgets/message_actions_sheet.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 
@@ -73,6 +75,93 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
   }
 
+  void _showMessageActions(MessageEntity message, bool isMine) {
+    if (message.isUnsent) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (_) => MessageActionsSheet(
+        message: message,
+        isMine: isMine,
+        onReply: () {
+          ref
+              .read(chatControllerProvider(widget.conversationId).notifier)
+              .setReplyTo(message);
+          _inputKey.currentState?.focusNode.requestFocus();
+        },
+        onUnsend: () {
+          ref
+              .read(chatControllerProvider(widget.conversationId).notifier)
+              .unsendMessage(message.id);
+        },
+      ),
+    );
+  }
+
+  void _scrollToMessage(String messageId) {
+    final chatState =
+        ref.read(chatControllerProvider(widget.conversationId));
+    final index = chatState.messages.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+
+    final items = _buildItemsWithSeparators(chatState.messages);
+    int targetIndex = 0;
+    int msgCount = 0;
+    for (int i = 0; i < items.length; i++) {
+      if (items[i] is MessageEntity) {
+        if (msgCount == index) {
+          targetIndex = i;
+          break;
+        }
+        msgCount++;
+      }
+    }
+
+    final estimatedOffset = targetIndex * 80.0;
+    _scrollController.animateTo(
+      estimatedOffset.clamp(
+        0.0,
+        _scrollController.position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _confirmDeleteChat() {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete chat?'),
+        content: const Text(
+          'This will permanently delete all messages for both users.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed == true) {
+        await ref
+            .read(chatControllerProvider(widget.conversationId).notifier)
+            .deleteConversation();
+        if (mounted) context.pop();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatState =
@@ -80,17 +169,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final currentUser = ref.watch(currentUserProfileProvider).value;
     final uid = currentUser?.uid ?? '';
 
-    final otherUid = _resolveOtherUid(ref, uid);
+    final conversation = _resolveConversation(ref);
+    final otherUid = conversation?.otherParticipantId(uid) ?? '';
     final otherProfile = otherUid.isNotEmpty
         ? ref.watch(userProfileByIdProvider(otherUid)).value
         : null;
 
     return Scaffold(
-      appBar: _ChatAppBar(profile: otherProfile),
+      appBar: _ChatAppBar(
+        profile: otherProfile,
+        onDelete: _confirmDeleteChat,
+      ),
       body: Column(
         children: [
-          if (otherUid.isNotEmpty)
-            _FollowBackBanner(otherUid: otherUid),
+          if (otherUid.isNotEmpty) _FollowBackBanner(otherUid: otherUid),
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -102,6 +194,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 currentUid: uid,
                 isLoadingMore: chatState.isLoadingMore,
                 scrollController: _scrollController,
+                onMessageLongPress: _showMessageActions,
+                onReplyTap: _scrollToMessage,
+                otherProfile: otherProfile,
+                currentProfile: currentUser,
               ),
             ),
           ),
@@ -110,6 +206,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             isSending: chatState.isSending,
             emojiOpen: _emojiOpen,
             onToggleEmoji: _toggleEmoji,
+            replyingTo: chatState.replyingTo,
+            replyToSenderName: _senderNameForReply(
+              chatState.replyingTo,
+              uid,
+              currentUser,
+              otherProfile,
+            ),
+            onClearReply: () => ref
+                .read(
+                    chatControllerProvider(widget.conversationId).notifier)
+                .clearReply(),
             onSendText: (text) => ref
                 .read(
                     chatControllerProvider(widget.conversationId).notifier)
@@ -118,6 +225,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 .read(
                     chatControllerProvider(widget.conversationId).notifier)
                 .sendImageMessage(path),
+            onSendGif: (url) => ref
+                .read(
+                    chatControllerProvider(widget.conversationId).notifier)
+                .sendGifMessage(url),
+            onSendAudio: (path, durationMs) => ref
+                .read(
+                    chatControllerProvider(widget.conversationId).notifier)
+                .sendAudioMessage(path, durationMs),
           ),
           if (_emojiOpen)
             SizedBox(
@@ -163,23 +278,50 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  String _resolveOtherUid(WidgetRef ref, String myUid) {
+  ConversationEntity? _resolveConversation(WidgetRef ref) {
     final conversations =
         ref.watch(conversationsStreamProvider).value ?? [];
-    final conv = conversations.cast<ConversationEntity?>().firstWhere(
+    return conversations.cast<ConversationEntity?>().firstWhere(
           (c) => c?.id == widget.conversationId,
           orElse: () => null,
         );
-    return conv?.otherParticipantId(myUid) ?? '';
   }
+
+  String? _senderNameForReply(
+    MessageEntity? reply,
+    String myUid,
+    UserProfile? me,
+    UserProfile? other,
+  ) {
+    if (reply == null) return null;
+    if (reply.senderId == myUid) return 'You';
+    return other?.fullName ?? other?.nickname ?? '';
+  }
+
+  List<Object> _buildItemsWithSeparators(List<MessageEntity> messages) {
+    final items = <Object>[];
+    for (int i = 0; i < messages.length; i++) {
+      items.add(messages[i]);
+      final isLast = i == messages.length - 1;
+      if (isLast ||
+          !_sameDay(messages[i].createdAt, messages[i + 1].createdAt)) {
+        items.add(messages[i].createdAt);
+      }
+    }
+    return items;
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 // ── App bar ─────────────────────────────────────────────────────────────
 
 class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _ChatAppBar({required this.profile});
+  const _ChatAppBar({required this.profile, required this.onDelete});
 
   final UserProfile? profile;
+  final VoidCallback onDelete;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -204,8 +346,27 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
-        IconButton(icon: const Icon(Icons.phone_outlined), onPressed: () {}),
-        IconButton(icon: const Icon(Icons.more_horiz), onPressed: () {}),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_horiz),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          onSelected: (value) {
+            if (value == 'delete') onDelete();
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline, color: Colors.redAccent),
+                  SizedBox(width: 8),
+                  Text('Delete chat'),
+                ],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -312,12 +473,20 @@ class _MessageList extends StatelessWidget {
     required this.currentUid,
     required this.isLoadingMore,
     required this.scrollController,
+    required this.onMessageLongPress,
+    required this.onReplyTap,
+    this.otherProfile,
+    this.currentProfile,
   });
 
   final List<MessageEntity> messages;
   final String currentUid;
   final bool isLoadingMore;
   final ScrollController scrollController;
+  final void Function(MessageEntity msg, bool isMine) onMessageLongPress;
+  final void Function(String messageId) onReplyTap;
+  final UserProfile? otherProfile;
+  final UserProfile? currentProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -354,17 +523,31 @@ class _MessageList extends StatelessWidget {
           return DateSeparator(date: item);
         }
         final message = item as MessageEntity;
+        final isMine = message.senderId == currentUid;
+
+        String? replySenderName;
+        if (message.hasReply) {
+          if (message.replyToSenderId == currentUid) {
+            replySenderName = 'You';
+          } else {
+            replySenderName =
+                otherProfile?.fullName ?? otherProfile?.nickname ?? '';
+          }
+        }
+
         return MessageBubble(
           message: message,
-          isMine: message.senderId == currentUid,
+          isMine: isMine,
+          replyToSenderName: replySenderName,
+          onLongPress: () => onMessageLongPress(message, isMine),
+          onReplyTap: message.hasReply
+              ? () => onReplyTap(message.replyToMessageId!)
+              : null,
         );
       },
     );
   }
 
-  /// Interleaves date separators between messages from different days.
-  /// Messages are newest-first; separators appear *after* the last message
-  /// of each day (which is visually *above* in a reversed list).
   List<Object> _buildItemsWithSeparators() {
     final items = <Object>[];
     for (int i = 0; i < messages.length; i++) {

@@ -10,6 +10,7 @@ class ConversationDto {
     required this.lastMessageSenderId,
     required this.unreadCount,
     required this.createdAt,
+    this.pinnedBy = const [],
   });
 
   final String id;
@@ -19,6 +20,7 @@ class ConversationDto {
   final String lastMessageSenderId;
   final Map<String, int> unreadCount;
   final Timestamp createdAt;
+  final List<String> pinnedBy;
 
   factory ConversationDto.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -35,6 +37,7 @@ class ConversationDto {
         (key, value) => MapEntry(key, (value as num).toInt()),
       ),
       createdAt: data['createdAt'] as Timestamp? ?? Timestamp.now(),
+      pinnedBy: List<String>.from(data['pinnedBy'] ?? []),
     );
   }
 
@@ -47,6 +50,7 @@ class ConversationDto {
       lastMessageSenderId: lastMessageSenderId,
       unreadCount: unreadCount,
       createdAt: createdAt.toDate(),
+      pinnedBy: pinnedBy,
     );
   }
 }

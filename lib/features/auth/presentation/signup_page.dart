@@ -1,6 +1,8 @@
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/core/widgets/ui.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -21,6 +23,8 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   final _name = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
+  bool _acceptedTerms = false;
+  bool _acceptedPrivacy = false;
 
   @override
   void dispose() {
@@ -99,11 +103,49 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     return null;
                   },
                 ),
-                SizedBox(height: 24.h),
+                SizedBox(height: 16.h),
+                _ConsentCheckbox(
+                  value: _acceptedTerms,
+                  onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+                  label: 'I agree to the ',
+                  linkText: 'Terms of Service',
+                  onLinkTap: () => showTermsOfService(context),
+                ),
+                SizedBox(height: 4.h),
+                _ConsentCheckbox(
+                  value: _acceptedPrivacy,
+                  onChanged: (v) =>
+                      setState(() => _acceptedPrivacy = v ?? false),
+                  label: 'I agree to the ',
+                  linkText: 'Privacy Policy',
+                  onLinkTap: () => showPrivacyPolicy(context),
+                ),
+                if (!_acceptedTerms || !_acceptedPrivacy)
+                  Padding(
+                    padding: EdgeInsets.only(top: 4.h, left: 12.w),
+                    child: Text(
+                      'You must accept both to create an account',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: Colors.black38,
+                      ),
+                    ),
+                  ),
+                SizedBox(height: 16.h),
                 PrimaryButton(
                   loading: state.loading,
                   onPressed: () async {
                     if (!_formKey.currentState!.validate()) return;
+                    if (!_acceptedTerms || !_acceptedPrivacy) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please accept the Terms of Service and Privacy Policy',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
 
                     final prevUser = ref.read(firebaseAuthProvider).currentUser;
                     final prevProfile =
@@ -137,6 +179,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     if (!mounted) return;
                     final result = ref.read(authControllerProvider);
                     if (result.error == null) {
+                      _storeConsent(ref);
                       context.push('/setup/flow');
                     }
                   },
@@ -182,6 +225,84 @@ class _SignupPageState extends ConsumerState<SignupPage> {
           ),
         ),
       ),
+    );
+  }
+
+  void _storeConsent(WidgetRef ref) {
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid == null) return;
+    ref.read(firestoreProvider).collection('users').doc(uid).set({
+      'consentTermsAt': DateTime.now().toIso8601String(),
+      'consentPrivacyAt': DateTime.now().toIso8601String(),
+      'consentTermsVersion': '1.0',
+      'consentPrivacyVersion': '1.0',
+    }, SetOptions(merge: true));
+  }
+}
+
+class _ConsentCheckbox extends StatelessWidget {
+  const _ConsentCheckbox({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    required this.linkText,
+    required this.onLinkTap,
+  });
+
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  final String label;
+  final String linkText;
+  final VoidCallback onLinkTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 28.r,
+          height: 28.r,
+          child: Checkbox(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.black,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4.r),
+            ),
+          ),
+        ),
+        SizedBox(width: 8.w),
+        Flexible(
+          child: GestureDetector(
+            onTap: () => onChanged(!value),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: label,
+                    style: TextStyle(fontSize: 13.sp, color: Colors.black54),
+                  ),
+                  WidgetSpan(
+                    child: GestureDetector(
+                      onTap: onLinkTap,
+                      child: Text(
+                        linkText,
+                        style: TextStyle(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

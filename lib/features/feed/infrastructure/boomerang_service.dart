@@ -75,6 +75,7 @@ class BoomerangService {
       userAvatar: user['avatarUrl'] as String?,
       videoUrl: videoUrl,
       imageUrl: posters.first,
+      ownerIsPrivate: (user['isPrivate'] ?? false) as bool,
     );
     return id;
   }

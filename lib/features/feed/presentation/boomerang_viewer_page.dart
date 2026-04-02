@@ -21,6 +21,8 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _controller;
   bool _showHeart = false;
+  bool _userPaused = false;
+  bool _showPauseIcon = false;
   late final AnimationController _anim;
 
   @override
@@ -55,6 +57,24 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     super.dispose();
   }
 
+  void _onTap() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    final wasPlaying = c.value.isPlaying;
+    if (wasPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+    setState(() {
+      _userPaused = wasPlaying;
+      _showPauseIcon = true;
+    });
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _showPauseIcon = false);
+    });
+  }
+
   void _onDoubleTap() async {
     setState(() => _showHeart = true);
     _anim.forward(from: 0);
@@ -78,6 +98,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
         children: [
           Positioned.fill(
             child: GestureDetector(
+              onTap: _onTap,
               onDoubleTap: _onDoubleTap,
               behavior: HitTestBehavior.opaque,
               child:
@@ -110,6 +131,25 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                   Icons.favorite,
                   color: Colors.white.fade(0.9),
                   size: 100.r,
+                ),
+              ),
+            ),
+          if (_showPauseIcon)
+            Center(
+              child: AnimatedOpacity(
+                opacity: _showPauseIcon ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  padding: EdgeInsets.all(16.r),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _userPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                    color: Colors.white,
+                    size: 48.r,
+                  ),
                 ),
               ),
             ),

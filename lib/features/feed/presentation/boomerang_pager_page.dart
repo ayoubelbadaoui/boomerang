@@ -1,5 +1,6 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -60,9 +61,13 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
       final snap = await ref
           .read(boomerangRepoProvider)
           .fetchBoomerangsPage(startAfter: _last, limit: 10);
+      final blockedSet =
+          ref.read(blockedUsersProvider).value?.toSet() ?? const <String>{};
       final items =
           snap.docs
-              .where((d) => d.id != widget.initialId)
+              .where((d) =>
+                  d.id != widget.initialId &&
+                  !blockedSet.contains((d.data()['userId'] ?? '') as String))
               .map((d) => (id: d.id, data: d.data()))
               .toList();
       setState(() {
@@ -205,6 +210,8 @@ class _PostPageWithTicker extends ConsumerStatefulWidget {
 class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
     with SingleTickerProviderStateMixin {
   bool _showHeart = false;
+  bool _userPaused = false;
+  bool _showPauseIcon = false;
   late final AnimationController _anim;
 
   @override
@@ -220,6 +227,24 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   void dispose() {
     _anim.dispose();
     super.dispose();
+  }
+
+  void _onTap() {
+    final c = widget.controller;
+    if (c == null || !c.value.isInitialized) return;
+    final wasPlaying = c.value.isPlaying;
+    if (wasPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+    setState(() {
+      _userPaused = wasPlaying;
+      _showPauseIcon = true;
+    });
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _showPauseIcon = false);
+    });
   }
 
   void _onDoubleTap() async {
@@ -247,6 +272,7 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
       children: [
         Positioned.fill(
           child: GestureDetector(
+            onTap: _onTap,
             onDoubleTap: _onDoubleTap,
             behavior: HitTestBehavior.opaque,
             child: Stack(
@@ -293,6 +319,25 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
                 Icons.favorite,
                 color: Colors.white.fade(0.9),
                 size: 100.r,
+              ),
+            ),
+          ),
+        if (_showPauseIcon)
+          Center(
+            child: AnimatedOpacity(
+              opacity: _showPauseIcon ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: Container(
+                padding: EdgeInsets.all(16.r),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _userPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                  color: Colors.white,
+                  size: 48.r,
+                ),
               ),
             ),
           ),

@@ -111,7 +111,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           body: _tabs[_currentIndex],
 
           bottomNavigationBar: Padding(
-            padding: EdgeInsets.only(bottom: 8.h, top: 8.h),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.paddingOf(context).bottom + 4.h,
+              top: 8.h,
+            ),
             child: SizedBox(
               height: 72.h,
               child: Row(

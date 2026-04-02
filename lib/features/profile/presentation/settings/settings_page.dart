@@ -9,6 +9,7 @@ import 'package:boomerang/features/profile/presentation/settings/qr_code_page.da
 import 'package:boomerang/features/profile/presentation/settings/help_center_page.dart';
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
+import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -109,9 +110,18 @@ class SettingsPage extends ConsumerWidget {
                       ),
                 ),
                 _Section(title: 'Safety Center', onTap: () {}),
-                _Section(title: 'Community Guidelines', onTap: () {}),
-                _Section(title: 'Terms of Services', onTap: () {}),
-                _Section(title: 'Privacy Policy', onTap: () {}),
+                _Section(
+                  title: 'Community Guidelines',
+                  onTap: () => showCommunityGuidelines(context),
+                ),
+                _Section(
+                  title: 'Terms of Service',
+                  onTap: () => showTermsOfService(context),
+                ),
+                _Section(
+                  title: 'Privacy Policy',
+                  onTap: () => showPrivacyPolicy(context),
+                ),
                 SizedBox(height: 16.h),
                 ListTile(
                   contentPadding: EdgeInsets.zero,

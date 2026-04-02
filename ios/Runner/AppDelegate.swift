@@ -3,6 +3,7 @@ import UIKit
 import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
+import AVFoundation
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -10,6 +11,9 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Baseline: don't interrupt other audio (music, calls, etc.)
+    setAmbientAudioSession()
+
     // Set up FCM (Firebase is initialized in Flutter main.dart)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self
@@ -33,6 +37,29 @@ import UserNotifications
     application.registerForRemoteNotifications()
     
     GeneratedPluginRegistrant.register(with: self)
+
+    // MethodChannel so Flutter can restore the audio session after the
+    // camera plugin overrides it during CameraController.initialize().
+    let controller = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(
+      name: "com.boomerang/audio_session",
+      binaryMessenger: controller.binaryMessenger
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "setAmbient":
+        self?.setAmbientAudioSession()
+        result(true)
+      case "deactivate":
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        self?.setAmbientAudioSession()
+        result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
   
@@ -70,5 +97,16 @@ import UserNotifications
     withCompletionHandler completionHandler: @escaping () -> Void) {
     let userInfo = response.notification.request.content.userInfo
     completionHandler()
+  }
+
+  /// Sets AVAudioSession to .ambient so the app mixes with background music
+  /// and never interrupts phone calls.
+  private func setAmbientAudioSession() {
+    let session = AVAudioSession.sharedInstance()
+    do {
+      try session.setCategory(.ambient)
+    } catch {
+      print("Audio session error: \(error.localizedDescription)")
+    }
   }
 }

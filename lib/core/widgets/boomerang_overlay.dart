@@ -1,5 +1,6 @@
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
+import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,8 +51,8 @@ class BoomerangOverlay extends ConsumerWidget {
                   'Reels',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 24.sp,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const Spacer(),
@@ -74,7 +75,7 @@ class BoomerangOverlay extends ConsumerWidget {
                 '$likes',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 11.sp,
+                  fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -93,7 +94,7 @@ class BoomerangOverlay extends ConsumerWidget {
                     '$count',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 11.sp,
+                      fontSize: 13.sp,
                       fontWeight: FontWeight.w600,
                     ),
                   );
@@ -138,7 +139,13 @@ class BoomerangOverlay extends ConsumerWidget {
                 ),
               SizedBox(height: 16.h),
               _ActionBubble(
-                onTap: () => _showShareSheet(context, video, handle),
+                onTap: () => _showShareSheet(
+                  context,
+                  video,
+                  handle,
+                  reportedUid: userId,
+                  boomerangId: boomerangId,
+                ),
                 child: Icon(Icons.send_outlined,
                     color: Colors.white, size: 24.r),
               ),
@@ -185,7 +192,7 @@ class BoomerangOverlay extends ConsumerWidget {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 14.sp,
+                        fontSize: 16.sp,
                       ),
                     ),
                   ],
@@ -310,7 +317,13 @@ void _showCommentsSheet(BuildContext context, String boomerangId) {
   );
 }
 
-void _showShareSheet(BuildContext context, String? videoUrl, String handle) {
+void _showShareSheet(
+  BuildContext context,
+  String? videoUrl,
+  String handle, {
+  required String reportedUid,
+  String? boomerangId,
+}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -367,8 +380,10 @@ void _showShareSheet(BuildContext context, String? videoUrl, String handle) {
                     label: 'Report',
                     onTap: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Reported')),
+                      showReportSheet(
+                        context,
+                        reportedUid: reportedUid,
+                        boomerangId: boomerangId,
                       );
                     },
                   ),

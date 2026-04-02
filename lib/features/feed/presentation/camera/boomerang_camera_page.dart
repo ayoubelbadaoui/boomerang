@@ -6,6 +6,7 @@ import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_pag
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 // ---------------------------------------------------------------------------
 // Filter definitions
@@ -64,6 +65,8 @@ class BoomerangCameraPage extends StatefulWidget {
 
 class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     with TickerProviderStateMixin {
+  static const _audioSession = MethodChannel('com.boomerang/audio_session');
+
   CameraController? _cam;
   List<CameraDescription> _cameras = [];
   int _camIdx = 0;
@@ -137,11 +140,28 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       _minZoom = await c.getMinZoomLevel();
       _maxZoom = await c.getMaxZoomLevel();
       _zoom = _minZoom;
-      await c.setFlashMode(_flash);
+      if (desc.lensDirection == CameraLensDirection.back) {
+        await c.setFlashMode(_flash);
+      } else {
+        await c.setFlashMode(FlashMode.off);
+      }
       if (mounted) setState(() {});
+      if (Platform.isIOS) await _restoreAudioSession();
     } catch (e) {
       debugPrint('Camera init error: $e');
     }
+  }
+
+  Future<void> _restoreAudioSession() async {
+    try {
+      await _audioSession.invokeMethod('setAmbient');
+    } catch (_) {}
+  }
+
+  Future<void> _deactivateAudioSession() async {
+    try {
+      await _audioSession.invokeMethod('deactivate');
+    } catch (_) {}
   }
 
   @override
@@ -157,44 +177,33 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     _pulseAnim.dispose();
     _zoomBadgeAnim.dispose();
     _cam?.dispose();
+    if (Platform.isIOS) _deactivateAudioSession();
     super.dispose();
   }
 
   // -- Flash ---------------------------------------------------------------
+  // Video recording uses FlashMode.torch (continuous light), not .always/.auto
+  // which only fire for still captures. Front camera has no hardware flash —
+  // we simulate it with a white screen overlay at max brightness.
+
+  bool get _isFrontCamera =>
+      _cameras.isNotEmpty &&
+      _cameras[_camIdx].lensDirection == CameraLensDirection.front;
 
   void _cycleFlash() {
-    const modes = [FlashMode.off, FlashMode.auto, FlashMode.always];
+    const modes = [FlashMode.off, FlashMode.torch];
     final next = modes[(modes.indexOf(_flash) + 1) % modes.length];
     setState(() => _flash = next);
-    _cam?.setFlashMode(next);
+    if (!_isFrontCamera) {
+      _cam?.setFlashMode(next);
+    }
     HapticFeedback.lightImpact();
   }
 
-  String get _flashLabel {
-    switch (_flash) {
-      case FlashMode.off:
-        return 'Off';
-      case FlashMode.auto:
-        return 'Auto';
-      case FlashMode.always:
-        return 'On';
-      default:
-        return '';
-    }
-  }
+  String get _flashLabel => _flash == FlashMode.torch ? 'On' : 'Off';
 
-  IconData get _flashIcon {
-    switch (_flash) {
-      case FlashMode.off:
-        return Icons.flash_off_rounded;
-      case FlashMode.auto:
-        return Icons.flash_auto_rounded;
-      case FlashMode.always:
-        return Icons.flash_on_rounded;
-      default:
-        return Icons.flash_off_rounded;
-    }
-  }
+  IconData get _flashIcon =>
+      _flash == FlashMode.torch ? Icons.flash_on_rounded : Icons.flash_off_rounded;
 
   // -- Flip ----------------------------------------------------------------
 
@@ -306,6 +315,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     HapticFeedback.mediumImpact();
     try {
       final xfile = await _cam!.stopVideoRecording();
+      if (Platform.isIOS) await _restoreAudioSession();
       _navigating = true;
       if (!mounted) return;
       final selectedFilter = _filters[_filterIdx];
@@ -325,6 +335,29 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     } catch (e) {
       _navigating = false;
       debugPrint('Record stop error: $e');
+    }
+  }
+
+  // -- Gallery import ------------------------------------------------------
+
+  Future<void> _showGallerySheet() async {
+    if (_recording || _navigating) return;
+    HapticFeedback.mediumImpact();
+
+    final picked = await showModalBottomSheet<File>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _GalleryImportSheet(),
+    );
+
+    if (picked != null && mounted) {
+      _navigating = true;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BoomerangEditorPage(inputFile: picked),
+        ),
+      );
+      _navigating = false;
     }
   }
 
@@ -361,6 +394,18 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                 onPointerUp: _onPointerUp,
                 onPointerCancel: _onPointerCancel,
                 child: const SizedBox.expand(),
+              ),
+            ),
+
+          // Front camera "screen flash" — bright white overlay while recording
+          if (_recording && _flash == FlashMode.torch && _isFrontCamera)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: 0.7,
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(color: Colors.white),
+                ),
               ),
             ),
 
@@ -542,7 +587,11 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(width: 52),
+                      _GlassButton(
+                        icon: Icons.photo_library_rounded,
+                        size: 52,
+                        onTap: _showGallerySheet,
+                      ),
                       _RecordButton(
                         progress: _progressAnim,
                         pulse: _pulseAnim,
@@ -902,4 +951,133 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RingPainter old) =>
       old.progress != progress || old.recording != recording || old.thickness != thickness;
+}
+
+// ---------------------------------------------------------------------------
+// Bottom-sheet for gallery import (max 1.5 s)
+// ---------------------------------------------------------------------------
+
+class _GalleryImportSheet extends StatefulWidget {
+  const _GalleryImportSheet();
+
+  @override
+  State<_GalleryImportSheet> createState() => _GalleryImportSheetState();
+}
+
+class _GalleryImportSheetState extends State<_GalleryImportSheet> {
+  bool _picking = false;
+
+  static const _maxDuration = Duration(milliseconds: 1500);
+
+  Future<void> _pickVideo() async {
+    if (_picking) return;
+    setState(() => _picking = true);
+    try {
+      final picker = ImagePicker();
+      final xfile = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: _maxDuration,
+      );
+      if (xfile == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      if (!mounted) return;
+      Navigator.pop(context, File(xfile.path));
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not import video: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pad = MediaQuery.paddingOf(context);
+    return Container(
+      padding: EdgeInsets.fromLTRB(24, 20, 24, pad.bottom + 20),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Import from Gallery',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Select a video up to 1.5 seconds long.',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _picking ? null : _pickVideo,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                disabledBackgroundColor: Colors.white38,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              icon: _picking
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black54,
+                      ),
+                    )
+                  : const Icon(Icons.video_library_rounded),
+              label: Text(_picking ? 'Opening…' : 'Choose Video'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white54,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('Cancel'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

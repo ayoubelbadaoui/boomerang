@@ -32,26 +32,33 @@ class BoomerangProcessor {
     _assertExists(inputPath);
     final outPath = await _tmpPath('poster', 'jpg');
 
-    final vf = [
+    Future<bool> _tryPoster(String vf) async {
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        '-ss', '0.1',
+        '-i', inputPath,
+        '-vf', vf,
+        '-frames:v', '1',
+        '-q:v', '2',
+        outPath,
+      ]);
+      return ReturnCode.isSuccess(await session.getReturnCode()) &&
+          File(outPath).existsSync();
+    }
+
+    final fullVf = [
       'scale=$targetWidth:-1',
       if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
     ].join(',');
 
-    final session = await FFmpegKit.executeWithArguments([
-      '-y',
-      '-ss', '0.1',
-      '-i', inputPath,
-      '-vf', vf,
-      '-frames:v', '1',
-      '-q:v', '2',
-      outPath,
-    ]);
-    if (!ReturnCode.isSuccess(await session.getReturnCode()) ||
-        !File(outPath).existsSync()) {
-      final logs = await session.getAllLogsAsString();
-      throw Exception('Poster failed\n$logs');
+    if (await _tryPoster(fullVf)) return outPath;
+
+    // Retry without color filter if it failed
+    if (videoFilter != null && videoFilter.isNotEmpty) {
+      if (await _tryPoster('scale=$targetWidth:-1')) return outPath;
     }
-    return outPath;
+
+    throw Exception('Poster generation failed');
   }
 
   // ---------------------------------------------------------------------------
@@ -61,21 +68,25 @@ class BoomerangProcessor {
   Future<String> mirrorInput(String inputPath) async {
     _assertExists(inputPath);
     final outPath = await _tmpPath('mirrored', 'mp4');
-    for (final enc in _encoderCandidates) {
-      final session = await FFmpegKit.executeWithArguments([
-        '-y',
-        '-noautorotate',
-        '-i', inputPath,
-        '-vf', 'hflip',
-        '-metadata:s:v', 'rotate=0',
-        '-an',
-        ...enc,
-        '-movflags', '+faststart',
-        outPath,
-      ]);
-      if (ReturnCode.isSuccess(await session.getReturnCode()) &&
-          await _hasVideoContent(outPath)) {
-        return outPath;
+
+    // Try with -noautorotate first, then without, for each encoder
+    for (final noAutoRotate in [true, false]) {
+      for (final enc in _encoderCandidates) {
+        final session = await FFmpegKit.executeWithArguments([
+          '-y',
+          if (noAutoRotate) '-noautorotate',
+          '-i', inputPath,
+          '-vf', 'hflip',
+          if (noAutoRotate) ...['-metadata:s:v', 'rotate=0'],
+          '-an',
+          ...enc,
+          '-movflags', '+faststart',
+          outPath,
+        ]);
+        if (ReturnCode.isSuccess(await session.getReturnCode()) &&
+            await _hasVideoContent(outPath)) {
+          return outPath;
+        }
       }
     }
     return inputPath;
@@ -169,24 +180,39 @@ class BoomerangProcessor {
       // fails with VFR timestamps).
       final maxFrames = (segmentSeconds * 60).ceil();
       final framePattern = '${tempDir.path}/$framePrefix%05d.jpg';
-      final vfParts = <String>[
-        if (scaleWidth != null) 'scale=$scaleWidth:-2',
-        if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
-      ];
-      final extractArgs = <String>[
+
+      List<String> _buildExtractArgs(String? vf) => <String>[
         '-y',
         '-ss', '0',
         '-i', inputPath,
         '-frames:v', '$maxFrames',
         '-vsync', '0',
-        if (vfParts.isNotEmpty) ...['-vf', vfParts.join(',')],
+        if (vf != null && vf.isNotEmpty) ...['-vf', vf],
         '-q:v', '2',
         framePattern,
       ];
 
-      final extractSession =
-          await FFmpegKit.executeWithArguments(extractArgs);
-      final extractRc = await extractSession.getReturnCode();
+      final vfParts = <String>[
+        if (scaleWidth != null) 'scale=$scaleWidth:-2',
+        if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
+      ];
+      final fullVf = vfParts.isNotEmpty ? vfParts.join(',') : null;
+
+      var extractSession = await FFmpegKit.executeWithArguments(
+        _buildExtractArgs(fullVf),
+      );
+      var extractRc = await extractSession.getReturnCode();
+
+      // If filter-based extraction fails, retry without color filter
+      if (!ReturnCode.isSuccess(extractRc) && videoFilter != null && videoFilter.isNotEmpty) {
+        _cleanupByPrefix(tempDir, framePrefix);
+        final fallbackVf = scaleWidth != null ? 'scale=$scaleWidth:-2' : null;
+        extractSession = await FFmpegKit.executeWithArguments(
+          _buildExtractArgs(fallbackVf),
+        );
+        extractRc = await extractSession.getReturnCode();
+      }
+
       if (!ReturnCode.isSuccess(extractRc)) {
         final logs = await extractSession.getAllLogsAsString();
         throw Exception('Frame extraction failed (${extractRc?.getValue()})\n$logs');

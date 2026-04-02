@@ -14,6 +14,11 @@ abstract class ChatRepo {
     required String senderId,
     required String text,
     required MessageType type,
+    String? replyToMessageId,
+    String? replyToText,
+    String? replyToSenderId,
+    MessageType? replyToType,
+    int? audioDurationMs,
   });
 
   Future<List<MessageEntity>> loadMoreMessages(
@@ -27,4 +32,23 @@ abstract class ChatRepo {
   Future<String> getOrCreateConversation(List<String> participantIds);
 
   Future<String> uploadChatImage(String conversationId, String localPath);
+
+  Future<String> uploadChatAudio(String conversationId, String localPath);
+
+  Future<void> unsendMessage({
+    required String conversationId,
+    required String messageId,
+  });
+
+  Future<void> pinConversation({
+    required String conversationId,
+    required String userId,
+  });
+
+  Future<void> unpinConversation({
+    required String conversationId,
+    required String userId,
+  });
+
+  Future<void> deleteConversation({required String conversationId});
 }

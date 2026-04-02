@@ -14,8 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:boomerang/core/utils/avatar_crop.dart';
 import 'dart:developer' show log;
 
 final profileSectionIndexProvider = StateProvider<int>((ref) => 0);
@@ -339,10 +339,8 @@ Future<void> _pickAvatarAndUpdate(
   required ImageSource source,
 }) async {
   try {
-    final picker = ImagePicker();
-    final res = await picker.pickImage(source: source, imageQuality: 90);
-    if (res == null) return;
-    final file = File(res.path);
+    final file = await pickAndCropAvatar(source);
+    if (file == null) return;
     final url = await ref
         .read(profileControllerProvider.notifier)
         .uploadAvatar(file);
