@@ -1,7 +1,6 @@
 import { admin, db } from '../infrastructure/firebase';
 import { NotificationPayload } from '../domain/notificationTypes';
 
-/** Removes keys whose value is undefined so Firestore doesn't reject the write. */
 function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined),
@@ -9,17 +8,13 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
 }
 
 /**
- * Writes a notification item to the canonical path watched by push delivery:
- * notifications/{userId}/items/{itemId}
+ * Writes a single notification doc to users/{userId}/notifications.
+ * The onNotificationCreated trigger watches this path for push delivery.
  */
 export async function enqueueNotification(targetUserId: string, payload: NotificationPayload): Promise<void> {
-  const canonical = db.collection('notifications').doc(targetUserId).collection('items');
   const createdAt = payload.createdAt ?? admin.firestore.FieldValue.serverTimestamp();
 
-  const canonicalItem = stripUndefined({ ...payload, createdAt, read: false });
-  await canonical.add(canonicalItem);
-
-  const legacyItem = stripUndefined({
+  const item = stripUndefined({
     type: payload.type,
     senderId: payload.actorUserId ?? '',
     actorUserId: payload.actorUserId,
@@ -35,6 +30,5 @@ export async function enqueueNotification(targetUserId: string, payload: Notific
     createdAt,
   });
 
-  const legacyRef = db.collection('users').doc(targetUserId).collection('notifications');
-  await legacyRef.add(legacyItem);
+  await db.collection('users').doc(targetUserId).collection('notifications').add(item);
 }

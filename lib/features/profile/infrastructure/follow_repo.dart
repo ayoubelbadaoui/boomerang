@@ -116,6 +116,13 @@ class FollowRepo {
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
+    batch.update(_fs.collection('users').doc(me), {
+      'followingCount': FieldValue.increment(1),
+    });
+    batch.update(_fs.collection('users').doc(targetUserId), {
+      'followersCount': FieldValue.increment(1),
+    });
+
     await batch.commit();
 
     // Push notification is handled server-side by Cloud Functions
@@ -237,6 +244,12 @@ class FollowRepo {
         .collection('users')
         .doc(me);
     batch.delete(followersRef);
+    batch.update(_fs.collection('users').doc(me), {
+      'followingCount': FieldValue.increment(-1),
+    });
+    batch.update(_fs.collection('users').doc(targetUserId), {
+      'followersCount': FieldValue.increment(-1),
+    });
     await batch.commit();
   }
 

@@ -44,20 +44,6 @@ class BoomerangRepo {
     });
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchBoomerangs() {
-    return _fs
-        .collection('boomerangs')
-        .orderBy('createdAt', descending: true)
-        .snapshots();
-  }
-
-  Future<QuerySnapshot<Map<String, dynamic>>> fetchBoomerangsOnce() {
-    return _fs
-        .collection('boomerangs')
-        .orderBy('createdAt', descending: true)
-        .get();
-  }
-
   Future<QuerySnapshot<Map<String, dynamic>>> fetchBoomerangsPage({
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
     int limit = 20,
@@ -70,6 +56,81 @@ class BoomerangRepo {
       q = q.startAfterDocument(startAfter);
     }
     return q.get();
+  }
+
+  /// Paginated fetch for the home feed: only boomerangs by the given userIds.
+  /// Firestore `whereIn` supports up to 30 values, so we batch if needed
+  /// and merge results sorted by createdAt descending.
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      fetchFollowingFeedPage({
+    required Set<String> followingIds,
+    required String myUid,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) async {
+    final allIds = {...followingIds, myUid};
+    if (allIds.isEmpty) return [];
+
+    final chunks = <List<String>>[];
+    final idList = allIds.toList();
+    for (var i = 0; i < idList.length; i += 30) {
+      chunks.add(idList.sublist(i, i + 30 > idList.length ? idList.length : i + 30));
+    }
+
+    final allDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    for (final chunk in chunks) {
+      Query<Map<String, dynamic>> q = _fs
+          .collection('boomerangs')
+          .where('userId', whereIn: chunk)
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+      if (startAfter != null) {
+        q = q.startAfterDocument(startAfter);
+      }
+      final snap = await q.get();
+      allDocs.addAll(snap.docs);
+    }
+
+    if (chunks.length > 1) {
+      allDocs.sort((a, b) {
+        final aT = a.data()['createdAt'] as Timestamp?;
+        final bT = b.data()['createdAt'] as Timestamp?;
+        if (aT == null && bT == null) return 0;
+        if (aT == null) return 1;
+        if (bT == null) return -1;
+        return bT.compareTo(aT);
+      });
+    }
+
+    return allDocs.take(limit).toList();
+  }
+
+  /// Paginated fetch for discover: only public boomerangs.
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchPublicBoomerangsPage({
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) {
+    Query<Map<String, dynamic>> q = _fs
+        .collection('boomerangs')
+        .where('ownerIsPrivate', isNotEqualTo: true)
+        .orderBy('ownerIsPrivate')
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    if (startAfter != null) {
+      q = q.startAfterDocument(startAfter);
+    }
+    return q.get();
+  }
+
+  /// Stream for discover: only public boomerangs.
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchPublicBoomerangs() {
+    return _fs
+        .collection('boomerangs')
+        .where('ownerIsPrivate', isNotEqualTo: true)
+        .orderBy('ownerIsPrivate')
+        .orderBy('createdAt', descending: true)
+        .limit(100)
+        .snapshots();
   }
 
   /// Paginated fetch for a specific user's posts
@@ -96,20 +157,36 @@ class BoomerangRepo {
     String? actorAvatar,
   }) async {
     final ref = _fs.collection('boomerangs').doc(boomerangId);
+    String? ownerId;
+    bool? wasLiked;
     await _fs.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) return;
       final data = snap.data() as Map<String, dynamic>;
+      ownerId = data['userId'] as String?;
       final List likedBy = (data['likedBy'] as List?) ?? <String>[];
-      final bool isLiked = likedBy.contains(userId);
+      wasLiked = likedBy.contains(userId);
       tx.update(ref, {
         'likedBy':
-            isLiked
+            wasLiked!
                 ? FieldValue.arrayRemove([userId])
                 : FieldValue.arrayUnion([userId]),
-        'likes': FieldValue.increment(isLiked ? -1 : 1),
+        'likes': FieldValue.increment(wasLiked! ? -1 : 1),
       });
     });
+    if (wasLiked != null) {
+      final likeRef = _fs.collection('users').doc(userId).collection('likes').doc(boomerangId);
+      if (wasLiked!) {
+        await likeRef.delete();
+      } else {
+        await likeRef.set({'createdAt': FieldValue.serverTimestamp()});
+      }
+    }
+    if (ownerId != null && ownerId!.isNotEmpty && wasLiked != null) {
+      await _fs.collection('users').doc(ownerId).update({
+        'totalLikes': FieldValue.increment(wasLiked! ? -1 : 1),
+      });
+    }
     // Push notification is handled server-side by Cloud Functions
     // (onBoomerangLikeUpdated trigger).
   }
@@ -122,6 +199,7 @@ class BoomerangRepo {
     String? imageUrl,
     String? caption,
     List<String>? hashtags,
+    bool ownerIsPrivate = false,
   }) async {
     // Normalize hashtags: lowercase, strip leading '#', drop empties
     final normalizedTags =
@@ -155,10 +233,14 @@ class BoomerangRepo {
       'imageUrl': imageUrl,
       if (caption != null) 'caption': caption,
       if (normalizedTags.isNotEmpty) 'hashtags': normalizedTags,
+      'ownerIsPrivate': ownerIsPrivate,
       'likes': 0,
       'likedBy': <String>[],
       'commentsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
+    });
+    await _fs.collection('users').doc(userId).update({
+      'boomerangsCount': FieldValue.increment(1),
     });
     // Increment hashtags usage counters (best-effort)
     if (normalizedTags.isNotEmpty) {

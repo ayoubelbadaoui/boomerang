@@ -1,4 +1,5 @@
 import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -150,6 +151,8 @@ class _UsersSearchList extends ConsumerWidget {
     if (q.isEmpty) {
       return const Center(child: Text('Search users by name or @handle'));
     }
+    final blockedSet =
+        ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     return FutureBuilder(
       future: ref
           .read(userSearchRepoProvider)
@@ -158,7 +161,11 @@ class _UsersSearchList extends ConsumerWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data!;
+        final allDocs = snapshot.data!;
+        final docs = allDocs.where((d) {
+          if (blockedSet.contains(d.id)) return false;
+          return true;
+        }).toList();
         if (docs.isEmpty) return const Center(child: Text('No users found'));
         return ListView.separated(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
@@ -218,14 +225,23 @@ class _BmgGrid extends ConsumerWidget {
     final stream =
         isHashtag
             ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
-            : ref.watch(boomerangRepoProvider).watchBoomerangs();
+            : ref.watch(boomerangRepoProvider).watchPublicBoomerangs();
+    final blockedSet =
+        ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     return StreamBuilder(
       stream: stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data!.docs;
+        final allDocs = snapshot.data!.docs;
+        final docs = allDocs.where((d) {
+          final data = d.data();
+          final uid = (data['userId'] ?? '') as String;
+          if (blockedSet.contains(uid)) return false;
+          if (data['ownerIsPrivate'] == true) return false;
+          return true;
+        }).toList();
         // Warm-cache first page posters once per snapshot.
         final snapHash = docs.length.hashCode ^ (docs.isNotEmpty ? docs.first.id.hashCode : 0);
         if (snapHash != _lastWarmedHash) {

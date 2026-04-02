@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:boomerang/core/utils/color_opacity.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
+import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -13,7 +14,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
-// import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
@@ -46,12 +46,12 @@ class _PaginatedBoomerangListState
   bool _loading = false;
   bool _hasMore = true;
   bool _refreshing = false;
+  bool _initialFollowingLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onScroll);
-    _fetchNext();
   }
 
   @override
@@ -72,21 +72,27 @@ class _PaginatedBoomerangListState
 
   Future<void> _fetchNext() async {
     if (_loading || !_hasMore) return;
+    final me = ref.read(currentUserProfileProvider).value;
+    final followingIds = ref.read(followingIdsProvider).value;
+    if (me == null || followingIds == null) return;
+
     setState(() => _loading = true);
     try {
-      final snap = await ref
+      final docs = await ref
           .read(boomerangRepoProvider)
-          .fetchBoomerangsPage(startAfter: _last, limit: 20);
-      debugPrint(
-        'feed: fetched page ${snap.docs.length} (hasMore=${snap.docs.length == 20})',
-      );
+          .fetchFollowingFeedPage(
+            followingIds: followingIds,
+            myUid: me.uid,
+            startAfter: _last,
+            limit: 20,
+          );
       if (mounted) {
         setState(() {
-          _docs.addAll(snap.docs);
-          if (snap.docs.isNotEmpty) {
-            _last = snap.docs.last;
+          _docs.addAll(docs);
+          if (docs.isNotEmpty) {
+            _last = docs.last;
           }
-          if (snap.docs.length < 20) {
+          if (docs.length < 20) {
             _hasMore = false;
           }
         });
@@ -103,7 +109,6 @@ class _PaginatedBoomerangListState
       _last = null;
       _hasMore = true;
     });
-    debugPrint('feed: refresh triggered');
     await _fetchNext();
     if (mounted) setState(() => _refreshing = false);
   }
@@ -111,7 +116,29 @@ class _PaginatedBoomerangListState
   @override
   Widget build(BuildContext context) {
     final likedIds = ref.watch(likedPostIdsProvider).value ?? const <String>{};
-    final isLoadingInitial = _docs.isEmpty && _loading && !_refreshing;
+    final blockedSet =
+        ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
+    final followingAsync = ref.watch(followingIdsProvider);
+
+    // Trigger initial fetch once following list resolves
+    if (!_initialFollowingLoaded && followingAsync.hasValue) {
+      _initialFollowingLoaded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchNext());
+    }
+
+    // Still waiting for following list
+    if (!followingAsync.hasValue && _docs.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final visibleDocs = blockedSet.isEmpty
+        ? _docs
+        : _docs
+            .where((d) =>
+                !blockedSet.contains((d.data()['userId'] ?? '') as String))
+            .toList();
+    final isLoadingInitial = visibleDocs.isEmpty && _loading && !_refreshing;
+
     return RefreshIndicator(
       color: Colors.black,
       onRefresh: _refresh,
@@ -124,8 +151,9 @@ class _PaginatedBoomerangListState
         itemCount:
             isLoadingInitial
                 ? 1
-                : (_docs.length + (_hasMore ? 1 : (_docs.isEmpty ? 1 : 0))),
-        separatorBuilder: (_, __) => SizedBox(),
+                : (visibleDocs.length +
+                    (_hasMore ? 1 : (visibleDocs.isEmpty ? 1 : 0))),
+        separatorBuilder: (_, __) => const SizedBox(),
         itemBuilder: (context, i) {
           if (isLoadingInitial) {
             return const Padding(
@@ -133,16 +161,32 @@ class _PaginatedBoomerangListState
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          if (_docs.isEmpty) {
-            return const SizedBox.shrink();
+          if (visibleDocs.isEmpty) {
+            return Padding(
+              padding: EdgeInsets.symmetric(vertical: 60.h),
+              child: Column(
+                children: [
+                  Icon(Icons.people_outline, size: 48.r, color: Colors.black26),
+                  SizedBox(height: 12.h),
+                  Text(
+                    'Follow people to see their boomerangs here',
+                    style: TextStyle(
+                      fontSize: 15.sp,
+                      color: Colors.black45,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
           }
-          if (i >= _docs.length) {
+          if (i >= visibleDocs.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          final d = _docs[i];
+          final d = visibleDocs[i];
           final data = d.data();
           final overrideLiked = _localLiked[d.id];
           final likesOverride = _localLikeCounts[d.id];
@@ -275,7 +319,8 @@ class _BoomerangCard extends ConsumerWidget {
                       SizedBox(width: 8.w),
                       _SvgCircleBtn(
                         asset: 'assets/svgs/share.svg',
-                        onTap: () => _showShareSheet(context, data),
+                        onTap: () =>
+                            _showShareSheet(context, data, boomerangId: id),
                       ),
                     ],
                   ),
@@ -653,9 +698,14 @@ void _showProfilePreview(
   );
 }
 
-void _showShareSheet(BuildContext context, Map<String, dynamic> data) {
+void _showShareSheet(
+  BuildContext context,
+  Map<String, dynamic> data, {
+  required String boomerangId,
+}) {
   final videoUrl = data['videoUrl'] as String?;
   final shareText = videoUrl ?? 'Check out this Boomerang!';
+  final userId = (data['userId'] ?? '') as String;
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.white,
@@ -715,6 +765,18 @@ void _showShareSheet(BuildContext context, Map<String, dynamic> data) {
                   } else {
                     Navigator.pop(context);
                   }
+                },
+              ),
+              _ShareOption(
+                icon: Icons.flag_outlined,
+                label: 'Report',
+                onTap: () {
+                  Navigator.pop(context);
+                  showReportSheet(
+                    context,
+                    reportedUid: userId,
+                    boomerangId: boomerangId,
+                  );
                 },
               ),
             ],
@@ -878,12 +940,12 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
     Widget posterLayer() {
       if (hasPoster) {
-        final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
-        final targetWidth = (MediaQuery.sizeOf(context).width - 32.w);
-        final cacheW = (targetWidth * devicePixelRatio).round();
-        return _FreshStorageImage(
-          url: widget.posterUrl!,
+        final cacheW = (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round();
+        return Image.network(
+          widget.posterUrl!,
+          fit: BoxFit.cover,
           cacheWidth: cacheW,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
         );
       }
       return Container(
@@ -932,60 +994,3 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   }
 }
 
-/// Attempts to refresh a Firebase Storage download URL to avoid stale-token 412s.
-class _FreshStorageImage extends StatefulWidget {
-  const _FreshStorageImage({
-    required this.url,
-    this.cacheWidth,
-  });
-  final String url;
-  final int? cacheWidth;
-
-  @override
-  State<_FreshStorageImage> createState() => _FreshStorageImageState();
-}
-
-class _FreshStorageImageState extends State<_FreshStorageImage> {
-  String? _resolvedUrl;
-  bool _triedRefresh = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _resolve();
-  }
-
-  Future<void> _resolve() async {
-    try {
-      final ref = FirebaseStorage.instance.refFromURL(widget.url);
-      final fresh = await ref.getDownloadURL();
-      if (mounted) {
-        setState(() => _resolvedUrl = fresh);
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _triedRefresh = true);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final url = _resolvedUrl ?? widget.url;
-    return Image(
-      image: ResizeImage.resizeIfNeeded(
-        widget.cacheWidth,
-        null,
-        NetworkImage(url),
-      ),
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        if (!_triedRefresh) {
-          _triedRefresh = true;
-          _resolve();
-        }
-        return const SizedBox.shrink();
-      },
-    );
-  }
-}

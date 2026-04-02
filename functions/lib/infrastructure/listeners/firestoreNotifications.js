@@ -39,7 +39,7 @@ const notificationService_1 = require("../../application/notificationService");
 const constants_1 = require("../../config/constants");
 exports.onNotificationCreated = functions
     .region(constants_1.FUNCTIONS_REGION)
-    .firestore.document('notifications/{userId}/items/{itemId}')
+    .firestore.document('users/{userId}/notifications/{itemId}')
     .onCreate(async (snap, ctx) => {
     const userId = ctx.params.userId;
     await (0, notificationService_1.processNotification)(userId, snap.data() ?? {});

@@ -12,6 +12,10 @@ class UserProfile {
     this.facebook = '',
     this.twitter = '',
     this.isPrivate = false,
+    this.followersCount = 0,
+    this.followingCount = 0,
+    this.boomerangsCount = 0,
+    this.totalLikes = 0,
   });
   final String uid;
   final String fullName;
@@ -25,6 +29,10 @@ class UserProfile {
   final String facebook;
   final String twitter;
   final bool isPrivate;
+  final int followersCount;
+  final int followingCount;
+  final int boomerangsCount;
+  final int totalLikes;
 
   String get handle => '@${nickname.replaceAll(' ', '_').toLowerCase()}';
 
@@ -49,6 +57,10 @@ class UserProfile {
       facebook: (data['facebook'] ?? '') as String,
       twitter: (data['twitter'] ?? '') as String,
       isPrivate: (data['isPrivate'] ?? false) as bool,
+      followersCount: (data['followersCount'] ?? 0) as int,
+      followingCount: (data['followingCount'] ?? 0) as int,
+      boomerangsCount: (data['boomerangsCount'] ?? 0) as int,
+      totalLikes: (data['totalLikes'] ?? 0) as int,
     );
   }
 }

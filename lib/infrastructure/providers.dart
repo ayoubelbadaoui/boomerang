@@ -21,6 +21,7 @@ import 'package:boomerang/features/profile/infrastructure/saved_repo.dart';
 import 'package:boomerang/core/auth/session_storage.dart';
 import 'package:boomerang/core/auth/multi_account_manager.dart';
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 // import 'package:path_provider/path_provider.dart';
 // import 'package:firebase_core/firebase_core.dart';
 
@@ -135,22 +136,18 @@ final boomerangRepoProvider = Provider<BoomerangRepo>((ref) {
   return BoomerangRepo(fs);
 });
 
-/// Stream of post ids liked by the current user, sourced from Firestore.
-/// This is the single source of truth for liked state in the UI.
+/// Stream of post ids liked by the current user.
+/// Reads from users/{uid}/likes subcollection instead of scanning all boomerangs.
 final likedPostIdsProvider = StreamProvider<Set<String>>((ref) {
   final user = ref.watch(currentUserProfileProvider).value;
   if (user == null) return const Stream.empty();
   final fs = ref.watch(firestoreProvider);
   return fs
-      .collection('boomerangs')
-      .where('likedBy', arrayContains: user.uid)
+      .collection('users')
+      .doc(user.uid)
+      .collection('likes')
       .snapshots()
-      .map((snap) {
-        final set = snap.docs.map((d) => d.id).toSet();
-        debugPrint(
-            'likedPostIdsProvider: fetched ${set.length} liked ids for ${user.uid}');
-        return set;
-      })
+      .map((snap) => snap.docs.map((d) => d.id).toSet())
       .handleError((e, st) {
         debugPrint('likedPostIdsProvider error: $e');
       });
@@ -287,60 +284,52 @@ final followRepoProvider = Provider<FollowRepo>((ref) {
   return FollowRepo(fs, auth);
 });
 
-/// Live count providers for followers/following
-final followersCountProvider = StreamProvider.family<int, String>((ref, uid) {
-  final fs = ref.watch(firestoreProvider);
-  return fs
-      .collection('followers')
-      .doc(uid)
-      .collection('users')
-      .snapshots()
-      .map((snap) => snap.size)
-      .handleError((e, st) {});
-});
-
-final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
+/// Live set of UIDs the current user follows (for feed filtering).
+final followingIdsProvider = StreamProvider<Set<String>>((ref) {
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null) return const Stream.empty();
   final fs = ref.watch(firestoreProvider);
   return fs
       .collection('following')
-      .doc(uid)
+      .doc(me.uid)
       .collection('users')
       .snapshots()
-      .map((snap) => snap.size)
+      .map((snap) => snap.docs.map((d) => d.id).toSet())
       .handleError((e, st) {});
 });
 
-/// Number of boomerangs created by a user
-final userBoomerangsCountProvider = StreamProvider.family<int, String>((
-  ref,
-  uid,
-) {
-  final fs = ref.watch(firestoreProvider);
-  return fs
-      .collection('boomerangs')
-      .where('userId', isEqualTo: uid)
-      .snapshots()
-      .map((snap) => snap.size)
-      .handleError((e, st) {});
+/// Counts read from the denormalized fields on the user profile doc.
+/// Zero extra listeners — piggybacks on the existing profile stream.
+final followersCountProvider = StreamProvider.family<int, String>((ref, uid) {
+  return ref.watch(userProfileByIdProvider(uid)).when(
+    data: (p) => Stream.value(p?.followersCount ?? 0),
+    loading: () => Stream.value(0),
+    error: (_, __) => Stream.value(0),
+  );
 });
 
-/// Total likes across a user's boomerangs
+final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
+  return ref.watch(userProfileByIdProvider(uid)).when(
+    data: (p) => Stream.value(p?.followingCount ?? 0),
+    loading: () => Stream.value(0),
+    error: (_, __) => Stream.value(0),
+  );
+});
+
+final userBoomerangsCountProvider = StreamProvider.family<int, String>((ref, uid) {
+  return ref.watch(userProfileByIdProvider(uid)).when(
+    data: (p) => Stream.value(p?.boomerangsCount ?? 0),
+    loading: () => Stream.value(0),
+    error: (_, __) => Stream.value(0),
+  );
+});
+
 final userTotalLikesProvider = StreamProvider.family<int, String>((ref, uid) {
-  final fs = ref.watch(firestoreProvider);
-  return fs
-      .collection('boomerangs')
-      .where('userId', isEqualTo: uid)
-      .snapshots()
-      .map((snap) {
-        int total = 0;
-        for (final d in snap.docs) {
-          final data = d.data();
-          final likes = (data['likes'] ?? 0);
-          if (likes is int) total += likes;
-        }
-        return total;
-      })
-      .handleError((e, st) {});
+  return ref.watch(userProfileByIdProvider(uid)).when(
+    data: (p) => Stream.value(p?.totalLikes ?? 0),
+    loading: () => Stream.value(0),
+    error: (_, __) => Stream.value(0),
+  );
 });
 
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
@@ -380,4 +369,6 @@ void invalidateUserScopedProviders(ProviderContainer container) {
   container.invalidate(incomingFollowRequestProvider);
   container.invalidate(isFollowingStreamProvider);
   container.invalidate(unreadCountProvider);
+  container.invalidate(blockedUsersProvider);
+  container.invalidate(followingIdsProvider);
 }
