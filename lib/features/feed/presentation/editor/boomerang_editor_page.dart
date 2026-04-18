@@ -74,7 +74,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
   Timer? _reverseTimer;
   final _caption = TextEditingController();
 
-  double _segmentSeconds = 1.6;
+  double _segmentSeconds = 1.0;
   late double _speed;
   String? _posterPath;
   bool _showPosterOverlay = true;
@@ -478,10 +478,10 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
                               ),
                             ),
                             child: Slider(
-                              value: _segmentSeconds.clamp(0.8, 3.0),
-                              min: 0.8,
-                              max: 3.0,
-                              divisions: 11,
+                              value: _segmentSeconds.clamp(0.3, 1.5),
+                              min: 0.3,
+                              max: 1.5,
+                              divisions: 12,
                               onChanged: (v) => setState(() => _segmentSeconds = v),
                             ),
                           ),

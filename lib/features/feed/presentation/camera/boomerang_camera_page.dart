@@ -80,6 +80,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   double _baseZoom = 1.0;
   final Map<int, Offset> _pointers = {};
   double _speed = 1.0;
+  double _duration = 1.0;
   int _filterIdx = 0;
   Offset? _focusPoint;
   Timer? _burstTimer;
@@ -91,14 +92,12 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   late final AnimationController _pulseAnim;
   late final AnimationController _zoomBadgeAnim;
 
-  static const _maxBurst = 2.0;
-
   @override
   void initState() {
     super.initState();
     _progressAnim = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: (_maxBurst * 1000).round()),
+      duration: Duration(milliseconds: (_duration * 1000).round()),
     );
     _flipAnim = AnimationController(
       vsync: this,
@@ -288,10 +287,12 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     try {
       await c.startVideoRecording();
       setState(() => _recording = true);
+      _progressAnim.duration =
+          Duration(milliseconds: (_duration * 1000).round());
       _progressAnim.forward(from: 0);
       _pulseAnim.repeat(reverse: true);
       _burstTimer = Timer(
-        Duration(milliseconds: (_maxBurst * 1000).round()),
+        Duration(milliseconds: (_duration * 1000).round()),
         () { if (_recording) _stopRecording(); },
       );
     } catch (e) {
@@ -568,6 +569,68 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Duration slider
+                AnimatedOpacity(
+                  opacity: _recording ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.timer_outlined,
+                            color: Colors.white60,
+                            size: 18,
+                          ),
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: Colors.white,
+                                inactiveTrackColor: Colors.white24,
+                                thumbColor: Colors.white,
+                                overlayColor: Colors.white12,
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 7,
+                                ),
+                              ),
+                              child: Slider(
+                                value: _duration,
+                                min: 0.3,
+                                max: 1.5,
+                                divisions: 12,
+                                onChanged: (v) =>
+                                    setState(() => _duration = v),
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 38,
+                            child: Text(
+                              '${_duration.toStringAsFixed(1)}s',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 // Instagram-style swipeable filter names
                 AnimatedOpacity(
                   opacity: _recording ? 0.0 : 1.0,
