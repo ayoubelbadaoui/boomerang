@@ -1,4 +1,5 @@
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ class HashtagFeedPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stream = ref.watch(boomerangRepoProvider).watchByHashtag(tag);
+    final blockedSet =
+        ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -42,7 +45,14 @@ class HashtagFeedPage extends ConsumerWidget {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final docs = snapshot.data!.docs;
+          final allDocs = snapshot.data!.docs;
+          final docs = allDocs.where((d) {
+            final data = d.data();
+            final uid = (data['userId'] ?? '') as String;
+            if (blockedSet.contains(uid)) return false;
+            if (data['ownerIsPrivate'] == true) return false;
+            return true;
+          }).toList();
           if (docs.isEmpty) {
             return const Center(child: Text('No posts for this hashtag yet'));
           }

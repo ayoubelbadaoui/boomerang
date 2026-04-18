@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:developer';
 import 'dart:io';
 
+import 'package:boomerang/features/feed/application/upload_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:flutter/material.dart';
@@ -69,11 +69,9 @@ class BoomerangEditorPage extends ConsumerStatefulWidget {
       _BoomerangEditorPageState();
 }
 
-class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
-    with TickerProviderStateMixin {
+class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
   VideoPlayerController? _controller;
   Timer? _reverseTimer;
-  bool _processing = false;
   final _caption = TextEditingController();
 
   double _segmentSeconds = 1.6;
@@ -82,7 +80,6 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
   bool _showPosterOverlay = true;
   late int _filterIdx;
 
-  late final AnimationController _publishAnim;
   late final FixedExtentScrollController _filterScrollCtrl;
 
   @override
@@ -91,10 +88,6 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
     _speed = widget.initialSpeed;
     _filterIdx = _resolveInitialFilter();
     _filterScrollCtrl = FixedExtentScrollController(initialItem: _filterIdx);
-    _publishAnim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
     _controller = VideoPlayerController.file(widget.inputFile)
       ..initialize().then((_) {
@@ -197,7 +190,6 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
     _disposePlaybackTimers();
     _controller?.dispose();
     _caption.dispose();
-    _publishAnim.dispose();
     _filterScrollCtrl.dispose();
     super.dispose();
   }
@@ -207,99 +199,38 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
     return f.ffmpeg;
   }
 
-  Future<void> _onCreate() async {
-    if (_processing) return;
+  void _onCreate() {
+    if (ref.read(uploadControllerProvider).isActive) return;
     FocusScope.of(context).unfocus();
-    setState(() => _processing = true);
-    _publishAnim.repeat();
-    try {
-      final processor = ref.read(boomerangProcessorProvider);
-      final colorFilter = _buildColorFilter();
 
-      String inputPath = widget.inputFile.path;
-      if (widget.mirrorVideo) {
-        inputPath = await processor.mirrorInput(inputPath);
-      }
-
-      final outPath = await processor.makeBoomerang(
-        inputPath,
-        segmentSeconds: _segmentSeconds,
-        totalDurationSeconds: 6.0,
-        speed: _speed,
-        videoFilter: colorFilter,
-      );
-
-      final storage = ref.read(storageProvider);
-      final path = 'boomerangs/${DateTime.now().millisecondsSinceEpoch}.mp4';
-      final task = await storage.ref(path).putFile(File(outPath));
-      final url = await task.ref.getDownloadURL();
-
-      String? posterUrl;
-      try {
-        final posterPath = await processor.generatePoster(
-          inputPath,
-          videoFilter: colorFilter,
-        );
-        final posterRef = storage.ref(
-          'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        );
-        final posterTask = await posterRef.putFile(File(posterPath));
-        posterUrl = await posterTask.ref.getDownloadURL();
-      } catch (_) {}
-
-      final me = ref.read(currentUserProfileProvider).value;
-      if (me == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please log in first.')),
-        );
-        return;
-      }
-
-      final caption = _caption.text.trim();
-      final tags = <String>{};
-      final re = RegExp(r'(?:#)([A-Za-z0-9_]{1,30})');
-      for (final m in re.allMatches(caption)) {
-        final t = m.group(1);
-        if (t != null && t.isNotEmpty) tags.add(t.toLowerCase());
-      }
-
-      await ref.read(boomerangRepoProvider).createBoomerangPost(
-            userId: me.uid,
-            userName: me.nickname.isNotEmpty ? me.nickname : me.fullName,
-            userAvatar: me.avatarUrl,
-            videoUrl: url,
-            imageUrl: posterUrl,
-            caption: caption.isEmpty ? null : caption,
-            hashtags: tags.isEmpty ? null : tags.toList(),
-            ownerIsPrivate: me.isPrivate,
-          );
-
-      if (!mounted) return;
-      ref.read(homeTabIndexProvider.notifier).state = 4;
-      Navigator.pop(context);
+    final me = ref.read(currentUserProfileProvider).value;
+    if (me == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Boomerang created')),
+        const SnackBar(content: Text('Please log in first.')),
       );
-    } catch (e, _) {
-      if (!mounted) return;
-      final isPluginMissing = e is MissingPluginException ||
-          (e is PlatformException &&
-              (e.message ?? '').contains('MissingPluginException'));
-      final message = isPluginMissing
-          ? 'Video processing is not available on this device.'
-          : 'Failed: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-      log('Editor ERROR: $e');
-    } finally {
-      if (mounted) {
-        _publishAnim.stop();
-        _publishAnim.reset();
-        setState(() => _processing = false);
-      }
+      return;
     }
+
+    ref.read(uploadControllerProvider.notifier).publish(
+      inputFile: widget.inputFile,
+      mirrorVideo: widget.mirrorVideo,
+      segmentSeconds: _segmentSeconds,
+      speed: _speed,
+      colorFilter: _buildColorFilter(),
+      caption: _caption.text.trim(),
+    );
+
+    ref.read(homeTabIndexProvider.notifier).state = 4;
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Uploading your boomerang...'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   Widget _applyPreviewFilter({required Widget child}) {
@@ -613,62 +544,30 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
                     child: SizedBox(
                       width: double.infinity,
                       height: 54.h,
-                      child: AnimatedBuilder(
-                        animation: _publishAnim,
-                        builder: (_, __) {
-                          return ElevatedButton(
-                            onPressed: _processing ? null : _onCreate,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              disabledBackgroundColor: Colors.white24,
-                              disabledForegroundColor: Colors.white60,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                      child: ElevatedButton(
+                        onPressed: _onCreate,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.rocket_launch_rounded, size: 20),
+                            SizedBox(width: 8.w),
+                            const Text(
+                              'Publish',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
-                            child: _processing
-                                ? Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          valueColor: AlwaysStoppedAnimation(
-                                            Colors.white.withValues(alpha: 0.8),
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: 12.w),
-                                      const Text(
-                                        'Creating...',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white70,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.rocket_launch_rounded, size: 20),
-                                      SizedBox(width: 8.w),
-                                      const Text(
-                                        'Publish',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                          );
-                        },
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -677,15 +576,6 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage>
             ),
           ),
 
-          // Processing overlay
-          if (_processing)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.4),
-                ),
-              ),
-            ),
         ],
       ),
     );

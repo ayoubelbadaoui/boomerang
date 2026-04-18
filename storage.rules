@@ -1,10 +1,55 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null
-                   && request.resource.size < 50 * 1024 * 1024;
+
+    // ── Privacy note ────────────────────────────────────────────────
+    // Storage rules cannot query Firestore, so we cannot check follower
+    // relationships here. Private-post media is protected by:
+    //  1. Firestore rules block non-followers from reading boomerang docs
+    //     (which contain the download URLs).
+    //  2. Firebase Storage download URLs include a unique token that acts
+    //     as a capability — without the URL, the file is inaccessible.
+    // This is an accepted tradeoff (Option C). If a URL is shared out
+    // of band, the media is accessible. For stronger isolation, migrate
+    // to signed URLs via a Cloud Function (Option B).
+
+    // ── User avatars — any authed user may read ─────────────────────
+    match /users/{uid}/{fileName} {
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null
+                            && request.auth.uid == uid
+                            && request.resource.size < 10 * 1024 * 1024
+                            && request.resource.contentType.matches('image/.*');
+      allow delete:         if request.auth != null
+                            && request.auth.uid == uid;
     }
+
+    // ── Boomerang videos & poster thumbnails — any auth, ≤ 50 MB ─────
+    match /boomerangs/{fileName} {
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null
+                            && request.resource.size < 50 * 1024 * 1024
+                            && (request.resource.contentType.matches('video/.*')
+                                || request.resource.contentType.matches('image/.*'));
+    }
+
+    // ── Chat images — any auth, images ≤ 10 MB ───────────────────────
+    match /chat_images/{conversationId}/{fileName} {
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null
+                            && request.resource.size < 10 * 1024 * 1024
+                            && request.resource.contentType.matches('image/.*');
+    }
+
+    // ── Chat audio / voice messages — any auth, audio ≤ 10 MB ────────
+    match /chat_audio/{conversationId}/{fileName} {
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null
+                            && request.resource.size < 10 * 1024 * 1024
+                            && request.resource.contentType.matches('audio/.*');
+    }
+
+    // No wildcard write or read — unlisted paths are denied by default
   }
 }

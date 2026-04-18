@@ -9,6 +9,7 @@ import {
   onFollowRequestCreated,
   onFollowerAdded,
 } from './infrastructure/listeners/socialTriggers';
+import { onUserPrivacyChanged, backfillOwnerIsPrivate } from './infrastructure/listeners/privacySync';
 
 export { onNotificationCreated };
 export {
@@ -18,4 +19,5 @@ export {
   onFollowRequestCreated,
   onFollowerAdded,
 };
+export { onUserPrivacyChanged, backfillOwnerIsPrivate };
 export const api = functions.region(FUNCTIONS_REGION).https.onRequest(app);

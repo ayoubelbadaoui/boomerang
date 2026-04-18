@@ -12,6 +12,7 @@ import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
 import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 import 'package:boomerang/features/chat/presentation/pages/conversations_page.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
+import 'package:boomerang/features/feed/presentation/widgets/upload_progress_bar.dart';
 import 'package:go_router/go_router.dart';
 
 final homeTabIndexProvider = StateProvider<int>((ref) => 0);
@@ -108,7 +109,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                     ],
                   )
                   : null,
-          body: _tabs[_currentIndex],
+          body: Column(
+            children: [
+              const UploadProgressBar(),
+              Expanded(child: _tabs[_currentIndex]),
+            ],
+          ),
 
           bottomNavigationBar: Padding(
             padding: EdgeInsets.only(

@@ -38,6 +38,7 @@ class BoomerangRepo {
       'userAvatar': user['avatarUrl'],
       'videoUrl': videoUrl,
       'imageUrl': imageUrl,
+      'ownerIsPrivate': (user['isPrivate'] ?? false) as bool,
       'likes': rand.nextInt(1000),
       'commentsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
@@ -50,6 +51,7 @@ class BoomerangRepo {
   }) {
     Query<Map<String, dynamic>> q = _fs
         .collection('boomerangs')
+        .where('ownerIsPrivate', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .limit(limit);
     if (startAfter != null) {
@@ -112,8 +114,7 @@ class BoomerangRepo {
   }) {
     Query<Map<String, dynamic>> q = _fs
         .collection('boomerangs')
-        .where('ownerIsPrivate', isNotEqualTo: true)
-        .orderBy('ownerIsPrivate')
+        .where('ownerIsPrivate', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .limit(limit);
     if (startAfter != null) {
@@ -126,8 +127,7 @@ class BoomerangRepo {
   Stream<QuerySnapshot<Map<String, dynamic>>> watchPublicBoomerangs() {
     return _fs
         .collection('boomerangs')
-        .where('ownerIsPrivate', isNotEqualTo: true)
-        .orderBy('ownerIsPrivate')
+        .where('ownerIsPrivate', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .limit(100)
         .snapshots();
@@ -263,10 +263,10 @@ class BoomerangRepo {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchByHashtag(String tag) {
     final normalized = tag.toLowerCase();
-    // Avoid composite index requirement by not ordering; client can sort if needed.
     return _fs
         .collection('boomerangs')
         .where('hashtags', arrayContains: normalized)
+        .where('ownerIsPrivate', isEqualTo: false)
         .limit(100)
         .snapshots();
   }
