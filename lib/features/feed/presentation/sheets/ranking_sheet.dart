@@ -125,11 +125,7 @@ class _RankList extends StatelessWidget {
                 ],
               ),
             ),
-            OutlinedButton(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
-              child: const Text('Follow'),
-            ),
+            const SizedBox.shrink(),
           ],
         );
       },

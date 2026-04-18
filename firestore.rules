@@ -49,11 +49,12 @@ service cloud.firestore {
       }
 
       // ── Follow requests ─────────────────────────────────────────────
-      // Sender creates; receiver reads & deletes; sender can also read
-      // own request (to show "Requested" state) and cancel (delete)
+      // Sender creates; receiver reads, updates (reject), & deletes;
+      // sender can also read own request and cancel (delete).
       match /followRequests/{senderId} {
         allow read:   if isUser(uid) || isUser(senderId);
         allow create: if isUser(senderId);
+        allow update: if isUser(uid);
         allow delete: if isUser(uid) || isUser(senderId);
       }
 

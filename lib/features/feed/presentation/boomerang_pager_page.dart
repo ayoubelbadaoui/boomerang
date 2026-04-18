@@ -33,15 +33,30 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   late final PageController _pageController;
   int _currentPage = 0;
 
+  bool _initialPostBlocked = false;
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
     _docs.add((id: widget.initialId, data: widget.initialData));
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkInitialPostPrivacy();
       _fetchNext();
     });
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+  }
+
+  void _checkInitialPostPrivacy() {
+    final data = widget.initialData;
+    final ownerIsPrivate = data['ownerIsPrivate'] == true;
+    if (!ownerIsPrivate) return;
+    final me = ref.read(currentUserProfileProvider).value;
+    final ownerId = (data['userId'] ?? '') as String;
+    if (me?.uid == ownerId) return;
+    final followingIds = ref.read(followingIdsProvider).value ?? const <String>{};
+    if (followingIds.contains(ownerId)) return;
+    setState(() => _initialPostBlocked = true);
   }
 
   @override
@@ -82,6 +97,26 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_initialPostBlocked) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        extendBodyBehindAppBar: true,
+        body: const Center(
+          child: Text(
+            'This content is private',
+            style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(

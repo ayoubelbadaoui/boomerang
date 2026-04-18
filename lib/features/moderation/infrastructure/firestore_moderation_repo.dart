@@ -24,6 +24,22 @@ class FirestoreModerationRepo implements ModerationRepo {
     String? blockedName,
     String? blockedAvatar,
   }) async {
+    // Check which follow edges exist so we can decrement counts accurately.
+    final blockerFollowsBlocked = (await _fs
+            .collection('following')
+            .doc(blockerUid)
+            .collection('users')
+            .doc(blockedUid)
+            .get())
+        .exists;
+    final blockedFollowsBlocker = (await _fs
+            .collection('following')
+            .doc(blockedUid)
+            .collection('users')
+            .doc(blockerUid)
+            .get())
+        .exists;
+
     final batch = _fs.batch();
 
     // 1. Add to blocked list
@@ -57,6 +73,24 @@ class FirestoreModerationRepo implements ModerationRepo {
     batch.delete(
       _fs.collection('users').doc(blockedUid).collection('followRequests').doc(blockerUid),
     );
+
+    // 5. Decrement counts for each edge that actually existed
+    if (blockerFollowsBlocked) {
+      batch.update(_fs.collection('users').doc(blockerUid), {
+        'followingCount': FieldValue.increment(-1),
+      });
+      batch.update(_fs.collection('users').doc(blockedUid), {
+        'followersCount': FieldValue.increment(-1),
+      });
+    }
+    if (blockedFollowsBlocker) {
+      batch.update(_fs.collection('users').doc(blockedUid), {
+        'followingCount': FieldValue.increment(-1),
+      });
+      batch.update(_fs.collection('users').doc(blockerUid), {
+        'followersCount': FieldValue.increment(-1),
+      });
+    }
 
     await batch.commit();
   }

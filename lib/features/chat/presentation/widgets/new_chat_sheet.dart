@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
+import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 
 class NewChatSheet extends ConsumerStatefulWidget {
   const NewChatSheet({super.key});
@@ -156,6 +157,8 @@ class _FollowingList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stream = ref.watch(followRepoProvider).watchFollowing(uid);
+    final blockedSet =
+        ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     final theme = Theme.of(context);
 
     return StreamBuilder(
@@ -164,7 +167,13 @@ class _FollowingList extends ConsumerWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data!.docs;
+        final allDocs = snapshot.data!.docs;
+        final docs = blockedSet.isEmpty
+            ? allDocs
+            : allDocs
+                .where((d) =>
+                    !blockedSet.contains((d.data()['userId'] ?? '') as String))
+                .toList();
         if (docs.isEmpty) {
           return Center(
             child: Padding(

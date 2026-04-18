@@ -73,10 +73,22 @@ class FollowRepo {
           .doc(targetUserId)
           .collection('followRequests')
           .doc(me);
+      var created = false;
       await _fs.runTransaction((tx) async {
         final existing = await tx.get(reqRef);
         if (existing.exists) {
-          return;
+          final data = existing.data() ?? <String, dynamic>{};
+          // Honour a 24-hour cooldown after rejection.
+          if (data['status'] == 'rejected') {
+            final rejTs = data['rejectedAt'];
+            if (rejTs is Timestamp) {
+              final elapsed =
+                  DateTime.now().difference(rejTs.toDate()).inHours;
+              if (elapsed < 24) return;
+            }
+          } else {
+            return;
+          }
         }
         tx.set(reqRef, {
           'senderId': me,
@@ -84,46 +96,48 @@ class FollowRepo {
           'status': 'pending',
           'createdAt': FieldValue.serverTimestamp(),
         });
+        created = true;
       });
-      // Push notification is handled server-side by Cloud Functions
-      // (onFollowRequestCreated trigger).
+      if (!created) return FollowOutcome.requested;
       return FollowOutcome.requested;
     }
-
-    final batch = _fs.batch();
 
     final followingRef = _fs
         .collection('following')
         .doc(me)
         .collection('users')
         .doc(targetUserId);
-    batch.set(followingRef, {
-      'userId': targetUserId,
-      'userName': pickName(targetData),
-      'userAvatar': targetData['avatarUrl'],
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
     final followersRef = _fs
         .collection('followers')
         .doc(targetUserId)
         .collection('users')
         .doc(me);
-    batch.set(followersRef, {
-      'userId': me,
-      'userName': pickName(meData),
-      'userAvatar': meData['avatarUrl'],
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
 
-    batch.update(_fs.collection('users').doc(me), {
-      'followingCount': FieldValue.increment(1),
-    });
-    batch.update(_fs.collection('users').doc(targetUserId), {
-      'followersCount': FieldValue.increment(1),
-    });
+    await _fs.runTransaction((tx) async {
+      final existingEdge = await tx.get(followingRef);
+      if (existingEdge.exists) return;
 
-    await batch.commit();
+      tx.set(followingRef, {
+        'userId': targetUserId,
+        'userName': pickName(targetData),
+        'userAvatar': targetData['avatarUrl'],
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      tx.set(followersRef, {
+        'userId': me,
+        'userName': pickName(meData),
+        'userAvatar': meData['avatarUrl'],
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      tx.update(_fs.collection('users').doc(me), {
+        'followingCount': FieldValue.increment(1),
+      });
+      tx.update(_fs.collection('users').doc(targetUserId), {
+        'followersCount': FieldValue.increment(1),
+      });
+    });
 
     // Push notification is handled server-side by Cloud Functions
     // (onFollowerAdded trigger).
@@ -184,6 +198,13 @@ class FollowRepo {
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      tx.update(_fs.collection('users').doc(senderId), {
+        'followingCount': FieldValue.increment(1),
+      });
+      tx.update(_fs.collection('users').doc(receiver), {
+        'followersCount': FieldValue.increment(1),
+      });
+
       tx.delete(requestRef);
     });
 
@@ -196,15 +217,33 @@ class FollowRepo {
       await notifRef.set(
         {
           'read': true,
-          // Flip to a standard follow notification so the client shows follow/unfollow.
           'type': 'follow',
         },
         SetOptions(merge: true),
       );
+    } else {
+      // Find and merge the matching follow_request notification so the inbox
+      // doesn't show stale accept/reject buttons.
+      final notifQuery = await _fs
+          .collection('users')
+          .doc(receiver)
+          .collection('notifications')
+          .where('type', isEqualTo: 'follow_request')
+          .where('senderId', isEqualTo: senderId)
+          .limit(1)
+          .get();
+      for (final doc in notifQuery.docs) {
+        await doc.reference.set(
+          {'read': true, 'type': 'follow'},
+          SetOptions(merge: true),
+        );
+      }
     }
   }
 
   /// Reject a pending follow request (current user is receiver).
+  /// Writes a rejected status with a timestamp so the sender is subject to a
+  /// 24-hour cooldown before they can re-request.
   Future<void> rejectRequest({
     required String senderId,
     String? notificationId,
@@ -216,7 +255,10 @@ class FollowRepo {
         .doc(receiver)
         .collection('followRequests')
         .doc(senderId);
-    await requestRef.delete();
+    await requestRef.set({
+      'status': 'rejected',
+      'rejectedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
     if (notificationId != null) {
       final notifRef = _fs
           .collection('users')
@@ -225,6 +267,18 @@ class FollowRepo {
           .doc(notificationId);
       await notifRef.delete();
     }
+  }
+
+  /// Cancel an outgoing pending follow request (current user is sender).
+  Future<void> cancelRequest(String targetUserId) async {
+    final me = _uid;
+    if (me == null) return;
+    await _fs
+        .collection('users')
+        .doc(targetUserId)
+        .collection('followRequests')
+        .doc(me)
+        .delete();
   }
 
   /// Stop following a user. Removes relationship documents.
@@ -288,15 +342,21 @@ class FollowRepo {
   }
 
   /// Auto-accept all pending requests when switching to public.
+  /// Rejected requests are cleaned up, not accepted.
   Future<void> acceptAllPendingFor(String receiverId) async {
-    final pending = await _fs
+    final requests = await _fs
         .collection('users')
         .doc(receiverId)
         .collection('followRequests')
         .get();
-    for (final doc in pending.docs) {
-      final senderId = doc.id;
-      await acceptRequest(senderId: senderId);
+    for (final doc in requests.docs) {
+      final data = doc.data();
+      final status = (data['status'] ?? 'pending') as String;
+      if (status == 'pending') {
+        await acceptRequest(senderId: doc.id);
+      } else {
+        await doc.reference.delete();
+      }
     }
   }
 }

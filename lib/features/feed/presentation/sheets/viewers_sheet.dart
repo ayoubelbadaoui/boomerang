@@ -91,11 +91,7 @@ class _ViewerTile extends StatelessWidget {
               style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700),
             ),
           ),
-          OutlinedButton(
-            onPressed: () {},
-            style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
-            child: const Text('Follow'),
-          ),
+          const SizedBox.shrink(),
         ],
       ),
     );

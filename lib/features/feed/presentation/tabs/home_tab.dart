@@ -131,12 +131,20 @@ class _PaginatedBoomerangListState
       return const Center(child: CircularProgressIndicator());
     }
 
-    final visibleDocs = blockedSet.isEmpty
-        ? _docs
-        : _docs
-            .where((d) =>
-                !blockedSet.contains((d.data()['userId'] ?? '') as String))
-            .toList();
+    final me = ref.watch(currentUserProfileProvider).value;
+    final meUid = me?.uid ?? '';
+    final currentFollowingIds = followingAsync.value ?? const <String>{};
+    final visibleDocs = _docs.where((d) {
+      final data = d.data();
+      final uid = (data['userId'] ?? '') as String;
+      if (blockedSet.contains(uid)) return false;
+      if (data['ownerIsPrivate'] == true &&
+          !currentFollowingIds.contains(uid) &&
+          uid != meUid) {
+        return false;
+      }
+      return true;
+    }).toList();
     final isLoadingInitial = visibleDocs.isEmpty && _loading && !_refreshing;
 
     return RefreshIndicator(

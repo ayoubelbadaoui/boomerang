@@ -32,13 +32,19 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
   bool _loading = false;
   bool _optimisticRequested = false;
 
-  Future<void> _toggleFollow({required bool isFollowing}) async {
+  Future<void> _toggleFollow({
+    required bool isFollowing,
+    required bool requested,
+  }) async {
     if (_loading) return;
     setState(() => _loading = true);
     final repo = ref.read(followRepoProvider);
     try {
       if (isFollowing) {
         await repo.unfollow(widget.userId);
+        if (mounted) _optimisticRequested = false;
+      } else if (requested) {
+        await repo.cancelRequest(widget.userId);
         if (mounted) _optimisticRequested = false;
       } else {
         final outcome = await repo.followOrRequest(widget.userId);
@@ -73,6 +79,10 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
     final requested = _optimisticRequested || (outgoing?.isPending == true);
     final theyFollowMe =
         ref.watch(isFollowedByProvider(widget.userId)).value ?? false;
+    final targetProfile =
+        ref.watch(userProfileByIdProvider(widget.userId)).value;
+    final targetIsPrivate = targetProfile?.isPrivate ?? false;
+    final canViewPrivateContent = !targetIsPrivate || isFollowing || isSelf;
     final followLabel =
         isFollowing
             ? 'Following'
@@ -80,7 +90,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 ? 'Pending'
                 : theyFollowMe
                     ? 'Follow back'
-                    : 'Follow';
+                    : targetIsPrivate
+                        ? 'Request'
+                        : 'Follow';
     final followIcon =
         isFollowing
             ? Icons.check
@@ -164,6 +176,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 ),
                 Consumer(
                   builder: (context, ref, _) {
+                    if (!canViewPrivateContent) {
+                      return const _Stat(value: '-', label: 'Followers');
+                    }
                     final followers = ref.watch(
                       followersCountProvider(widget.userId),
                     );
@@ -198,6 +213,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 ),
                 Consumer(
                   builder: (context, ref, _) {
+                    if (!canViewPrivateContent) {
+                      return const _Stat(value: '-', label: 'Following');
+                    }
                     final following = ref.watch(
                       followingCountProvider(widget.userId),
                     );
@@ -251,9 +269,12 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed:
-                          (requested || _loading)
+                          _loading
                               ? null
-                              : () => _toggleFollow(isFollowing: isFollowing),
+                              : () => _toggleFollow(
+                                    isFollowing: isFollowing,
+                                    requested: requested,
+                                  ),
                       icon:
                           _loading
                               ? SizedBox(
@@ -307,6 +328,16 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Unable to message this user'),
+                            ),
+                          );
+                          return;
+                        }
+                        if (targetIsPrivate && !isFollowing) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Follow this account to send a message',
+                              ),
                             ),
                           );
                           return;

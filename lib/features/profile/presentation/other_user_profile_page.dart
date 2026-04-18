@@ -449,6 +449,7 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
 
   Future<void> _toggleFollow({
     required bool isFollowing,
+    required bool requested,
   }) async {
     if (_loading) return;
     setState(() => _loading = true);
@@ -456,6 +457,9 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     try {
       if (isFollowing) {
         await repo.unfollow(widget.userId);
+        if (mounted) _optimisticRequested = false;
+      } else if (requested) {
+        await repo.cancelRequest(widget.userId);
         if (mounted) _optimisticRequested = false;
       } else {
         final outcome = await repo.followOrRequest(widget.userId);
@@ -490,9 +494,9 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
             : theyFollowMe
                 ? 'Follow back'
                 : (widget.isPrivate ? 'Request' : 'Follow');
-    final onPressed = (requested || _loading)
+    final onPressed = _loading
         ? null
-        : () => _toggleFollow(isFollowing: isFollowing);
+        : () => _toggleFollow(isFollowing: isFollowing, requested: requested);
 
     return OutlinedButton.icon(
       onPressed: onPressed,
@@ -549,6 +553,20 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Unable to message this user')),
+          );
+        }
+        return;
+      }
+      final targetProfile =
+          ref.read(userProfileByIdProvider(widget.userId)).value;
+      final isFollowing =
+          ref.read(isFollowingStreamProvider(widget.userId)).value ?? false;
+      if ((targetProfile?.isPrivate ?? false) && !isFollowing) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Follow this account to send a message'),
+            ),
           );
         }
         return;
