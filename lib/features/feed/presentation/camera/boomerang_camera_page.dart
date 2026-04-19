@@ -650,18 +650,6 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      _GlassButton(
-                        icon: Icons.photo_library_rounded,
-                        size: 52,
-                        onTap: _showGallerySheet,
-                      ),
-                      _RecordButton(
-                        progress: _progressAnim,
-                        pulse: _pulseAnim,
-                        recording: _recording,
-                        onStart: _onHoldStart,
-                        onEnd: _onHoldEnd,
-                      ),
                       AnimatedBuilder(
                         animation: _flipAnim,
                         builder: (_, child) => Transform(
@@ -676,6 +664,18 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                           size: 52,
                           onTap: _flipCamera,
                         ),
+                      ),
+                      _RecordButton(
+                        progress: _progressAnim,
+                        pulse: _pulseAnim,
+                        recording: _recording,
+                        onStart: _onHoldStart,
+                        onEnd: _onHoldEnd,
+                      ),
+                      _GlassButton(
+                        icon: Icons.photo_library_rounded,
+                        size: 52,
+                        onTap: _showGallerySheet,
                       ),
                     ],
                   ),

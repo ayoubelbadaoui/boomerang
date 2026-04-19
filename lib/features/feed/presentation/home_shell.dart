@@ -13,6 +13,7 @@ import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 import 'package:boomerang/features/chat/presentation/pages/conversations_page.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/feed/presentation/widgets/upload_progress_bar.dart';
+import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 import 'package:go_router/go_router.dart';
 
 final homeTabIndexProvider = StateProvider<int>((ref) => 0);
@@ -146,7 +147,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   ),
                   _CreateButton(
                     active: _currentIndex == 2,
-                    onTap: () => _setTab(2),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const BoomerangCameraPage(),
+                        ),
+                      );
+                    },
                   ),
                   _ChatNavItem(
                     active: _currentIndex == 3,
