@@ -33,10 +33,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(activeConversationProvider.notifier).state =
+          widget.conversationId;
+    });
   }
 
   @override
   void dispose() {
+    ref.read(activeConversationProvider.notifier).state = null;
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();

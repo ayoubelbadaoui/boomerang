@@ -86,31 +86,20 @@ exports.onNewChatMessage = onDocumentCreated(
       return;
     }
 
+    // Data-only message so the client controls display and can suppress
+    // notifications when the conversation is already open.
     const message = {
-      notification: {
-        title: senderName,
-        body: body,
-        ...(senderAvatar ? { image: senderAvatar } : {}),
-      },
       data: {
         conversationId: conversationId,
         senderId: senderId,
         type: "chat_message",
         senderName: senderName,
+        body: body,
         ...(senderAvatar ? { avatarUrl: senderAvatar } : {}),
       },
-      android: {
-        priority: "high",
-        notification: {
-          sound: "default",
-          ...(senderAvatar ? { image: senderAvatar } : {}),
-        },
-      },
+      android: { priority: "high" },
       apns: {
-        payload: {
-          aps: { sound: "default", badge: 1, "mutable-content": 1 },
-        },
-        ...(senderAvatar ? { fcmOptions: { image: senderAvatar } } : {}),
+        payload: { aps: { "content-available": 1, badge: 1 } },
       },
       tokens: tokens,
     };

@@ -9,6 +9,10 @@ import 'package:boomerang/features/chat/domain/conversation_entity.dart';
 import 'package:boomerang/features/chat/infrastructure/firestore_chat_repo.dart';
 import 'package:boomerang/features/chat/application/chat_controller.dart';
 
+// ── Active conversation (suppresses push while chat is open) ────────────
+
+final activeConversationProvider = StateProvider<String?>((ref) => null);
+
 // ── Repository ──────────────────────────────────────────────────────────
 
 final chatRepoProvider = Provider<ChatRepo>((ref) {

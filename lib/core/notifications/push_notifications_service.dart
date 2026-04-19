@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -94,12 +95,25 @@ class _PushNotificationsBootstrap {
       await _saveToken(user.uid, token);
     });
 
-    // Foreground message handler (basic no-UI handler)
+    // Foreground message handler — suppress if the chat is already open
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       developer.log(
         '[notification push] FCM foreground message: ${message.messageId} '
         'title=${message.notification?.title} body=${message.notification?.body}',
       );
+
+      final type = message.data['type'] as String?;
+      final conversationId = message.data['conversationId'] as String?;
+      if (type == 'chat_message' && conversationId != null) {
+        final activeConvId = ref.read(activeConversationProvider);
+        if (activeConvId == conversationId) {
+          developer.log(
+            '[notification push] Suppressed — chat $conversationId is active',
+          );
+          return;
+        }
+      }
+
       await _showLocalNotification(message);
     });
 
@@ -166,10 +180,12 @@ class _PushNotificationsBootstrap {
       developer.log('[notification push]    - Alert: ${settings.alert}');
       developer.log('[notification push]    - Badge: ${settings.badge}');
       developer.log('[notification push]    - Sound: ${settings.sound}');
+      // Disable system-level foreground banners so we control display via
+      // flutter_local_notifications (allows per-conversation suppression).
       await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
+        alert: false,
         badge: true,
-        sound: true,
+        sound: false,
       );
     }
 
@@ -267,8 +283,12 @@ class _PushNotificationsBootstrap {
   }
 
   Future<void> _showLocalNotification(RemoteMessage message) async {
-    final title = message.notification?.title ?? 'Boomerang';
-    final body = message.notification?.body ?? 'New notification';
+    final title = message.notification?.title
+        ?? message.data['senderName'] as String?
+        ?? 'Boomerang';
+    final body = message.notification?.body
+        ?? message.data['body'] as String?
+        ?? 'New notification';
 
     final avatarUrl = message.data['avatarUrl'] as String?;
     ByteArrayAndroidBitmap? largeIcon;
