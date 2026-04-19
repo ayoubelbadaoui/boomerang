@@ -194,7 +194,7 @@ class _ProfileBody extends ConsumerWidget {
           if (p != null && p.bio.isNotEmpty)
             Text(
               p.bio,
-              style: TextStyle(color: Colors.black54, fontSize: 14.sp),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14.sp),
               textAlign: TextAlign.center,
             ),
           SizedBox(height: 20.h),

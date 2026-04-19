@@ -147,7 +147,7 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black54, fontSize: 14.sp),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14.sp),
                   ),
                 );
               },
