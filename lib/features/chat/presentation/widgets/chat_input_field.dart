@@ -200,6 +200,9 @@ class ChatInputFieldState extends State<ChatInputField> {
       case MessageType.audio:
         previewText = '🎤 Voice message';
         break;
+      case MessageType.sharedPost:
+        previewText = '📫 Shared a post';
+        break;
       case MessageType.text:
         previewText = reply.text;
         break;

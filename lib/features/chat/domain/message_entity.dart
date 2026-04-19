@@ -1,4 +1,4 @@
-enum MessageType { text, image, gif, audio }
+enum MessageType { text, image, gif, audio, sharedPost }
 
 enum MessageStatus { sent, delivered, seen }
 
@@ -16,6 +16,10 @@ class MessageEntity {
     this.replyToSenderId,
     this.replyToType,
     this.audioDurationMs,
+    this.sharedPostId,
+    this.sharedPostImageUrl,
+    this.sharedPostUserName,
+    this.sharedPostCaption,
   });
 
   final String id;
@@ -30,6 +34,10 @@ class MessageEntity {
   final String? replyToSenderId;
   final MessageType? replyToType;
   final int? audioDurationMs;
+  final String? sharedPostId;
+  final String? sharedPostImageUrl;
+  final String? sharedPostUserName;
+  final String? sharedPostCaption;
 
   MessageEntity copyWith({
     String? id,
@@ -44,6 +52,10 @@ class MessageEntity {
     String? replyToSenderId,
     MessageType? replyToType,
     int? audioDurationMs,
+    String? sharedPostId,
+    String? sharedPostImageUrl,
+    String? sharedPostUserName,
+    String? sharedPostCaption,
   }) {
     return MessageEntity(
       id: id ?? this.id,
@@ -58,6 +70,10 @@ class MessageEntity {
       replyToSenderId: replyToSenderId ?? this.replyToSenderId,
       replyToType: replyToType ?? this.replyToType,
       audioDurationMs: audioDurationMs ?? this.audioDurationMs,
+      sharedPostId: sharedPostId ?? this.sharedPostId,
+      sharedPostImageUrl: sharedPostImageUrl ?? this.sharedPostImageUrl,
+      sharedPostUserName: sharedPostUserName ?? this.sharedPostUserName,
+      sharedPostCaption: sharedPostCaption ?? this.sharedPostCaption,
     );
   }
 
@@ -67,6 +83,7 @@ class MessageEntity {
   bool get isImage => type == MessageType.image;
   bool get isGif => type == MessageType.gif;
   bool get isAudio => type == MessageType.audio;
+  bool get isSharedPost => type == MessageType.sharedPost;
   bool get hasReply => replyToMessageId != null;
 
   @override

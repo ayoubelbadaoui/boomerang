@@ -15,6 +15,10 @@ class MessageDto {
     this.replyToSenderId,
     this.replyToType,
     this.audioDurationMs,
+    this.sharedPostId,
+    this.sharedPostImageUrl,
+    this.sharedPostUserName,
+    this.sharedPostCaption,
   });
 
   final String id;
@@ -29,6 +33,10 @@ class MessageDto {
   final String? replyToSenderId;
   final String? replyToType;
   final int? audioDurationMs;
+  final String? sharedPostId;
+  final String? sharedPostImageUrl;
+  final String? sharedPostUserName;
+  final String? sharedPostCaption;
 
   factory MessageDto.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -47,6 +55,10 @@ class MessageDto {
       replyToSenderId: data['replyToSenderId'] as String?,
       replyToType: data['replyToType'] as String?,
       audioDurationMs: (data['audioDurationMs'] as num?)?.toInt(),
+      sharedPostId: data['sharedPostId'] as String?,
+      sharedPostImageUrl: data['sharedPostImageUrl'] as String?,
+      sharedPostUserName: data['sharedPostUserName'] as String?,
+      sharedPostCaption: data['sharedPostCaption'] as String?,
     );
   }
 
@@ -64,6 +76,10 @@ class MessageDto {
       replyToSenderId: replyToSenderId,
       replyToType: replyToType != null ? _parseType(replyToType!) : null,
       audioDurationMs: audioDurationMs,
+      sharedPostId: sharedPostId,
+      sharedPostImageUrl: sharedPostImageUrl,
+      sharedPostUserName: sharedPostUserName,
+      sharedPostCaption: sharedPostCaption,
     );
   }
 
@@ -80,6 +96,10 @@ class MessageDto {
       if (replyToSenderId != null) 'replyToSenderId': replyToSenderId,
       if (replyToType != null) 'replyToType': replyToType,
       if (audioDurationMs != null) 'audioDurationMs': audioDurationMs,
+      if (sharedPostId != null) 'sharedPostId': sharedPostId,
+      if (sharedPostImageUrl != null) 'sharedPostImageUrl': sharedPostImageUrl,
+      if (sharedPostUserName != null) 'sharedPostUserName': sharedPostUserName,
+      if (sharedPostCaption != null) 'sharedPostCaption': sharedPostCaption,
     };
   }
 
@@ -91,6 +111,8 @@ class MessageDto {
         return MessageType.gif;
       case 'audio':
         return MessageType.audio;
+      case 'sharedPost':
+        return MessageType.sharedPost;
       default:
         return MessageType.text;
     }
@@ -115,6 +137,8 @@ class MessageDto {
         return 'gif';
       case MessageType.audio:
         return 'audio';
+      case MessageType.sharedPost:
+        return 'sharedPost';
       case MessageType.text:
         return 'text';
     }

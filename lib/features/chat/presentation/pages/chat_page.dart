@@ -177,6 +177,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  void _openSharedPost(String boomerangId) {
+    context.push('/boomerang/$boomerangId');
+  }
+
   void _confirmDeleteChat() {
     showDialog<bool>(
       context: context,
@@ -241,6 +245,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 scrollController: _scrollController,
                 onMessageLongPress: _showMessageActions,
                 onReplyTap: _scrollToMessage,
+                onSharedPostTap: _openSharedPost,
                 otherProfile: otherProfile,
                 currentProfile: currentUser,
               ),
@@ -520,6 +525,7 @@ class _MessageList extends StatelessWidget {
     required this.scrollController,
     required this.onMessageLongPress,
     required this.onReplyTap,
+    required this.onSharedPostTap,
     this.otherProfile,
     this.currentProfile,
   });
@@ -530,6 +536,7 @@ class _MessageList extends StatelessWidget {
   final ScrollController scrollController;
   final void Function(MessageEntity msg, bool isMine) onMessageLongPress;
   final void Function(String messageId) onReplyTap;
+  final void Function(String boomerangId) onSharedPostTap;
   final UserProfile? otherProfile;
   final UserProfile? currentProfile;
 
@@ -587,6 +594,9 @@ class _MessageList extends StatelessWidget {
           onLongPress: () => onMessageLongPress(message, isMine),
           onReplyTap: message.hasReply
               ? () => onReplyTap(message.replyToMessageId!)
+              : null,
+          onSharedPostTap: message.isSharedPost && message.sharedPostId != null
+              ? () => onSharedPostTap(message.sharedPostId!)
               : null,
         );
       },

@@ -138,6 +138,15 @@ class ChatController extends StateNotifier<ChatState> {
 
   // ── Send messages ─────────────────────────────────────────────────────
 
+  String? _replyPreviewText(MessageEntity? reply) {
+    if (reply == null) return null;
+    if (reply.isImage) return '📷 Photo';
+    if (reply.isGif) return 'GIF';
+    if (reply.isAudio) return '🎤 Voice message';
+    if (reply.isSharedPost) return '📫 Shared a post';
+    return reply.text;
+  }
+
   Future<void> sendMessage(
     String text, {
     MessageType type = MessageType.text,
@@ -153,13 +162,7 @@ class ChatController extends StateNotifier<ChatState> {
         text: text.trim(),
         type: type,
         replyToMessageId: reply?.id,
-        replyToText: reply?.isImage == true
-            ? '📷 Photo'
-            : reply?.isGif == true
-                ? 'GIF'
-                : reply?.isAudio == true
-                    ? '🎤 Voice message'
-                    : reply?.text,
+        replyToText: _replyPreviewText(reply),
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );
@@ -182,13 +185,7 @@ class ChatController extends StateNotifier<ChatState> {
         text: url,
         type: MessageType.image,
         replyToMessageId: reply?.id,
-        replyToText: reply?.isImage == true
-            ? '📷 Photo'
-            : reply?.isGif == true
-                ? 'GIF'
-                : reply?.isAudio == true
-                    ? '🎤 Voice message'
-                    : reply?.text,
+        replyToText: _replyPreviewText(reply),
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );
@@ -210,15 +207,40 @@ class ChatController extends StateNotifier<ChatState> {
         text: gifUrl,
         type: MessageType.gif,
         replyToMessageId: reply?.id,
-        replyToText: reply?.isImage == true
-            ? '📷 Photo'
-            : reply?.isGif == true
-                ? 'GIF'
-                : reply?.isAudio == true
-                    ? '🎤 Voice message'
-                    : reply?.text,
+        replyToText: _replyPreviewText(reply),
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
+      );
+      if (_disposed) return;
+      state = state.copyWith(isSending: false, clearReply: true);
+    } catch (e) {
+      if (_disposed) return;
+      state = state.copyWith(isSending: false, error: e.toString());
+    }
+  }
+
+  Future<void> sendSharedPostMessage({
+    required String boomerangId,
+    required String imageUrl,
+    required String userName,
+    String? caption,
+  }) async {
+    state = state.copyWith(isSending: true, error: null);
+    try {
+      final reply = state.replyingTo;
+      await _repo.sendMessage(
+        conversationId,
+        senderId: currentUserId,
+        text: boomerangId,
+        type: MessageType.sharedPost,
+        replyToMessageId: reply?.id,
+        replyToText: _replyPreviewText(reply),
+        replyToSenderId: reply?.senderId,
+        replyToType: reply?.type,
+        sharedPostId: boomerangId,
+        sharedPostImageUrl: imageUrl,
+        sharedPostUserName: userName,
+        sharedPostCaption: caption,
       );
       if (_disposed) return;
       state = state.copyWith(isSending: false, clearReply: true);
@@ -240,13 +262,7 @@ class ChatController extends StateNotifier<ChatState> {
         type: MessageType.audio,
         audioDurationMs: durationMs,
         replyToMessageId: reply?.id,
-        replyToText: reply?.isImage == true
-            ? '📷 Photo'
-            : reply?.isGif == true
-                ? 'GIF'
-                : reply?.isAudio == true
-                    ? '🎤 Voice message'
-                    : reply?.text,
+        replyToText: _replyPreviewText(reply),
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );

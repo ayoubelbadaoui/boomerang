@@ -19,6 +19,10 @@ abstract class ChatRepo {
     String? replyToSenderId,
     MessageType? replyToType,
     int? audioDurationMs,
+    String? sharedPostId,
+    String? sharedPostImageUrl,
+    String? sharedPostUserName,
+    String? sharedPostCaption,
   });
 
   Future<List<MessageEntity>> loadMoreMessages(

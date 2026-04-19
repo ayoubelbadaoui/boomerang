@@ -11,6 +11,7 @@ import 'features/auth/presentation/setup_flow_page.dart';
 import 'features/profile/presentation/settings/settings_page.dart';
 import 'features/chat/presentation/pages/conversations_page.dart';
 import 'features/chat/presentation/pages/chat_page.dart';
+import 'features/feed/presentation/single_boomerang_page.dart';
 import 'infrastructure/providers.dart';
 
 final router = GoRouter(
@@ -52,6 +53,12 @@ final router = GoRouter(
       path: '/chat/:conversationId',
       builder: (c, s) => ChatPage(
         conversationId: s.pathParameters['conversationId']!,
+      ),
+    ),
+    GoRoute(
+      path: '/boomerang/:boomerangId',
+      builder: (c, s) => SingleBoomerangPage(
+        boomerangId: s.pathParameters['boomerangId']!,
       ),
     ),
   ],

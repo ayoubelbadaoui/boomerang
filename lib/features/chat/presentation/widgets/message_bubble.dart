@@ -14,6 +14,7 @@ class MessageBubble extends StatelessWidget {
     this.onLongPress,
     this.onReplyTap,
     this.replyToSenderName,
+    this.onSharedPostTap,
   });
 
   final MessageEntity message;
@@ -21,6 +22,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onReplyTap;
   final String? replyToSenderName;
+  final VoidCallback? onSharedPostTap;
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +80,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   bool get _isMediaType =>
-      message.isImage || message.isGif;
+      message.isImage || message.isGif || message.isSharedPost;
 
   Widget _buildReplyPreview(ThemeData theme) {
     final replyBg = isMine
@@ -97,6 +99,9 @@ class MessageBubble extends StatelessWidget {
         break;
       case MessageType.audio:
         previewText = '🎤 Voice message';
+        break;
+      case MessageType.sharedPost:
+        previewText = '📫 Shared a post';
         break;
       default:
         previewText = message.replyToText ?? '';
@@ -166,6 +171,14 @@ class MessageBubble extends StatelessWidget {
           time: timeText,
           isMine: isMine,
           theme: theme,
+        );
+      case MessageType.sharedPost:
+        return _SharedPostContent(
+          message: message,
+          time: timeText,
+          isMine: isMine,
+          theme: theme,
+          onTap: onSharedPostTap,
         );
       case MessageType.text:
         return _TextContent(
@@ -425,6 +438,123 @@ class _GifContent extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+// ── Shared post content ────────────────────────────────────────────────
+
+class _SharedPostContent extends StatelessWidget {
+  const _SharedPostContent({
+    required this.message,
+    required this.time,
+    required this.isMine,
+    required this.theme,
+    this.onTap,
+  });
+
+  final MessageEntity message;
+  final String time;
+  final bool isMine;
+  final ThemeData theme;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = message.sharedPostImageUrl;
+    final userName = message.sharedPostUserName ?? '';
+    final caption = message.sharedPostCaption ?? '';
+    final timeColor = isMine
+        ? Colors.white.withValues(alpha: 0.7)
+        : theme.colorScheme.onSurfaceVariant;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 220.w,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10.r),
+                child: Image.network(
+                  imageUrl,
+                  width: 220.w,
+                  height: 180.w,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (_, child, progress) {
+                    if (progress == null) return child;
+                    return SizedBox(
+                      width: 220.w,
+                      height: 180.w,
+                      child:
+                          const Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => SizedBox(
+                    width: 220.w,
+                    height: 180.w,
+                    child: const Center(
+                        child: Icon(Icons.broken_image_outlined)),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(8.w, 8.h, 8.w, 4.h),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.play_circle_outline_rounded,
+                    size: 16.sp,
+                    color: isMine ? Colors.white70 : Colors.black54,
+                  ),
+                  SizedBox(width: 6.w),
+                  Expanded(
+                    child: Text(
+                      userName,
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w700,
+                        color: isMine ? Colors.white : Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (caption.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.fromLTRB(8.w, 0, 8.w, 4.h),
+                child: Text(
+                  caption,
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: isMine ? Colors.white70 : Colors.black54,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(8.w, 2.h, 8.w, 6.h),
+              child: Align(
+                alignment: Alignment.bottomRight,
+                child: Text(
+                  time,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: timeColor,
+                    fontSize: 10.sp,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -17,6 +17,7 @@ import 'package:boomerang/features/feed/presentation/sheets/profile_preview_shee
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
+import 'package:boomerang/features/chat/presentation/widgets/send_post_sheet.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -704,6 +705,23 @@ void _showShareSheet(
                   color: Colors.black12,
                   borderRadius: BorderRadius.circular(3),
                 ),
+              ),
+              _ShareOption(
+                icon: Icons.send_rounded,
+                label: 'Send',
+                onTap: () {
+                  Navigator.pop(context);
+                  final imageUrl = (data['imageUrl'] ?? '') as String;
+                  final userName = (data['userName'] ?? '') as String;
+                  final caption = data['caption'] as String?;
+                  showSendPostSheet(
+                    context,
+                    boomerangId: boomerangId,
+                    imageUrl: imageUrl,
+                    userName: userName,
+                    caption: caption,
+                  );
+                },
               ),
               _ShareOption(
                 icon: Icons.share_outlined,

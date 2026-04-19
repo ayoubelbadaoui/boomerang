@@ -94,6 +94,10 @@ class FirestoreChatRepo implements ChatRepo {
     String? replyToSenderId,
     MessageType? replyToType,
     int? audioDurationMs,
+    String? sharedPostId,
+    String? sharedPostImageUrl,
+    String? sharedPostUserName,
+    String? sharedPostCaption,
   }) async {
     final messageRef = _messages(conversationId).doc();
     final conversationRef = _conversations.doc(conversationId);
@@ -111,6 +115,9 @@ class FirestoreChatRepo implements ChatRepo {
         break;
       case MessageType.audio:
         previewText = '🎤 Voice message';
+        break;
+      case MessageType.sharedPost:
+        previewText = '📫 Shared a post';
         break;
       case MessageType.text:
         previewText = text;
@@ -130,6 +137,10 @@ class FirestoreChatRepo implements ChatRepo {
       if (replyToType != null)
         'replyToType': MessageDto.typeToString(replyToType),
       if (audioDurationMs != null) 'audioDurationMs': audioDurationMs,
+      if (sharedPostId != null) 'sharedPostId': sharedPostId,
+      if (sharedPostImageUrl != null) 'sharedPostImageUrl': sharedPostImageUrl,
+      if (sharedPostUserName != null) 'sharedPostUserName': sharedPostUserName,
+      if (sharedPostCaption != null) 'sharedPostCaption': sharedPostCaption,
     };
 
     final conversationSnap = await conversationRef.get();
@@ -165,6 +176,10 @@ class FirestoreChatRepo implements ChatRepo {
       replyToSenderId: replyToSenderId,
       replyToType: replyToType,
       audioDurationMs: audioDurationMs,
+      sharedPostId: sharedPostId,
+      sharedPostImageUrl: sharedPostImageUrl,
+      sharedPostUserName: sharedPostUserName,
+      sharedPostCaption: sharedPostCaption,
     );
   }
 
@@ -233,6 +248,10 @@ class FirestoreChatRepo implements ChatRepo {
       'replyToSenderId': FieldValue.delete(),
       'replyToType': FieldValue.delete(),
       'audioDurationMs': FieldValue.delete(),
+      'sharedPostId': FieldValue.delete(),
+      'sharedPostImageUrl': FieldValue.delete(),
+      'sharedPostUserName': FieldValue.delete(),
+      'sharedPostCaption': FieldValue.delete(),
     });
 
     final convSnap = await conversationRef.get();
@@ -289,6 +308,9 @@ class FirestoreChatRepo implements ChatRepo {
             break;
           case MessageType.audio:
             previewText = '🎤 Voice message';
+            break;
+          case MessageType.sharedPost:
+            previewText = '📫 Shared a post';
             break;
           case MessageType.text:
             previewText = entity.text;

@@ -1,6 +1,7 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
+import 'package:boomerang/features/chat/presentation/widgets/send_post_sheet.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -158,6 +159,9 @@ class BoomerangOverlay extends ConsumerWidget {
                   handle,
                   reportedUid: userId,
                   boomerangId: boomerangId,
+                  imageUrl: data['imageUrl'] as String?,
+                  userName: (data['userName'] ?? '') as String,
+                  caption: data['caption'] as String?,
                 ),
                 child: Icon(Icons.send_outlined,
                     color: Colors.white, size: 28.r),
@@ -351,6 +355,9 @@ void _showShareSheet(
   String handle, {
   required String reportedUid,
   String? boomerangId,
+  String? imageUrl,
+  String? userName,
+  String? caption,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -387,6 +394,22 @@ void _showShareSheet(
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
+                  _ShareOption(
+                    icon: Icons.send_rounded,
+                    label: 'Send',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (boomerangId != null) {
+                        showSendPostSheet(
+                          context,
+                          boomerangId: boomerangId,
+                          imageUrl: imageUrl ?? '',
+                          userName: userName ?? '',
+                          caption: caption,
+                        );
+                      }
+                    },
+                  ),
                   _ShareOption(
                     icon: Icons.copy,
                     label: 'Copy link',
