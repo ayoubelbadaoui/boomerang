@@ -347,7 +347,6 @@ class _ActivityTile extends StatelessWidget {
                       fit: BoxFit.cover,
                       filterQuality: FilterQuality.medium,
                       cacheWidth: 150,
-                      cacheHeight: 150,
                       frameBuilder: (_, child, frame, sync) {
                         if (sync) return child;
                         return AnimatedOpacity(
