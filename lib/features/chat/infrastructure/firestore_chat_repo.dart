@@ -42,6 +42,7 @@ class FirestoreChatRepo implements ChatRepo {
   Future<String> getOrCreateConversation(List<String> participantIds) async {
     final sorted = List<String>.from(participantIds)..sort();
 
+    // Check for any legacy conversation created with an auto-generated ID.
     final existing = await _conversations
         .where('participants', isEqualTo: sorted)
         .limit(1)
@@ -49,19 +50,29 @@ class FirestoreChatRepo implements ChatRepo {
 
     if (existing.docs.isNotEmpty) return existing.docs.first.id;
 
-    final now = Timestamp.now();
-    final unreadCount = {for (final uid in sorted) uid: 0};
+    // Deterministic ID guarantees one document per unique participant pair.
+    final deterministicId = sorted.join('_');
+    final docRef = _conversations.doc(deterministicId);
 
-    final doc = await _conversations.add({
-      'participants': sorted,
-      'lastMessage': '',
-      'lastMessageAt': now,
-      'lastMessageSenderId': '',
-      'unreadCount': unreadCount,
-      'createdAt': now,
-      'pinnedBy': <String>[],
+    return _firestore.runTransaction<String>((tx) async {
+      final snap = await tx.get(docRef);
+      if (snap.exists) return deterministicId;
+
+      final now = Timestamp.now();
+      final unreadCount = {for (final uid in sorted) uid: 0};
+
+      tx.set(docRef, {
+        'participants': sorted,
+        'lastMessage': '',
+        'lastMessageAt': now,
+        'lastMessageSenderId': '',
+        'unreadCount': unreadCount,
+        'createdAt': now,
+        'pinnedBy': <String>[],
+      });
+
+      return deterministicId;
     });
-    return doc.id;
   }
 
   // ── Messages ──────────────────────────────────────────────────────────

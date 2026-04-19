@@ -89,7 +89,7 @@ class BoomerangOverlay extends ConsumerWidget {
                 '$likes',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14.sp,
+                  fontSize: 15.sp,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -97,7 +97,7 @@ class BoomerangOverlay extends ConsumerWidget {
               _ActionBubble(
                 onTap: () => _showCommentsSheet(context, boomerangId, userId),
                 child: Icon(Icons.chat_bubble_outline_rounded,
-                    color: Colors.white, size: 28.r),
+                    color: Colors.white, size: 34.r),
               ),
               SizedBox(height: 4.h),
               StreamBuilder(
@@ -108,7 +108,7 @@ class BoomerangOverlay extends ConsumerWidget {
                     '$count',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 14.sp,
+                      fontSize: 15.sp,
                       fontWeight: FontWeight.w600,
                     ),
                   );
@@ -146,7 +146,7 @@ class BoomerangOverlay extends ConsumerWidget {
                             ? Icons.bookmark
                             : Icons.bookmark_outline_rounded,
                         color: Colors.white,
-                        size: 28.r,
+                        size: 34.r,
                       ),
                     );
                   },
@@ -164,7 +164,7 @@ class BoomerangOverlay extends ConsumerWidget {
                   caption: data['caption'] as String?,
                 ),
                 child: Icon(Icons.send_outlined,
-                    color: Colors.white, size: 28.r),
+                    color: Colors.white, size: 34.r),
               ),
               if (me != null && me.uid == userId) ...[
                 SizedBox(height: 16.h),
@@ -175,7 +175,7 @@ class BoomerangOverlay extends ConsumerWidget {
                     boomerangId,
                   ),
                   child: Icon(Icons.delete_outline_rounded,
-                      color: Colors.white, size: 28.r),
+                      color: Colors.white, size: 34.r),
                 ),
               ],
             ],
@@ -198,7 +198,7 @@ class BoomerangOverlay extends ConsumerWidget {
                     LiveAvatar(
                       userId: userId,
                       fallbackUrl: avatar,
-                      size: 44.r,
+                      size: 52.r,
                     ),
                     SizedBox(width: 10.w),
                     Text(
@@ -206,7 +206,7 @@ class BoomerangOverlay extends ConsumerWidget {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 18.sp,
+                        fontSize: 20.sp,
                       ),
                     ),
                   ],
@@ -220,7 +220,7 @@ class BoomerangOverlay extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 14.sp,
+                    fontSize: 15.sp,
                   ),
                 ),
               ],
@@ -242,7 +242,7 @@ class _ActionBubble extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.all(12.r),
+        padding: EdgeInsets.all(14.r),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.35),
           shape: BoxShape.circle,
@@ -295,7 +295,7 @@ class _LikeIcon extends ConsumerWidget {
         child: Icon(
           isLiked ? Icons.favorite : Icons.favorite_border,
           color: isLiked ? Colors.red : Colors.white,
-          size: 28.r,
+          size: 34.r,
         ),
       ),
     );
