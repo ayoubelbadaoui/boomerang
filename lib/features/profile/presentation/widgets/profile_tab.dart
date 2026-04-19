@@ -107,15 +107,19 @@ class ProfileTab extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   SizedBox(height: 8.h),
-                  InkWell(
-                    onTap: () => _showAvatarPickerSheet(context, ref),
-                    borderRadius: BorderRadius.circular(48.r),
-                    child: Stack(
-                      children: [
-                        AppAvatar(url: p?.avatarUrl, size: 96.r),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
+                  Stack(
+                    children: [
+                      AppAvatar(
+                        url: p?.avatarUrl,
+                        size: 96.r,
+                        enableFullscreen: true,
+                        heroTag: 'own_profile_avatar',
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onTap: () => _showAvatarPickerSheet(context, ref),
                           child: Container(
                             height: 24.r,
                             width: 24.r,
@@ -130,8 +134,8 @@ class ProfileTab extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                   SizedBox(height: 12.h),
                   if (p != null && p.nickname.isNotEmpty)

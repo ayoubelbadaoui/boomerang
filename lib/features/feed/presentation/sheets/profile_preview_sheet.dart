@@ -114,16 +114,12 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
-            InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => OtherUserProfilePage(userId: widget.userId),
-                  ),
-                );
-              },
-              customBorder: const CircleBorder(),
-              child: LiveAvatar(userId: widget.userId, fallbackUrl: widget.avatarUrl, size: 88.r),
+            LiveAvatar(
+              userId: widget.userId,
+              fallbackUrl: widget.avatarUrl,
+              size: 88.r,
+              enableFullscreen: true,
+              heroTag: 'preview_avatar_${widget.userId}',
             ),
             SizedBox(height: 12.h),
             InkWell(
@@ -466,7 +462,13 @@ class _BlockedPreview extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
-            LiveAvatar(userId: userId, fallbackUrl: avatarUrl, size: 88.r),
+            LiveAvatar(
+              userId: userId,
+              fallbackUrl: avatarUrl,
+              size: 88.r,
+              enableFullscreen: true,
+              heroTag: 'preview_blocked_avatar_$userId',
+            ),
             SizedBox(height: 12.h),
             Text(
               handle,

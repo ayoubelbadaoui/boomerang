@@ -175,7 +175,12 @@ class _ProfileBody extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(height: 8.h),
-          AppAvatar(url: p?.avatarUrl, size: 96.r),
+          AppAvatar(
+            url: p?.avatarUrl,
+            size: 96.r,
+            enableFullscreen: true,
+            heroTag: 'other_profile_avatar_$userId',
+          ),
           SizedBox(height: 12.h),
           if (p != null && p.nickname.isNotEmpty)
             Text(
@@ -348,7 +353,12 @@ class _BlockedProfileBody extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(height: 32.h),
-            AppAvatar(url: p?.avatarUrl, size: 96.r),
+            AppAvatar(
+              url: p?.avatarUrl,
+              size: 96.r,
+              enableFullscreen: true,
+              heroTag: 'other_profile_private_avatar_$userId',
+            ),
             SizedBox(height: 12.h),
             if (p != null && p.nickname.isNotEmpty)
               Text(
