@@ -40,6 +40,11 @@ abstract class ChatRepo {
     required String messageId,
   });
 
+  Future<void> deleteMessage({
+    required String conversationId,
+    required String messageId,
+  });
+
   Future<void> pinConversation({
     required String conversationId,
     required String userId,
@@ -51,4 +56,6 @@ abstract class ChatRepo {
   });
 
   Future<void> deleteConversation({required String conversationId});
+
+  Future<void> deleteConversations({required List<String> conversationIds});
 }

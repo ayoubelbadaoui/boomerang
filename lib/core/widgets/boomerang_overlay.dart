@@ -1,6 +1,8 @@
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,15 +77,15 @@ class BoomerangOverlay extends ConsumerWidget {
                 '$likes',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 13.sp,
+                  fontSize: 14.sp,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              SizedBox(height: 16.h),
+              SizedBox(height: 18.h),
               _ActionBubble(
-                onTap: () => _showCommentsSheet(context, boomerangId),
+                onTap: () => _showCommentsSheet(context, boomerangId, userId),
                 child: Icon(Icons.chat_bubble_outline_rounded,
-                    color: Colors.white, size: 24.r),
+                    color: Colors.white, size: 28.r),
               ),
               SizedBox(height: 4.h),
               StreamBuilder(
@@ -94,13 +96,13 @@ class BoomerangOverlay extends ConsumerWidget {
                     '$count',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 13.sp,
+                      fontSize: 14.sp,
                       fontWeight: FontWeight.w600,
                     ),
                   );
                 },
               ),
-              SizedBox(height: 16.h),
+              SizedBox(height: 18.h),
               if (me != null)
                 StreamBuilder<bool>(
                   stream: ref
@@ -132,7 +134,7 @@ class BoomerangOverlay extends ConsumerWidget {
                             ? Icons.bookmark
                             : Icons.bookmark_outline_rounded,
                         color: Colors.white,
-                        size: 24.r,
+                        size: 28.r,
                       ),
                     );
                   },
@@ -147,8 +149,20 @@ class BoomerangOverlay extends ConsumerWidget {
                   boomerangId: boomerangId,
                 ),
                 child: Icon(Icons.send_outlined,
-                    color: Colors.white, size: 24.r),
+                    color: Colors.white, size: 28.r),
               ),
+              if (me != null && me.uid == userId) ...[
+                SizedBox(height: 16.h),
+                _ActionBubble(
+                  onTap: () => _confirmDeleteFromOverlay(
+                    context,
+                    ref,
+                    boomerangId,
+                  ),
+                  child: Icon(Icons.delete_outline_rounded,
+                      color: Colors.white, size: 28.r),
+                ),
+              ],
             ],
           ),
         ),
@@ -163,36 +177,21 @@ class BoomerangOverlay extends ConsumerWidget {
             children: [
               GestureDetector(
                 onTap: () => _showProfilePreview(
-                    context, handle, avatar, userId),
+                    context, handle, userId),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 16.r,
-                      backgroundImage:
-                          avatar != null ? NetworkImage(avatar) : null,
-                      onBackgroundImageError:
-                          avatar != null ? (_, __) {} : null,
-                      backgroundColor: Colors.grey.shade300,
-                      child: avatar == null
-                          ? Text(
-                              userName.isNotEmpty
-                                  ? userName[0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14.sp,
-                              ),
-                            )
-                          : null,
+                    LiveAvatar(
+                      userId: userId,
+                      fallbackUrl: avatar,
+                      size: 44.r,
                     ),
-                    SizedBox(width: 8.w),
+                    SizedBox(width: 10.w),
                     Text(
                       handle,
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 16.sp,
+                        fontSize: 18.sp,
                       ),
                     ),
                   ],
@@ -206,7 +205,7 @@ class BoomerangOverlay extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 13.sp,
+                    fontSize: 14.sp,
                   ),
                 ),
               ],
@@ -228,7 +227,7 @@ class _ActionBubble extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.all(10.r),
+        padding: EdgeInsets.all(12.r),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.35),
           shape: BoxShape.circle,
@@ -266,7 +265,7 @@ class _LikeIcon extends ConsumerWidget {
         child: Icon(
           isLiked ? Icons.favorite : Icons.favorite_border,
           color: isLiked ? Colors.red : Colors.white,
-          size: 24.r,
+          size: 28.r,
         ),
       ),
     );
@@ -276,7 +275,6 @@ class _LikeIcon extends ConsumerWidget {
 void _showProfilePreview(
   BuildContext context,
   String handle,
-  String? avatar,
   String userId,
 ) {
   showModalBottomSheet<void>(
@@ -289,12 +287,15 @@ void _showProfilePreview(
     builder: (_) => ProfilePreviewSheet(
       userId: userId,
       handle: handle,
-      avatarUrl: avatar,
     ),
   );
 }
 
-void _showCommentsSheet(BuildContext context, String boomerangId) {
+void _showCommentsSheet(
+  BuildContext context,
+  String boomerangId,
+  String postOwnerId,
+) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -311,6 +312,7 @@ void _showCommentsSheet(BuildContext context, String boomerangId) {
         builder: (context, controller) => CommentsSheet(
           boomerangId: boomerangId,
           scrollController: controller,
+          postOwnerId: postOwnerId,
         ),
       );
     },
@@ -396,6 +398,50 @@ void _showShareSheet(
       );
     },
   );
+}
+
+void _confirmDeleteFromOverlay(
+  BuildContext context,
+  WidgetRef ref,
+  String boomerangId,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Delete Boomerang'),
+      content: const Text(
+        'Are you sure you want to delete this boomerang? This action cannot be undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  try {
+    await ref
+        .read(userBoomerangsControllerProvider.notifier)
+        .deleteBoomerang(boomerangId);
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Boomerang deleted')),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to delete: $e')),
+    );
+  }
 }
 
 class _ShareOption extends StatelessWidget {

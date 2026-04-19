@@ -112,16 +112,21 @@ service cloud.firestore {
 
       // Comments
       match /comments/{commentId} {
+        function isPostOwner() {
+          return get(/databases/$(database)/documents/boomerangs/$(boomerangId)).data.userId == request.auth.uid;
+        }
+
         allow read:   if canReadParentBoomerang();
         allow create: if authed() && request.resource.data.userId == request.auth.uid;
         allow update: if authed();
-        allow delete: if authed() && resource.data.userId == request.auth.uid;
+        allow delete: if authed() && (resource.data.userId == request.auth.uid || isPostOwner());
 
         // Replies
         match /replies/{replyId} {
-          allow read:           if canReadParentBoomerang();
-          allow create:         if authed() && request.resource.data.userId == request.auth.uid;
-          allow update, delete: if authed() && resource.data.userId == request.auth.uid;
+          allow read:   if canReadParentBoomerang();
+          allow create: if authed() && request.resource.data.userId == request.auth.uid;
+          allow update: if authed() && resource.data.userId == request.auth.uid;
+          allow delete: if authed() && (resource.data.userId == request.auth.uid || isPostOwner());
         }
       }
     }

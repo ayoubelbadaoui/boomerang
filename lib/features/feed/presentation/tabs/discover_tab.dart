@@ -1,4 +1,5 @@
 import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -196,7 +197,6 @@ class _UsersSearchList extends ConsumerWidget {
                       (_) => ProfilePreviewSheet(
                         userId: uid,
                         handle: handle,
-                        avatarUrl: avatar,
                       ),
                 );
               },
@@ -333,7 +333,7 @@ class _BmgGrid extends ConsumerWidget {
                   SizedBox(height: 8.h),
                 Row(
                   children: [
-                    AppAvatar(url: avatar, size: 24.r),
+                    LiveAvatar(userId: (d['userId'] ?? '') as String, fallbackUrl: avatar, size: 24.r),
                     SizedBox(width: 8.w),
                     Expanded(
                       child: InkWell(

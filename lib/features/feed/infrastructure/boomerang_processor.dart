@@ -32,10 +32,10 @@ class BoomerangProcessor {
     _assertExists(inputPath);
     final outPath = await _tmpPath('poster', 'jpg');
 
-    Future<bool> _tryPoster(String vf) async {
+    Future<bool> _tryPoster(String vf, {String seekTo = '0.1'}) async {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
-        '-ss', '0.1',
+        '-ss', seekTo,
         '-i', inputPath,
         '-vf', vf,
         '-frames:v', '1',
@@ -43,7 +43,8 @@ class BoomerangProcessor {
         outPath,
       ]);
       return ReturnCode.isSuccess(await session.getReturnCode()) &&
-          File(outPath).existsSync();
+          File(outPath).existsSync() &&
+          File(outPath).lengthSync() > 0;
     }
 
     final fullVf = [
@@ -51,14 +52,49 @@ class BoomerangProcessor {
       if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
     ].join(',');
 
-    if (await _tryPoster(fullVf)) return outPath;
+    // Try seeking to 0.1 s first; fall back to frame 0 for very short videos.
+    for (final seek in ['0.1', '0']) {
+      if (await _tryPoster(fullVf, seekTo: seek)) return outPath;
 
-    // Retry without color filter if it failed
-    if (videoFilter != null && videoFilter.isNotEmpty) {
-      if (await _tryPoster('scale=$targetWidth:-1')) return outPath;
+      if (videoFilter != null && videoFilter.isNotEmpty) {
+        if (await _tryPoster('scale=$targetWidth:-1', seekTo: seek)) {
+          return outPath;
+        }
+      }
     }
 
     throw Exception('Poster generation failed');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Trim — hard-clips the input to [maxSeconds] so imported gallery videos
+  // never exceed the boomerang segment budget (1.5 s → 3 s final loop).
+  // Returns the original path unchanged when already short enough.
+  // ---------------------------------------------------------------------------
+
+  Future<String> trimToMaxDuration(
+    String inputPath, {
+    double maxSeconds = 1.5,
+  }) async {
+    _assertExists(inputPath);
+    final outPath = await _tmpPath('trimmed', 'mp4');
+
+    for (final enc in _encoderCandidates) {
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        '-i', inputPath,
+        '-t', maxSeconds.toStringAsFixed(2),
+        '-an',
+        ...enc,
+        '-movflags', '+faststart',
+        outPath,
+      ]);
+      if (ReturnCode.isSuccess(await session.getReturnCode()) &&
+          await _hasVideoContent(outPath)) {
+        return outPath;
+      }
+    }
+    return inputPath;
   }
 
   // ---------------------------------------------------------------------------

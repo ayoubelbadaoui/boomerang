@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'package:boomerang/features/chat/domain/message_entity.dart';
 import 'package:boomerang/features/chat/presentation/widgets/audio_message_player.dart';
+import 'package:boomerang/features/chat/presentation/widgets/fullscreen_image_viewer.dart';
 
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
@@ -288,29 +289,42 @@ class _ImageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final heroTag = 'chat_image_$url';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
-          child: Image.network(
-            url,
-            width: 200.w,
-            height: 200.w,
-            fit: BoxFit.cover,
-            loadingBuilder: (_, child, progress) {
-              if (progress == null) return child;
-              return SizedBox(
+        GestureDetector(
+          onTap: () => FullscreenImageViewer.open(
+            context,
+            imageUrl: url,
+            heroTag: heroTag,
+          ),
+          child: Hero(
+            tag: heroTag,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12.r),
+              child: Image.network(
+                url,
                 width: 200.w,
                 height: 200.w,
-                child: const Center(child: CircularProgressIndicator()),
-              );
-            },
-            errorBuilder: (_, __, ___) => SizedBox(
-              width: 200.w,
-              height: 200.w,
-              child: const Center(child: Icon(Icons.broken_image_outlined)),
+                fit: BoxFit.cover,
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return SizedBox(
+                    width: 200.w,
+                    height: 200.w,
+                    child: const Center(child: CircularProgressIndicator()),
+                  );
+                },
+                errorBuilder: (_, __, ___) => SizedBox(
+                  width: 200.w,
+                  height: 200.w,
+                  child:
+                      const Center(child: Icon(Icons.broken_image_outlined)),
+                ),
+              ),
             ),
           ),
         ),
@@ -346,28 +360,41 @@ class _GifContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final heroTag = 'chat_gif_$url';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
-          child: Image.network(
-            url,
-            width: 200.w,
-            fit: BoxFit.cover,
-            loadingBuilder: (_, child, progress) {
-              if (progress == null) return child;
-              return SizedBox(
+        GestureDetector(
+          onTap: () => FullscreenImageViewer.open(
+            context,
+            imageUrl: url,
+            heroTag: heroTag,
+          ),
+          child: Hero(
+            tag: heroTag,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12.r),
+              child: Image.network(
+                url,
                 width: 200.w,
-                height: 120.w,
-                child: const Center(child: CircularProgressIndicator()),
-              );
-            },
-            errorBuilder: (_, __, ___) => SizedBox(
-              width: 200.w,
-              height: 120.w,
-              child: const Center(child: Icon(Icons.broken_image_outlined)),
+                fit: BoxFit.cover,
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return SizedBox(
+                    width: 200.w,
+                    height: 120.w,
+                    child: const Center(child: CircularProgressIndicator()),
+                  );
+                },
+                errorBuilder: (_, __, ___) => SizedBox(
+                  width: 200.w,
+                  height: 120.w,
+                  child:
+                      const Center(child: Icon(Icons.broken_image_outlined)),
+                ),
+              ),
             ),
           ),
         ),

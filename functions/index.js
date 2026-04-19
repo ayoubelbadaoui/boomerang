@@ -86,9 +86,14 @@ exports.onNewChatMessage = onDocumentCreated(
       return;
     }
 
-    // Data-only message so the client controls display and can suppress
-    // notifications when the conversation is already open.
+    // notification block handles background/terminated display;
+    // the client suppresses it in the foreground when the chat is open.
     const message = {
+      notification: {
+        title: senderName,
+        body: body,
+        ...(senderAvatar ? { image: senderAvatar } : {}),
+      },
       data: {
         conversationId: conversationId,
         senderId: senderId,
@@ -97,9 +102,19 @@ exports.onNewChatMessage = onDocumentCreated(
         body: body,
         ...(senderAvatar ? { avatarUrl: senderAvatar } : {}),
       },
-      android: { priority: "high" },
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+          channelId: "boomerang_push",
+          ...(senderAvatar ? { image: senderAvatar } : {}),
+        },
+      },
       apns: {
-        payload: { aps: { "content-available": 1, badge: 1 } },
+        payload: {
+          aps: { sound: "default", badge: 1, "mutable-content": 1 },
+        },
+        ...(senderAvatar ? { fcmOptions: { image: senderAvatar } } : {}),
       },
       tokens: tokens,
     };

@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:developer' show log;
-import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
-import 'package:boomerang/features/profile/presentation/widgets/boomerang_preview.dart';
+import 'package:boomerang/features/profile/presentation/profile_reels_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class UserBoomerangsGrid extends ConsumerStatefulWidget {
@@ -26,6 +25,49 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
         ref.read(userBoomerangsControllerProvider.notifier).fetchNext();
       }
     });
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    String boomerangId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Boomerang'),
+        content: const Text(
+          'Are you sure you want to delete this boomerang? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref
+          .read(userBoomerangsControllerProvider.notifier)
+          .deleteBoomerang(boomerangId);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Boomerang deleted')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete: $e')),
+      );
+    }
   }
 
   @override
@@ -61,24 +103,28 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
               itemBuilder: (context, index) {
                 final doc = s.docs[index];
                 final data = doc.data();
-                final id = doc.id;
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
                 final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
                 return InkWell(
-                  onLongPress:
-                      () => showBoomerangPreview(
-                        context,
-                        videoUrl: videoUrl,
-                        posterUrl: imageUrl,
-                      ),
                   onTap: () {
+                    final items = s.docs
+                        .map((d) => (id: d.id, data: d.data()))
+                        .toList();
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => BoomerangViewerPage(id: id, data: data),
+                        builder: (_) => ProfileReelsPage(
+                          initialItems: items,
+                          initialIndex: index,
+                          hasMore: s.hasMore,
+                          onLoadMore: () => ref
+                              .read(userBoomerangsControllerProvider.notifier)
+                              .fetchNext(),
+                        ),
                       ),
                     );
                   },
+                  onLongPress: () => _confirmDelete(context, ref, doc.id),
                   child: AspectRatio(
                     aspectRatio: aspectRatio,
                     child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),

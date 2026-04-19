@@ -17,6 +17,8 @@ class ConversationTile extends ConsumerWidget {
     required this.onTap,
     this.isPinned = false,
     this.onLongPress,
+    this.isSelectionMode = false,
+    this.isSelected = false,
   });
 
   final ConversationEntity conversation;
@@ -25,6 +27,8 @@ class ConversationTile extends ConsumerWidget {
   final VoidCallback onTap;
   final bool isPinned;
   final VoidCallback? onLongPress;
+  final bool isSelectionMode;
+  final bool isSelected;
 
   String get _formattedTime {
     final now = DateTime.now();
@@ -59,10 +63,36 @@ class ConversationTile extends ConsumerWidget {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Padding(
+      child: Container(
+        color: isSelected
+            ? theme.colorScheme.primary.withValues(alpha: 0.08)
+            : null,
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
         child: Row(
           children: [
+            if (isSelectionMode) ...[
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 24.w,
+                height: 24.w,
+                margin: EdgeInsets.only(right: 12.w),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : Colors.grey.shade400,
+                    width: 2,
+                  ),
+                ),
+                child: isSelected
+                    ? Icon(Icons.check, size: 14.sp, color: Colors.white)
+                    : null,
+              ),
+            ],
             AppAvatar(url: otherUser?.avatarUrl, size: 56.r),
             SizedBox(width: 14.w),
             Expanded(

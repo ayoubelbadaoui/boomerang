@@ -56,27 +56,46 @@ class ChatController extends StateNotifier<ChatState> {
   final String conversationId;
   final String currentUserId;
   StreamSubscription<List<MessageEntity>>? _subscription;
+  bool _disposed = false;
 
   static const _pageSize = 20;
+
+  bool _isViewing = false;
+
+  void setViewing(bool viewing) {
+    _isViewing = viewing;
+    if (viewing) markAsSeen();
+  }
 
   void _init() {
     _subscription = _repo
         .streamMessages(conversationId, limit: _pageSize)
         .listen(
       (streamedMessages) {
+        if (_disposed) return;
         final paginatedOlder = state.messages
             .where((m) => !streamedMessages.any((sm) => sm.id == m.id))
             .toList();
         state = state.copyWith(
           messages: [...streamedMessages, ...paginatedOlder],
         );
+
+        if (_isViewing) {
+          final hasUnseenFromOthers = streamedMessages.any(
+            (m) =>
+                m.senderId != currentUserId &&
+                m.status != MessageStatus.seen,
+          );
+          if (hasUnseenFromOthers) {
+            _repo.markMessagesAsSeen(conversationId, currentUserId);
+          }
+        }
       },
       onError: (Object e) {
+        if (_disposed) return;
         state = state.copyWith(error: e.toString());
       },
     );
-
-    _repo.markMessagesAsSeen(conversationId, currentUserId);
   }
 
   Future<void> loadMore() async {
@@ -90,6 +109,7 @@ class ChatController extends StateNotifier<ChatState> {
         before: oldest.createdAt,
         limit: _pageSize,
       );
+      if (_disposed) return;
 
       final existingIds = state.messages.map((m) => m.id).toSet();
       final fresh =
@@ -101,6 +121,7 @@ class ChatController extends StateNotifier<ChatState> {
         hasMore: older.length >= _pageSize,
       );
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(isLoadingMore: false, error: e.toString());
     }
   }
@@ -142,8 +163,10 @@ class ChatController extends StateNotifier<ChatState> {
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );
+      if (_disposed) return;
       state = state.copyWith(isSending: false, clearReply: true);
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(isSending: false, error: e.toString());
     }
   }
@@ -169,8 +192,10 @@ class ChatController extends StateNotifier<ChatState> {
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );
+      if (_disposed) return;
       state = state.copyWith(isSending: false, clearReply: true);
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(isSending: false, error: e.toString());
     }
   }
@@ -195,8 +220,10 @@ class ChatController extends StateNotifier<ChatState> {
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );
+      if (_disposed) return;
       state = state.copyWith(isSending: false, clearReply: true);
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(isSending: false, error: e.toString());
     }
   }
@@ -223,8 +250,10 @@ class ChatController extends StateNotifier<ChatState> {
         replyToSenderId: reply?.senderId,
         replyToType: reply?.type,
       );
+      if (_disposed) return;
       state = state.copyWith(isSending: false, clearReply: true);
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(isSending: false, error: e.toString());
     }
   }
@@ -247,6 +276,15 @@ class ChatController extends StateNotifier<ChatState> {
     }
 
     await _repo.unsendMessage(
+      conversationId: conversationId,
+      messageId: messageId,
+    );
+  }
+
+  // ── Delete message ─────────────────────────────────────────────────
+
+  Future<void> deleteMessage(String messageId) async {
+    await _repo.deleteMessage(
       conversationId: conversationId,
       messageId: messageId,
     );
@@ -282,6 +320,8 @@ class ChatController extends StateNotifier<ChatState> {
 
   @override
   void dispose() {
+    _disposed = true;
+    _isViewing = false;
     _subscription?.cancel();
     super.dispose();
   }

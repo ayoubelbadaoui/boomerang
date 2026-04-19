@@ -1,4 +1,4 @@
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +17,7 @@ class ProfilePreviewSheet extends ConsumerStatefulWidget {
     super.key,
     required this.userId,
     required this.handle,
-    required this.avatarUrl,
+    this.avatarUrl,
   });
   final String userId;
   final String handle;
@@ -123,7 +123,7 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 );
               },
               customBorder: const CircleBorder(),
-              child: AppAvatar(url: widget.avatarUrl, size: 88.r),
+              child: LiveAvatar(userId: widget.userId, fallbackUrl: widget.avatarUrl, size: 88.r),
             ),
             SizedBox(height: 12.h),
             InkWell(
@@ -466,7 +466,7 @@ class _BlockedPreview extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
-            AppAvatar(url: avatarUrl, size: 88.r),
+            LiveAvatar(userId: userId, fallbackUrl: avatarUrl, size: 88.r),
             SizedBox(height: 12.h),
             Text(
               handle,

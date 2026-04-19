@@ -1,4 +1,4 @@
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:flutter/material.dart';
@@ -72,14 +72,14 @@ class FollowListSheet extends ConsumerWidget {
                     itemBuilder: (context, i) {
                       final d = docs[i].data();
                       final name = (d['userName'] ?? 'User') as String;
-                      final avatar = d['userAvatar'] as String?;
+                      final avatarFallback = d['userAvatar'] as String?;
                       final handle =
                           '@${name.replaceAll(' ', '_').toLowerCase()}';
                       final userId = (d['userId'] ?? '') as String;
                       return _FollowListTile(
                         name: name,
                         handle: handle,
-                        avatar: avatar,
+                        avatarFallback: avatarFallback,
                         userId: userId,
                         showFollowBack: mode == FollowMode.followers,
                       );
@@ -99,14 +99,14 @@ class _FollowListTile extends ConsumerStatefulWidget {
   const _FollowListTile({
     required this.name,
     required this.handle,
-    required this.avatar,
+    required this.avatarFallback,
     required this.userId,
     required this.showFollowBack,
   });
 
   final String name;
   final String handle;
-  final String? avatar;
+  final String? avatarFallback;
   final String userId;
   final bool showFollowBack;
 
@@ -138,10 +138,9 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
       onTap: () => _showProfilePreview(
         context,
         widget.handle,
-        widget.avatar,
         widget.userId,
       ),
-      leading: AppAvatar(url: widget.avatar, size: 44.r),
+      leading: LiveAvatar(userId: widget.userId, fallbackUrl: widget.avatarFallback, size: 44.r),
       title: Text(
         widget.name,
         style: const TextStyle(fontWeight: FontWeight.w700),
@@ -185,7 +184,6 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
 void _showProfilePreview(
   BuildContext context,
   String handle,
-  String? avatar,
   String userId,
 ) {
   showModalBottomSheet<void>(
@@ -199,7 +197,6 @@ void _showProfilePreview(
         (_) => ProfilePreviewSheet(
           userId: userId,
           handle: handle,
-          avatarUrl: avatar,
         ),
   );
 }

@@ -1,4 +1,4 @@
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -230,8 +230,9 @@ class _FollowingList extends ConsumerWidget {
             final isLoading = loadingUserId == userId;
 
             return _UserTile(
+              userId: userId,
               name: name,
-              avatarUrl: avatar,
+              avatarFallback: avatar,
               isLoading: isLoading,
               onTap: () => onTap(userId),
             );
@@ -246,14 +247,16 @@ class _FollowingList extends ConsumerWidget {
 
 class _UserTile extends StatelessWidget {
   const _UserTile({
+    required this.userId,
     required this.name,
-    required this.avatarUrl,
+    required this.avatarFallback,
     required this.isLoading,
     required this.onTap,
   });
 
+  final String userId;
   final String name;
-  final String? avatarUrl;
+  final String? avatarFallback;
   final bool isLoading;
   final VoidCallback onTap;
 
@@ -269,7 +272,7 @@ class _UserTile extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 10.h),
         child: Row(
           children: [
-            AppAvatar(url: avatarUrl, size: 48.r),
+            LiveAvatar(userId: userId, fallbackUrl: avatarFallback, size: 48.r),
             SizedBox(width: 14.w),
             Expanded(
               child: Column(

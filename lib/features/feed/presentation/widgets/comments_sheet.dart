@@ -1,4 +1,4 @@
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,12 +11,14 @@ class CommentsSheet extends ConsumerStatefulWidget {
     super.key,
     required this.boomerangId,
     required this.scrollController,
+    this.postOwnerId,
     this.targetCommentId,
     this.targetReplyId,
   });
 
   final String boomerangId;
   final ScrollController scrollController;
+  final String? postOwnerId;
   final String? targetCommentId;
   final String? targetReplyId;
 
@@ -152,6 +154,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
                             (c['createdAt'] is Timestamp)
                                 ? (c['createdAt'] as Timestamp).toDate()
                                 : DateTime.now(),
+                        postOwnerId: widget.postOwnerId,
                         highlightReplyId: _highlightReplyId,
                         replyKeys: _replyKeys,
                         targetReplyId: _highlightReplyId,
@@ -180,6 +183,7 @@ class _CommentTile extends ConsumerWidget {
     required this.likes,
     required this.likedBy,
     required this.createdAt,
+    this.postOwnerId,
     this.highlightReplyId,
     required this.replyKeys,
     this.targetReplyId,
@@ -193,6 +197,7 @@ class _CommentTile extends ConsumerWidget {
   final int likes;
   final List<String> likedBy;
   final DateTime createdAt;
+  final String? postOwnerId;
   final String? highlightReplyId;
   final Map<String, GlobalKey> replyKeys;
   final String? targetReplyId;
@@ -200,130 +205,190 @@ class _CommentTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(currentUserProfileProvider).value;
+    final myUid = me?.uid;
     final isLiked = me != null && likedBy.contains(me.uid);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final canDelete =
+        myUid != null && (myUid == userId || myUid == postOwnerId);
+    return GestureDetector(
+      onLongPress: canDelete
+          ? () => _confirmDelete(context, ref)
+          : null,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               GestureDetector(
                 onTap: userId.isEmpty ? null : () => _openProfile(context),
-                child: AppAvatar(url: userAvatar, size: 56.r),
+                child: LiveAvatar(userId: userId, fallbackUrl: userAvatar, size: 56.r),
               ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: userId.isEmpty ? null : () => _openProfile(context),
-                      child: Text(
-                        userName,
-                        style: TextStyle(
-                          fontFamily: 'Urbanist',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16.sp,
-                          height: 1.4,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 6.h),
-                    Text(
-                      text,
-                      style: TextStyle(
-                        fontFamily: 'Urbanist',
-                        fontSize: 14.sp,
-                        height: 1.4,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    SizedBox(height: 10.h),
-                    Row(
-                      children: [
-                        InkWell(
-                          onTap:
-                              me == null
-                                  ? null
-                                  : () {
-                                      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-                                      if (uid == null) return;
-                                      ref
-                                          .read(commentsRepoProvider)
-                                          .toggleLike(
-                                            boomerangId: boomerangId,
-                                            commentId: commentId,
-                                            userId: uid,
-                                          );
-                                    },
-                          customBorder: const CircleBorder(),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isLiked
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                size: 22,
-                                color: isLiked ? Colors.red : Colors.black54,
-                              ),
-                              SizedBox(width: 6.w),
-                              Text(
-                                '$likes',
-                                style: TextStyle(
-                                  fontFamily: 'Urbanist',
-                                  fontSize: 12.sp,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.0,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(width: 16.w),
-                        Text(
-                          _timeAgo(createdAt),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: userId.isEmpty ? null : () => _openProfile(context),
+                        child: Text(
+                          userName,
                           style: TextStyle(
-                            color: Colors.black54,
                             fontFamily: 'Urbanist',
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w500,
-                            height: 1.0,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16.sp,
+                            height: 1.4,
                             letterSpacing: 0.2,
                           ),
                         ),
-                        SizedBox(width: 16.w),
-                        InkWell(
-                          onTap: () => _openReply(context, ref),
-                          child: Text(
-                            'Reply',
-                            style: TextStyle(
-                              fontFamily: 'Urbanist',
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w700,
-                              height: 1.2,
-                              letterSpacing: 0,
+                      ),
+                      SizedBox(height: 6.h),
+                      Text(
+                        text,
+                        style: TextStyle(
+                          fontFamily: 'Urbanist',
+                          fontSize: 14.sp,
+                          height: 1.4,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      SizedBox(height: 10.h),
+                      Row(
+                        children: [
+                          InkWell(
+                            onTap:
+                                me == null
+                                    ? null
+                                    : () {
+                                        final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+                                        if (uid == null) return;
+                                        ref
+                                            .read(commentsRepoProvider)
+                                            .toggleLike(
+                                              boomerangId: boomerangId,
+                                              commentId: commentId,
+                                              userId: uid,
+                                            );
+                                      },
+                            customBorder: const CircleBorder(),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isLiked
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  size: 22,
+                                  color: isLiked ? Colors.red : Colors.black54,
+                                ),
+                                SizedBox(width: 6.w),
+                                Text(
+                                  '$likes',
+                                  style: TextStyle(
+                                    fontFamily: 'Urbanist',
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.0,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          SizedBox(width: 16.w),
+                          Text(
+                            _timeAgo(createdAt),
+                            style: TextStyle(
+                              color: Colors.black54,
+                              fontFamily: 'Urbanist',
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w500,
+                              height: 1.0,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          SizedBox(width: 16.w),
+                          InkWell(
+                            onTap: () => _openReply(context, ref),
+                            child: Text(
+                              'Reply',
+                              style: TextStyle(
+                                fontFamily: 'Urbanist',
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: 8.w),
+              ],
+            ),
+            _RepliesList(
+              boomerangId: boomerangId,
+              commentId: commentId,
+              postOwnerId: postOwnerId,
+              replyKeys: replyKeys,
+              targetReplyId: highlightReplyId,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: Text(
+                  'Delete comment',
+                  style: TextStyle(
+                    fontFamily: 'Urbanist',
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref.read(commentsRepoProvider).delete(
+                    boomerangId: boomerangId,
+                    commentId: commentId,
+                  );
+                },
               ),
-              SizedBox(width: 8.w),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontFamily: 'Urbanist',
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx),
+              ),
             ],
           ),
-          _RepliesList(
-            boomerangId: boomerangId,
-            commentId: commentId,
-            replyKeys: replyKeys,
-            targetReplyId: highlightReplyId,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -339,7 +404,6 @@ class _CommentTile extends ConsumerWidget {
       builder: (_) => ProfilePreviewSheet(
         userId: userId,
         handle: userName,
-        avatarUrl: userAvatar,
       ),
     );
   }
@@ -419,11 +483,13 @@ class _RepliesList extends ConsumerWidget {
   const _RepliesList({
     required this.boomerangId,
     required this.commentId,
+    this.postOwnerId,
     required this.replyKeys,
     this.targetReplyId,
   });
   final String boomerangId;
   final String commentId;
+  final String? postOwnerId;
   final Map<String, GlobalKey> replyKeys;
   final String? targetReplyId;
 
@@ -431,7 +497,6 @@ class _RepliesList extends ConsumerWidget {
     BuildContext context, {
     required String userId,
     required String handle,
-    required String? avatarUrl,
   }) {
     showModalBottomSheet<void>(
       context: context,
@@ -443,13 +508,14 @@ class _RepliesList extends ConsumerWidget {
       builder: (_) => ProfilePreviewSheet(
         userId: userId,
         handle: handle,
-        avatarUrl: avatarUrl,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentUserProfileProvider).value;
+    final myUid = me?.uid;
     final stream =
         FirebaseFirestore.instance
             .collection('boomerangs')
@@ -481,16 +547,22 @@ class _RepliesList extends ConsumerWidget {
                       ts is Timestamp ? ts.toDate() : DateTime.now();
                   final key = replyKeys.putIfAbsent(replyId, () => GlobalKey());
                   final isHighlight = targetReplyId == replyId;
-                  return Padding(
+                  final canDelete = myUid != null &&
+                      (myUid == replyUserId || myUid == postOwnerId);
+                  return GestureDetector(
                     key: key,
-                    padding: EdgeInsets.only(bottom: 10.h),
-                    child: Container(
-                      color:
-                          isHighlight
-                              ? Colors.yellow.withValues(alpha: 0.12)
-                              : Colors.transparent,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    onLongPress: canDelete
+                        ? () => _confirmDeleteReply(context, ref, replyId)
+                        : null,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 10.h),
+                      child: Container(
+                        color:
+                            isHighlight
+                                ? Colors.yellow.withValues(alpha: 0.12)
+                                : Colors.transparent,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           GestureDetector(
                             onTap: replyUserId.isEmpty
@@ -499,9 +571,8 @@ class _RepliesList extends ConsumerWidget {
                                       context,
                                       userId: replyUserId,
                                       handle: name,
-                                      avatarUrl: avatar,
                                     ),
-                            child: AppAvatar(url: avatar, size: 40.r),
+                            child: LiveAvatar(userId: replyUserId, fallbackUrl: avatar, size: 40.r),
                           ),
                           SizedBox(width: 8.w),
                           Expanded(
@@ -515,42 +586,42 @@ class _RepliesList extends ConsumerWidget {
                                             context,
                                             userId: replyUserId,
                                             handle: name,
-                                            avatarUrl: avatar,
                                           ),
-                                  child: Text(
-                                    name,
-                                    style: TextStyle(
-                                      fontFamily: 'Urbanist',
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14.sp,
-                                      height: 1.4,
-                                      letterSpacing: 0.2,
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontFamily: 'Urbanist',
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14.sp,
+                                        height: 1.4,
+                                        letterSpacing: 0.2,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                SizedBox(height: 4.h),
-                                Text(
-                                  text,
-                                  style: TextStyle(
-                                    fontFamily: 'Urbanist',
-                                    fontSize: 13.sp,
-                                    height: 1.4,
+                                  SizedBox(height: 4.h),
+                                  Text(
+                                    text,
+                                    style: TextStyle(
+                                      fontFamily: 'Urbanist',
+                                      fontSize: 13.sp,
+                                      height: 1.4,
+                                    ),
                                   ),
-                                ),
-                                SizedBox(height: 6.h),
-                                Text(
-                                  _timeAgo(createdAt),
-                                  style: TextStyle(
-                                    color: Colors.black45,
-                                    fontFamily: 'Urbanist',
-                                    fontSize: 12.sp,
-                                    fontWeight: FontWeight.w500,
+                                  SizedBox(height: 6.h),
+                                  Text(
+                                    _timeAgo(createdAt),
+                                    style: TextStyle(
+                                      color: Colors.black45,
+                                      fontFamily: 'Urbanist',
+                                      fontSize: 12.sp,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -558,6 +629,62 @@ class _RepliesList extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  void _confirmDeleteReply(
+    BuildContext context,
+    WidgetRef ref,
+    String replyId,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: Text(
+                  'Delete reply',
+                  style: TextStyle(
+                    fontFamily: 'Urbanist',
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref.read(commentsRepoProvider).deleteReply(
+                    boomerangId: boomerangId,
+                    parentCommentId: commentId,
+                    replyId: replyId,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontFamily: 'Urbanist',
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

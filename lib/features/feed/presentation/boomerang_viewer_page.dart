@@ -23,6 +23,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
   bool _showHeart = false;
   bool _userPaused = false;
   bool _showPauseIcon = false;
+  bool _showPosterOverlay = true;
   late final AnimationController _anim;
 
   @override
@@ -37,6 +38,8 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
           _controller?.setLooping(true);
           _controller?.setVolume(0.0);
           _controller?.play();
+          _controller?.addListener(_onVideoTickForPoster);
+          _schedulePosterFallback();
         });
     }
     _anim = AnimationController(
@@ -48,6 +51,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
 
   @override
   void dispose() {
+    _controller?.removeListener(_onVideoTickForPoster);
     _controller?.dispose();
     _anim.dispose();
     SystemChrome.setEnabledSystemUIMode(
@@ -55,6 +59,30 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
       overlays: SystemUiOverlay.values,
     );
     super.dispose();
+  }
+
+  void _dismissPoster() {
+    if (!_showPosterOverlay) return;
+    _showPosterOverlay = false;
+    _controller?.removeListener(_onVideoTickForPoster);
+    if (mounted) setState(() {});
+  }
+
+  void _onVideoTickForPoster() {
+    final c = _controller;
+    if (c == null) return;
+    final v = c.value;
+    if (!v.isInitialized) return;
+    if (!v.isBuffering && (v.isPlaying || v.position > Duration.zero)) {
+      _dismissPoster();
+    }
+  }
+
+  void _schedulePosterFallback() {
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      if (_controller?.value.isInitialized == true) _dismissPoster();
+    });
   }
 
   void _onTap() {
@@ -91,6 +119,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
   @override
   Widget build(BuildContext context) {
     final image = widget.data['imageUrl'] as String?;
+    final hasVideo = _controller != null && _controller!.value.isInitialized;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -101,24 +130,37 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
               onTap: _onTap,
               onDoubleTap: _onDoubleTap,
               behavior: HitTestBehavior.opaque,
-              child:
-                  _controller != null && _controller!.value.isInitialized
-                      ? FittedBox(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (hasVideo)
+                    FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: SizedBox(
+                        width: _controller!.value.size.width,
+                        height: _controller!.value.size.height,
+                        child: VideoPlayer(_controller!),
+                      ),
+                    )
+                  else
+                    Container(color: Colors.black),
+                  if (image != null &&
+                      image.isNotEmpty &&
+                      _showPosterOverlay)
+                    AnimatedOpacity(
+                      opacity: _showPosterOverlay ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Image.network(
+                        image,
                         fit: BoxFit.cover,
-                        clipBehavior: Clip.hardEdge,
-                        child: SizedBox(
-                          width: _controller!.value.size.width,
-                          height: _controller!.value.size.height,
-                          child: VideoPlayer(_controller!),
-                        ),
-                      )
-                      : (image != null && image.isNotEmpty
-                          ? Image.network(
-                              image,
-                              fit: BoxFit.cover,
-                              cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
-                            )
-                          : Container(color: Colors.black)),
+                        cacheWidth: (MediaQuery.sizeOf(context).width *
+                                MediaQuery.devicePixelRatioOf(context))
+                            .round(),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           if (_showHeart)

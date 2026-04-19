@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:boomerang/core/notifications/in_app_notification.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/router.dart';
@@ -95,7 +96,7 @@ class _PushNotificationsBootstrap {
       await _saveToken(user.uid, token);
     });
 
-    // Foreground message handler — suppress if the chat is already open
+    // Foreground message handler
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       developer.log(
         '[notification push] FCM foreground message: ${message.messageId} '
@@ -104,6 +105,7 @@ class _PushNotificationsBootstrap {
 
       final type = message.data['type'] as String?;
       final conversationId = message.data['conversationId'] as String?;
+
       if (type == 'chat_message' && conversationId != null) {
         final activeConvId = ref.read(activeConversationProvider);
         if (activeConvId == conversationId) {
@@ -112,6 +114,23 @@ class _PushNotificationsBootstrap {
           );
           return;
         }
+
+        // Show Instagram-style in-app banner instead of a system notification
+        final title = message.notification?.title
+            ?? message.data['senderName'] as String?
+            ?? 'Boomerang';
+        final body = message.notification?.body
+            ?? message.data['body'] as String?
+            ?? 'New message';
+        final avatarUrl = message.data['avatarUrl'] as String?;
+
+        ref.read(inAppNotificationProvider.notifier).state = InAppNotification(
+          title: title,
+          body: body,
+          avatarUrl: avatarUrl,
+          conversationId: conversationId,
+        );
+        return;
       }
 
       await _showLocalNotification(message);

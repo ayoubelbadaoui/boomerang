@@ -123,9 +123,55 @@ class UploadController extends Notifier<UploadState> {
       log('Upload failed', name: 'UploadController', error: e, stackTrace: st);
       state = UploadState(
         phase: UploadPhase.failed,
-        errorMessage: '$e',
+        errorMessage: _friendlyError(e),
       );
     }
+  }
+
+  static String _friendlyError(Object error) {
+    if (error is FirebaseException) {
+      return switch (error.code) {
+        'storage/retry-limit-exceeded' ||
+        'storage/server-file-wrong-size' => 'Upload interrupted. Please try again.',
+        'storage/unauthenticated' => 'Please log in and try again.',
+        'storage/unauthorized' => 'Permission denied. Please log in again.',
+        'storage/quota-exceeded' => 'Storage full. Please try again later.',
+        'storage/canceled' => 'Upload was cancelled.',
+        _ => 'Upload failed. Please try again.',
+      };
+    }
+
+    final msg = error.toString().toLowerCase();
+
+    if (error is SocketException || msg.contains('socketexception')) {
+      return 'No internet connection. Please try again.';
+    }
+    if (msg.contains('permission') || msg.contains('unauthorized') || msg.contains('403')) {
+      return 'Permission denied. Please log in again.';
+    }
+    if (msg.contains('not found') || msg.contains('404')) {
+      return 'Something went wrong. Please try again.';
+    }
+    if (msg.contains('quota') || msg.contains('resource_exhausted')) {
+      return 'Service is busy. Please try again later.';
+    }
+    if (msg.contains('timeout') || msg.contains('deadline')) {
+      return 'Upload timed out. Check your connection.';
+    }
+    if (msg.contains('input file does not exist')) {
+      return 'Video file not found. Please record again.';
+    }
+    if (msg.contains('frame extraction') || msg.contains('poster generation')) {
+      return 'Could not process video. Try a different clip.';
+    }
+    if (msg.contains('encoding failed') || msg.contains('ffmpeg')) {
+      return 'Video processing failed. Try a different clip.';
+    }
+    if (msg.contains('canceled') || msg.contains('cancelled')) {
+      return 'Upload was cancelled.';
+    }
+
+    return 'Upload failed. Please try again.';
   }
 
   Future<void> _run(_PublishArgs args, UserProfile me) async {
@@ -167,7 +213,10 @@ class UploadController extends Notifier<UploadState> {
     );
 
     final videoFuture = _uploadVideo(storage, outPath);
-    final posterFuture = _uploadPoster(storage, processor, inputPath, args.colorFilter);
+    final posterFuture = _uploadPoster(
+      storage, processor, inputPath, args.colorFilter,
+      fallbackVideoPath: outPath,
+    );
 
     final results = await Future.wait([videoFuture, posterFuture]);
     final videoUrl = results[0]!;
@@ -226,13 +275,22 @@ class UploadController extends Notifier<UploadState> {
     FirebaseStorage storage,
     BoomerangProcessor processor,
     String inputPath,
-    String? colorFilter,
-  ) async {
+    String? colorFilter, {
+    String? fallbackVideoPath,
+  }) async {
     try {
-      final posterPath = await processor.generatePoster(
-        inputPath,
-        videoFilter: colorFilter,
-      );
+      String? posterPath;
+      try {
+        posterPath = await processor.generatePoster(
+          inputPath,
+          videoFilter: colorFilter,
+        );
+      } catch (_) {
+        if (fallbackVideoPath != null) {
+          posterPath = await processor.generatePoster(fallbackVideoPath);
+        }
+      }
+      if (posterPath == null) return null;
       final posterRef = storage.ref(
         'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );

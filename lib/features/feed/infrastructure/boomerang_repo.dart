@@ -271,6 +271,39 @@ class BoomerangRepo {
         .snapshots();
   }
 
+  /// Deletes a boomerang and adjusts denormalized counters (best-effort).
+  Future<void> deleteBoomerang({
+    required String boomerangId,
+    required String userId,
+  }) async {
+    final docRef = _fs.collection('boomerangs').doc(boomerangId);
+    final snap = await docRef.get();
+    final data = snap.data();
+
+    await docRef.delete();
+
+    // Decrement user's boomerangsCount
+    await _fs.collection('users').doc(userId).update({
+      'boomerangsCount': FieldValue.increment(-1),
+    });
+
+    // Decrement hashtag counters (best-effort, mirrors createBoomerangPost)
+    final tags = (data?['hashtags'] as List?)?.cast<String>() ?? const <String>[];
+    if (tags.isNotEmpty) {
+      final batch = _fs.batch();
+      for (final tag in tags.toSet()) {
+        final doc = _fs.collection('hashtags').doc(tag);
+        batch.set(doc, {
+          'count': FieldValue.increment(-1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      try {
+        await batch.commit();
+      } catch (_) {}
+    }
+  }
+
   /// Fetch a single boomerang document by id.
   /// Returns null if not found.
   Future<(String, Map<String, dynamic>)?> fetchBoomerangById(

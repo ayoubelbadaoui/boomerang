@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
@@ -237,7 +237,8 @@ class _BoomerangCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final handle =
         '@${(data['userName'] ?? 'user').toString().replaceAll(' ', '_').toLowerCase()}';
-    final avatar = data['userAvatar'] as String?;
+    final userId = (data['userId'] ?? '') as String;
+    final avatarFallback = data['userAvatar'] as String?;
     final image = data['imageUrl'] as String?; // optional poster
     final video = data['videoUrl'] as String?;
     final likes = (likesOverride ?? data['likes'] ?? 0) as int;
@@ -283,27 +284,25 @@ class _BoomerangCard extends ConsumerWidget {
                             () => _showProfilePreview(
                               context,
                               handle,
-                              avatar,
-                              data['userId'] as String,
+                              userId,
                             ),
                         customBorder: const CircleBorder(),
-                        child: AppAvatar(url: avatar, size: 28.r),
+                        child: LiveAvatar(userId: userId, fallbackUrl: avatarFallback, size: 36.r),
                       ),
-                      SizedBox(width: 8.w),
+                      SizedBox(width: 10.w),
                       InkWell(
                         onTap:
                             () => _showProfilePreview(
                               context,
                               handle,
-                              avatar,
-                              data['userId'] as String,
+                              userId,
                             ),
                         child: Text(
                           handle,
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
-                            fontSize: 14.sp,
+                            fontSize: 16.sp,
                           ),
                         ),
                       ),
@@ -376,7 +375,7 @@ class _BoomerangCard extends ConsumerWidget {
                       style: TextStyle(
                         color: Colors.black,
                         fontWeight: FontWeight.w700,
-                        fontSize: 14.sp,
+                        fontSize: 16.sp,
                       ),
                     ),
                     SizedBox(height: 4.h),
@@ -385,7 +384,7 @@ class _BoomerangCard extends ConsumerWidget {
                       textAlign: TextAlign.left,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.black87, fontSize: 13.sp),
+                      style: TextStyle(color: Colors.black87, fontSize: 14.sp),
                     ),
                   ],
                 ),
@@ -412,11 +411,11 @@ class _SvgCircleBtn extends StatelessWidget {
           color: Colors.black,
           shape: BoxShape.circle,
         ),
-        padding: EdgeInsets.all(10.r),
+        padding: EdgeInsets.all(12.r),
         child: SvgPicture.asset(
           asset,
-          width: 20.r,
-          height: 20.r,
+          width: 24.r,
+          height: 24.r,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
       ),
@@ -431,49 +430,21 @@ class _CommentButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final commentsCount = ((data['commentsCount'] ?? 0) as num).toInt();
     return GestureDetector(
       onTap: () => _showCommentsSheet(context, boomerangId, data),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              shape: BoxShape.circle,
-            ),
-            padding: EdgeInsets.all(10.r),
-            child: SvgPicture.asset(
-              'assets/svgs/comment.svg',
-              width: 20.r,
-              height: 20.r,
-              colorFilter:
-                  const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-            ),
-          ),
-          if (commentsCount > 0)
-            Positioned(
-              right: -4,
-              top: -4,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 1.h),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(10.r),
-                ),
-                constraints: BoxConstraints(minWidth: 18.r),
-                child: Text(
-                  commentsCount > 99 ? '99+' : '$commentsCount',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          shape: BoxShape.circle,
+        ),
+        padding: EdgeInsets.all(12.r),
+        child: SvgPicture.asset(
+          'assets/svgs/comment.svg',
+          width: 24.r,
+          height: 24.r,
+          colorFilter:
+              const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
       ),
     );
   }
@@ -512,11 +483,11 @@ class _BookmarkButton extends ConsumerWidget {
               color: Colors.black,
               shape: BoxShape.circle,
             ),
-            padding: EdgeInsets.all(10.r),
+            padding: EdgeInsets.all(12.r),
             child: SvgPicture.asset(
               'assets/svgs/Bookmark.svg',
-              width: 20.r,
-              height: 20.r,
+              width: 24.r,
+              height: 24.r,
               colorFilter: ColorFilter.mode(
                 saved ? Colors.yellow : Colors.white,
                 BlendMode.srcIn,
@@ -565,8 +536,8 @@ class _LikeCircleButtonState extends ConsumerState<_LikeCircleButton> {
       customBorder: const CircleBorder(),
       child: SvgPicture.asset(
         'assets/heart.svg',
-        width: 30.w,
-        height: 30.w,
+        width: 36.w,
+        height: 36.w,
         colorFilter: ColorFilter.mode(
           widget.isLiked ? Colors.red : Colors.white,
           BlendMode.srcIn,
@@ -687,7 +658,6 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
 void _showProfilePreview(
   BuildContext context,
   String handle,
-  String? avatar,
   String userId,
 ) {
   showModalBottomSheet<void>(
@@ -701,7 +671,6 @@ void _showProfilePreview(
         (_) => ProfilePreviewSheet(
           userId: userId,
           handle: handle,
-          avatarUrl: avatar,
         ),
   );
 }
@@ -767,7 +736,7 @@ void _showShareSheet(
                     if (context.mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Video link copied')),
+                        const SnackBar(content: Text('Boomerang link copied')),
                       );
                     }
                   } else {
@@ -800,6 +769,7 @@ void _showCommentsSheet(
   String boomerangId,
   Map<String, dynamic> data,
 ) {
+  final postOwnerId = (data['userId'] ?? '') as String;
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -817,6 +787,7 @@ void _showCommentsSheet(
             (context, controller) => CommentsSheet(
               boomerangId: boomerangId,
               scrollController: controller,
+              postOwnerId: postOwnerId,
             ),
       );
     },

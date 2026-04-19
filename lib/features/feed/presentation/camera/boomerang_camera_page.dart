@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -1045,8 +1046,12 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
         if (mounted) Navigator.pop(context);
         return;
       }
+
+      final trimmed = await const BoomerangProcessor()
+          .trimToMaxDuration(xfile.path, maxSeconds: 1.5);
+
       if (!mounted) return;
-      Navigator.pop(context, File(xfile.path));
+      Navigator.pop(context, File(trimmed));
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);

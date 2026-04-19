@@ -250,6 +250,59 @@ class FirestoreChatRepo implements ChatRepo {
     }
   }
 
+  // ── Delete single message ────────────────────────────────────────────
+
+  @override
+  Future<void> deleteMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final messageRef = _messages(conversationId).doc(messageId);
+    final conversationRef = _conversations.doc(conversationId);
+
+    await messageRef.delete();
+
+    final latestSnap = await _messages(conversationId)
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .get();
+
+    if (latestSnap.docs.isEmpty) {
+      await conversationRef.update({
+        'lastMessage': '',
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'lastMessageSenderId': '',
+      });
+    } else {
+      final latest = MessageDto.fromFirestore(latestSnap.docs.first);
+      final entity = latest.toEntity();
+      String previewText;
+      if (entity.isUnsent) {
+        previewText = 'Message unsent';
+      } else {
+        switch (entity.type) {
+          case MessageType.image:
+            previewText = '📷 Photo';
+            break;
+          case MessageType.gif:
+            previewText = 'GIF';
+            break;
+          case MessageType.audio:
+            previewText = '🎤 Voice message';
+            break;
+          case MessageType.text:
+            previewText = entity.text;
+            break;
+        }
+      }
+      await conversationRef.update({
+        'lastMessage': previewText,
+        'lastMessageAt': latestSnap.docs.first.data()['createdAt'],
+        'lastMessageSenderId': entity.senderId,
+      });
+    }
+  }
+
   // ── Pin / Unpin conversation ─────────────────────────────────────────
 
   @override
@@ -298,6 +351,15 @@ class FirestoreChatRepo implements ChatRepo {
     }
 
     await _conversations.doc(conversationId).delete();
+  }
+
+  @override
+  Future<void> deleteConversations({
+    required List<String> conversationIds,
+  }) async {
+    await Future.wait(
+      conversationIds.map((id) => deleteConversation(conversationId: id)),
+    );
   }
 
   // ── Media uploads ──────────────────────────────────────────────────────

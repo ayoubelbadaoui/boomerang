@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 
@@ -23,18 +24,26 @@ class _CreateTabState extends ConsumerState<CreateTab> {
     );
   }
 
+  static const _maxDuration = Duration(milliseconds: 1500);
+
   Future<void> _importFromGallery() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
     try {
       final picker = ImagePicker();
-      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
+      final XFile? file = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: _maxDuration,
+      );
       if (file == null) return;
+
+      final trimmed = await const BoomerangProcessor()
+          .trimToMaxDuration(file.path, maxSeconds: 1.5);
 
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BoomerangEditorPage(inputFile: File(file.path)),
+          builder: (_) => BoomerangEditorPage(inputFile: File(trimmed)),
         ),
       );
     } catch (e) {

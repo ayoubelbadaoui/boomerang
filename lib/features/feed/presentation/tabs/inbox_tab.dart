@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
-import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/core/widgets/live_avatar.dart';
 
 class InboxTab extends ConsumerWidget {
   const InboxTab({super.key});
@@ -91,11 +91,11 @@ class InboxTab extends ConsumerWidget {
                                 subtitle = 'Requested to follow you';
                                 itemType = _ItemType.followRequest;
                               } else if (type == 'like') {
-                                subtitle = 'Liked your video';
+                                subtitle = 'Liked your boomerang';
                                 thumb = d['boomerangImage'] as String?;
                                 itemType = _ItemType.like;
                               } else if (type == 'comment') {
-                                subtitle = 'Commented on your video';
+                                subtitle = 'Commented on your boomerang';
                                 thumb = d['boomerangImage'] as String?;
                                 itemType = _ItemType.comment;
                               } else if (type == 'reply') {
@@ -286,7 +286,7 @@ class _ActivityTile extends StatelessWidget {
                 InkWell(
                   onTap: () => _openProfile(context, ref, item),
                   customBorder: const CircleBorder(),
-                  child: AppAvatar(url: item.avatar, size: 60.r),
+                  child: LiveAvatar(userId: item.actorId, fallbackUrl: item.avatar, size: 60.r),
                 ),
                 SizedBox(width: 12.w),
                 Expanded(
@@ -595,7 +595,6 @@ Future<void> _openProfile(
       return ProfilePreviewSheet(
         userId: item.actorId,
         handle: '@${item.title.replaceAll(' ', '').toLowerCase()}',
-        avatarUrl: item.avatar,
       );
     },
   );

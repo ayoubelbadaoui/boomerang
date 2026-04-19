@@ -52,6 +52,24 @@ class UserBoomerangsByUserController
     await fetchNext();
   }
 
+  Future<void> deleteBoomerang(String boomerangId) async {
+    final userId = arg;
+
+    await ref.read(boomerangRepoProvider).deleteBoomerang(
+          boomerangId: boomerangId,
+          userId: userId,
+        );
+
+    final current = state.value;
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          docs: current.docs.where((d) => d.id != boomerangId).toList(),
+        ),
+      );
+    }
+  }
+
   Future<void> fetchNext() async {
     final currentState = state.value ?? UserBoomerangsState.initial;
     if (currentState.isLoading || !currentState.hasMore) return;

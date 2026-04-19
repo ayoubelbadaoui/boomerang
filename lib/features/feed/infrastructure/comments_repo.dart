@@ -70,6 +70,48 @@ class CommentsRepo {
     // (onReplyCreated trigger).
   }
 
+  Future<void> delete({
+    required String boomerangId,
+    required String commentId,
+  }) async {
+    final commentRef = _fs
+        .collection('boomerangs')
+        .doc(boomerangId)
+        .collection('comments')
+        .doc(commentId);
+
+    final repliesSnap = await commentRef.collection('replies').get();
+    final batch = _fs.batch();
+    for (final reply in repliesSnap.docs) {
+      batch.delete(reply.reference);
+    }
+    batch.delete(commentRef);
+    await batch.commit();
+
+    final totalDeleted = 1 + repliesSnap.docs.length;
+    await _fs.collection('boomerangs').doc(boomerangId).update({
+      'commentsCount': FieldValue.increment(-totalDeleted),
+    });
+  }
+
+  Future<void> deleteReply({
+    required String boomerangId,
+    required String parentCommentId,
+    required String replyId,
+  }) async {
+    await _fs
+        .collection('boomerangs')
+        .doc(boomerangId)
+        .collection('comments')
+        .doc(parentCommentId)
+        .collection('replies')
+        .doc(replyId)
+        .delete();
+    await _fs.collection('boomerangs').doc(boomerangId).update({
+      'commentsCount': FieldValue.increment(-1),
+    });
+  }
+
   Future<void> toggleLike({
     required String boomerangId,
     required String commentId,

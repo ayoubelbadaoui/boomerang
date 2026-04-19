@@ -23,6 +23,8 @@ class ConversationsPage extends ConsumerStatefulWidget {
 class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   final _searchController = TextEditingController();
   String _query = '';
+  final Set<String> _selectedIds = {};
+  bool _isSelectionMode = false;
 
   @override
   void dispose() {
@@ -31,7 +33,82 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   void _openChat(String conversationId) {
+    if (_isSelectionMode) {
+      _toggleSelection(conversationId);
+      return;
+    }
     context.push('/chat/$conversationId');
+  }
+
+  void _toggleSelection(String conversationId) {
+    setState(() {
+      if (_selectedIds.contains(conversationId)) {
+        _selectedIds.remove(conversationId);
+        if (_selectedIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedIds.add(conversationId);
+      }
+    });
+  }
+
+  void _enterSelectionMode(String conversationId) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedIds.add(conversationId);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  void _selectAll(List<ConversationEntity> conversations) {
+    setState(() {
+      if (_selectedIds.length == conversations.length) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds.addAll(conversations.map((c) => c.id));
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    final count = _selectedIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete chats?'),
+        content: Text(
+          count == 1
+              ? 'This will permanently delete this conversation for both users.'
+              : 'This will permanently delete $count conversations for both users.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final ids = _selectedIds.toList();
+    _exitSelectionMode();
+    await ref
+        .read(chatRepoProvider)
+        .deleteConversations(conversationIds: ids);
   }
 
   Future<void> _startNewConversation(String otherUid) async {
@@ -50,37 +127,76 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final uid = currentUser?.uid ?? '';
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? const BackButton() : null,
-        automaticallyImplyLeading: false,
-        title: Text('Messages', style: theme.textTheme.titleLarge),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24),
+      appBar: _isSelectionMode
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _exitSelectionMode,
+              ),
+              title: Text(
+                '${_selectedIds.length} selected',
+                style: theme.textTheme.titleLarge,
+              ),
+              actions: [
+                if (convAsync.hasValue)
+                  IconButton(
+                    icon: Icon(
+                      _selectedIds.length == (convAsync.value?.length ?? 0)
+                          ? Icons.deselect
+                          : Icons.select_all,
+                    ),
+                    tooltip: _selectedIds.length ==
+                            (convAsync.value?.length ?? 0)
+                        ? 'Deselect all'
+                        : 'Select all',
+                    onPressed: () => _selectAll(convAsync.value ?? []),
+                  ),
+                IconButton(
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    color: _selectedIds.isNotEmpty
+                        ? theme.colorScheme.error
+                        : Colors.grey,
+                  ),
+                  onPressed:
+                      _selectedIds.isNotEmpty ? _deleteSelected : null,
                 ),
-              ),
-              builder: (_) => DraggableScrollableSheet(
-                initialChildSize: 0.75,
-                minChildSize: 0.4,
-                maxChildSize: 0.92,
-                expand: false,
-                builder: (_, scrollController) => const NewChatSheet(),
-              ),
+              ],
+            )
+          : AppBar(
+              leading:
+                  Navigator.canPop(context) ? const BackButton() : null,
+              automaticallyImplyLeading: false,
+              title:
+                  Text('Messages', style: theme.textTheme.titleLarge),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.white,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                    ),
+                    builder: (_) => DraggableScrollableSheet(
+                      initialChildSize: 0.75,
+                      minChildSize: 0.4,
+                      maxChildSize: 0.92,
+                      expand: false,
+                      builder: (_, scrollController) =>
+                          const NewChatSheet(),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.more_horiz),
+                  onPressed: () {},
+                ),
+              ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_horiz),
-            onPressed: () {},
-          ),
-        ],
-      ),
       body: convAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
@@ -89,16 +205,19 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.chat_bubble_outline, size: 64.sp, color: Colors.grey),
+                Icon(Icons.chat_bubble_outline,
+                    size: 64.sp, color: Colors.grey),
                 SizedBox(height: 16.h),
                 Text(
                   'No messages yet',
-                  style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey),
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(color: Colors.grey),
                 ),
                 SizedBox(height: 8.h),
                 Text(
                   'Start a conversation with someone!',
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -108,7 +227,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         data: (conversations) {
           final filtered = _query.isEmpty
               ? conversations
-              : conversations; // real filter applied below via profile names
+              : conversations;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,16 +236,19 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 controller: _searchController,
                 onChanged: (v) => setState(() => _query = v),
               ),
-              SizedBox(height: 16.h),
-              _RecentSection(
-                conversations: conversations,
-                currentUid: uid,
-                onTap: _startNewConversation,
-              ),
+              if (!_isSelectionMode) ...[
+                SizedBox(height: 16.h),
+                _RecentSection(
+                  conversations: conversations,
+                  currentUid: uid,
+                  onTap: _startNewConversation,
+                ),
+              ],
               SizedBox(height: 8.h),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
-                child: Text('Messages', style: theme.textTheme.titleSmall),
+                child:
+                    Text('Messages', style: theme.textTheme.titleSmall),
               ),
               SizedBox(height: 4.h),
               Expanded(
@@ -137,6 +259,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                         currentUid: uid,
                         searchQuery: _query,
                         onTap: _openChat,
+                        isSelectionMode: _isSelectionMode,
+                        selectedIds: _selectedIds,
+                        onEnterSelection: _enterSelectionMode,
                       ),
               ),
             ],
@@ -238,12 +363,18 @@ class _ConversationList extends ConsumerWidget {
     required this.currentUid,
     required this.searchQuery,
     required this.onTap,
+    this.isSelectionMode = false,
+    this.selectedIds = const {},
+    this.onEnterSelection,
   });
 
   final List<ConversationEntity> conversations;
   final String currentUid;
   final String searchQuery;
   final ValueChanged<String> onTap;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final ValueChanged<String>? onEnterSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -281,13 +412,17 @@ class _ConversationList extends ConsumerWidget {
           otherUser: profile,
           currentUserId: currentUid,
           isPinned: isPinned,
+          isSelectionMode: isSelectionMode,
+          isSelected: selectedIds.contains(conv.id),
           onTap: () => onTap(conv.id),
-          onLongPress: () => _showConversationActions(
-            context,
-            ref,
-            conv,
-            isPinned,
-          ),
+          onLongPress: isSelectionMode
+              ? null
+              : () => _showConversationActions(
+                    context,
+                    ref,
+                    conv,
+                    isPinned,
+                  ),
         );
       },
     );
@@ -350,6 +485,25 @@ class _ConversationList extends ConsumerWidget {
                       userId: currentUid,
                     );
                   }
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.checklist_rounded,
+                  size: 22.sp,
+                ),
+                title: Text(
+                  'Select chats',
+                  style: theme.textTheme.bodyLarge,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                dense: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  onEnterSelection?.call(conv.id);
                 },
               ),
               ListTile(

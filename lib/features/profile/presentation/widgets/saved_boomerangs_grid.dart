@@ -1,4 +1,4 @@
-import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
+import 'package:boomerang/features/profile/presentation/profile_reels_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,9 +43,18 @@ class SavedBoomerangsGrid extends ConsumerWidget {
             final videoUrl = (data['videoUrl'] as String?) ?? '';
             return GestureDetector(
               onTap: () {
+                final items = docs
+                    .map((d) => (
+                          id: ((d.data()['boomerangId'] ?? d.id) as String),
+                          data: d.data(),
+                        ))
+                    .toList();
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => BoomerangViewerPage(id: id, data: data),
+                    builder: (_) => ProfileReelsPage(
+                      initialItems: items,
+                      initialIndex: index,
+                    ),
                   ),
                 );
               },

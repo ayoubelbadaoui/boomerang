@@ -3,7 +3,7 @@ import 'package:boomerang/features/profile/application/user_boomerangs_by_user_c
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart';
+import 'package:boomerang/features/profile/presentation/profile_reels_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class UserBoomerangsGridForUser extends ConsumerStatefulWidget {
@@ -62,15 +62,28 @@ class _UserBoomerangsGridForUserState
               itemBuilder: (context, index) {
                 final doc = s.docs[index];
                 final data = doc.data();
-                final id = doc.id;
                 final imageUrl = data['imageUrl'] as String?;
                 final videoUrl = data['videoUrl'] as String?;
                 final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
                 return InkWell(
                   onTap: () {
+                    final items = s.docs
+                        .map((d) => (id: d.id, data: d.data()))
+                        .toList();
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => BoomerangViewerPage(id: id, data: data),
+                        builder: (_) => ProfileReelsPage(
+                          initialItems: items,
+                          initialIndex: index,
+                          hasMore: s.hasMore,
+                          onLoadMore: () => ref
+                              .read(
+                                userBoomerangsByUserControllerProvider(
+                                  widget.userId,
+                                ).notifier,
+                              )
+                              .fetchNext(),
+                        ),
                       ),
                     );
                   },

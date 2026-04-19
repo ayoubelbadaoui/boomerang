@@ -1,6 +1,5 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
-import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,55 +7,37 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
 
-class BoomerangPagerPage extends ConsumerStatefulWidget {
-  const BoomerangPagerPage({
+typedef LoadMoreCallback = Future<void> Function();
+
+class ProfileReelsPage extends ConsumerStatefulWidget {
+  const ProfileReelsPage({
     super.key,
-    required this.initialId,
-    required this.initialData,
-    this.targetCommentId,
-    this.targetReplyId,
+    required this.initialItems,
+    required this.initialIndex,
+    this.hasMore = false,
+    this.onLoadMore,
   });
-  final String initialId;
-  final Map<String, dynamic> initialData;
-  final String? targetCommentId;
-  final String? targetReplyId;
+
+  final List<({String id, Map<String, dynamic> data})> initialItems;
+  final int initialIndex;
+  final bool hasMore;
+  final LoadMoreCallback? onLoadMore;
 
   @override
-  ConsumerState<BoomerangPagerPage> createState() => _BoomerangPagerPageState();
+  ConsumerState<ProfileReelsPage> createState() => _ProfileReelsPageState();
 }
 
-class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
-  final _docs = <({String id, Map<String, dynamic> data})>[];
-  bool _loading = false;
-  bool _hasMore = true;
-  dynamic _last;
+class _ProfileReelsPageState extends ConsumerState<ProfileReelsPage> {
   late final PageController _pageController;
-  int _currentPage = 0;
-
-  bool _initialPostBlocked = false;
+  late int _currentPage;
+  bool _loadingMore = false;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: 0);
-    _docs.add((id: widget.initialId, data: widget.initialData));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkInitialPostPrivacy();
-      _fetchNext();
-    });
+    _currentPage = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-  }
-
-  void _checkInitialPostPrivacy() {
-    final data = widget.initialData;
-    final ownerIsPrivate = data['ownerIsPrivate'] == true;
-    if (!ownerIsPrivate) return;
-    final me = ref.read(currentUserProfileProvider).value;
-    final ownerId = (data['userId'] ?? '') as String;
-    if (me?.uid == ownerId) return;
-    final followingIds = ref.read(followingIdsProvider).value ?? const <String>{};
-    if (followingIds.contains(ownerId)) return;
-    setState(() => _initialPostBlocked = true);
   }
 
   @override
@@ -69,54 +50,23 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     super.dispose();
   }
 
-  Future<void> _fetchNext() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
+  Future<void> _maybeLoadMore(int index) async {
+    if (_loadingMore) return;
+    if (widget.onLoadMore == null || !widget.hasMore) return;
+    if (widget.initialItems.length - index > 3) return;
+    _loadingMore = true;
     try {
-      final snap = await ref
-          .read(boomerangRepoProvider)
-          .fetchBoomerangsPage(startAfter: _last, limit: 10);
-      final blockedSet =
-          ref.read(blockedUsersProvider).value?.toSet() ?? const <String>{};
-      final items =
-          snap.docs
-              .where((d) =>
-                  d.id != widget.initialId &&
-                  !blockedSet.contains((d.data()['userId'] ?? '') as String))
-              .map((d) => (id: d.id, data: d.data()))
-              .toList();
-      setState(() {
-        _docs.addAll(items);
-        if (snap.docs.isNotEmpty) _last = snap.docs.last;
-        if (snap.docs.length < 10) _hasMore = false;
-      });
+      await widget.onLoadMore!();
     } finally {
-      if (mounted) setState(() => _loading = false);
+      _loadingMore = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_initialPostBlocked) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        extendBodyBehindAppBar: true,
-        body: const Center(
-          child: Text(
-            'This content is private',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-        ),
-      );
-    }
+    final items = widget.initialItems;
+    final showTrailingLoader = widget.hasMore && widget.onLoadMore != null;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
@@ -124,15 +74,18 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         scrollDirection: Axis.vertical,
         onPageChanged: (i) {
           setState(() => _currentPage = i);
-          if (_docs.length - i <= 3) _fetchNext();
+          _maybeLoadMore(i);
         },
-        itemCount: _docs.length + (_hasMore ? 1 : 0),
+        itemCount: items.length + (showTrailingLoader ? 1 : 0),
         itemBuilder: (context, i) {
-          if (i >= _docs.length) {
-            return const Center(child: CircularProgressIndicator());
+          if (i >= items.length) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            );
           }
-          final it = _docs[i];
+          final it = items[i];
           return _PostPage(
+            key: ValueKey(it.id),
             id: it.id,
             data: it.data,
             isActive: i == _currentPage,
@@ -145,6 +98,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
 
 class _PostPage extends ConsumerStatefulWidget {
   const _PostPage({
+    super.key,
     required this.id,
     required this.data,
     required this.isActive,
@@ -152,6 +106,7 @@ class _PostPage extends ConsumerStatefulWidget {
   final String id;
   final Map<String, dynamic> data;
   final bool isActive;
+
   @override
   ConsumerState<_PostPage> createState() => _PostPageState();
 }
@@ -216,6 +171,8 @@ class _PostPageState extends ConsumerState<_PostPage> {
     }
   }
 
+  /// For very short looping videos the listener may never trigger because
+  /// position resets to zero between cycles. Force-clear after a short delay.
   void _schedulePosterFallback() {
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;

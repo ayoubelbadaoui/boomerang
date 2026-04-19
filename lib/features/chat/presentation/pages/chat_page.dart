@@ -28,20 +28,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final _scrollController = ScrollController();
   final _inputKey = GlobalKey<ChatInputFieldState>();
   bool _emojiOpen = false;
+  ProviderContainer? _container;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_container != null) return;
+    _container = ProviderScope.containerOf(context);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(activeConversationProvider.notifier).state =
-          widget.conversationId;
+      if (mounted) {
+        _container!.read(activeConversationProvider.notifier).state =
+            widget.conversationId;
+        _container!
+            .read(chatControllerProvider(widget.conversationId).notifier)
+            .setViewing(true);
+      }
     });
   }
 
   @override
   void dispose() {
-    ref.read(activeConversationProvider.notifier).state = null;
+    _container
+        ?.read(chatControllerProvider(widget.conversationId).notifier)
+        .setViewing(false);
+    _container?.read(activeConversationProvider.notifier).state = null;
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
@@ -102,6 +118,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ref
               .read(chatControllerProvider(widget.conversationId).notifier)
               .unsendMessage(message.id);
+        },
+        onDelete: () {
+          ref
+              .read(chatControllerProvider(widget.conversationId).notifier)
+              .deleteMessage(message.id);
         },
       ),
     );
