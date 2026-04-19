@@ -65,9 +65,9 @@ class MessageActionsSheet extends StatelessWidget {
                   );
                 },
               ),
-            if (canUnsend)
+            if (isMine && !message.isUnsent)
               _ActionTile(
-                icon: Icons.undo_rounded,
+                icon: Icons.delete_outline_rounded,
                 label: 'Unsend',
                 color: theme.colorScheme.error,
                 onTap: () {
@@ -76,8 +76,10 @@ class MessageActionsSheet extends StatelessWidget {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Unsend message?'),
-                      content: const Text(
-                        'This will remove the message for everyone.',
+                      content: Text(
+                        canUnsend
+                            ? 'This will remove the message for everyone.'
+                            : 'This message is older than 1 hour and will be deleted.',
                       ),
                       actions: [
                         TextButton(
@@ -87,7 +89,11 @@ class MessageActionsSheet extends StatelessWidget {
                         TextButton(
                           onPressed: () {
                             Navigator.pop(ctx, true);
-                            onUnsend();
+                            if (canUnsend) {
+                              onUnsend();
+                            } else {
+                              onDelete();
+                            }
                           },
                           style: TextButton.styleFrom(
                             foregroundColor: theme.colorScheme.error,
@@ -99,39 +105,6 @@ class MessageActionsSheet extends StatelessWidget {
                   );
                 },
               ),
-            _ActionTile(
-              icon: Icons.delete_outline_rounded,
-              label: 'Delete',
-              color: theme.colorScheme.error,
-              onTap: () {
-                Navigator.pop(context);
-                showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Delete message?'),
-                    content: const Text(
-                      'This message will be permanently deleted.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(ctx, true);
-                          onDelete();
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: theme.colorScheme.error,
-                        ),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
           ],
         ),
       ),

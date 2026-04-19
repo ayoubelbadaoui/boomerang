@@ -55,7 +55,13 @@ abstract class ChatRepo {
     required String userId,
   });
 
-  Future<void> deleteConversation({required String conversationId});
+  Future<void> deleteConversation({
+    required String conversationId,
+    required String userId,
+  });
 
-  Future<void> deleteConversations({required List<String> conversationIds});
+  Future<void> deleteConversations({
+    required List<String> conversationIds,
+    required String userId,
+  });
 }

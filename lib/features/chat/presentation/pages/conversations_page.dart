@@ -85,8 +85,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         title: const Text('Delete chats?'),
         content: Text(
           count == 1
-              ? 'This will permanently delete this conversation for both users.'
-              : 'This will permanently delete $count conversations for both users.',
+              ? 'This conversation will be removed from your inbox.'
+              : '$count conversations will be removed from your inbox.',
         ),
         actions: [
           TextButton(
@@ -104,11 +104,14 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
     if (confirmed != true || !mounted) return;
 
+    final me = ref.read(currentUserProfileProvider).value;
+    if (me == null) return;
+
     final ids = _selectedIds.toList();
     _exitSelectionMode();
     await ref
         .read(chatRepoProvider)
-        .deleteConversations(conversationIds: ids);
+        .deleteConversations(conversationIds: ids, userId: me.uid);
   }
 
   Future<void> _startNewConversation(String otherUid) async {
@@ -530,7 +533,7 @@ class _ConversationList extends ConsumerWidget {
                     builder: (ctx) => AlertDialog(
                       title: const Text('Delete chat?'),
                       content: const Text(
-                        'This will permanently delete all messages for both users.',
+                        'This conversation will be removed from your inbox.',
                       ),
                       actions: [
                         TextButton(
@@ -548,8 +551,10 @@ class _ConversationList extends ConsumerWidget {
                     ),
                   ).then((confirmed) {
                     if (confirmed == true) {
-                      ref.read(chatRepoProvider)
-                          .deleteConversation(conversationId: conv.id);
+                      ref.read(chatRepoProvider).deleteConversation(
+                            conversationId: conv.id,
+                            userId: currentUid,
+                          );
                     }
                   });
                 },

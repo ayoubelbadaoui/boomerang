@@ -42,18 +42,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (_container != null) return;
     _container = ProviderScope.containerOf(context);
 
-    _container!.read(activeConversationProvider.notifier).state =
-        widget.conversationId;
-    _container!.read(pendingSeenConversationIdsProvider.notifier).update(
-      (ids) => {...ids, widget.conversationId},
-    );
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _container!
-            .read(chatControllerProvider(widget.conversationId).notifier)
-            .setViewing(true);
-      }
+      if (!mounted) return;
+      _container!.read(activeConversationProvider.notifier).state =
+          widget.conversationId;
+      _container!.read(pendingSeenConversationIdsProvider.notifier).update(
+        (ids) => {...ids, widget.conversationId},
+      );
+      _container!
+          .read(chatControllerProvider(widget.conversationId).notifier)
+          .setViewing(true);
     });
   }
 
@@ -185,7 +183,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete chat?'),
         content: const Text(
-          'This will permanently delete all messages for both users.',
+          'This conversation will be removed from your inbox.',
         ),
         actions: [
           TextButton(

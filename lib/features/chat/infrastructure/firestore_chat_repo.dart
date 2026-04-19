@@ -328,37 +328,57 @@ class FirestoreChatRepo implements ChatRepo {
   // ── Delete conversation ────────────────────────────────────────────────
 
   @override
-  Future<void> deleteConversation({required String conversationId}) async {
-    final messagesSnap = await _messages(conversationId).get();
+  Future<void> deleteConversation({
+    required String conversationId,
+    required String userId,
+  }) async {
+    final convRef = _conversations.doc(conversationId);
+    final snap = await convRef.get();
+    final participants =
+        List<String>.from(snap.data()?['participants'] ?? []);
 
-    final batchOps = <WriteBatch>[];
-    var currentBatch = _firestore.batch();
-    var count = 0;
+    final isLastParticipant =
+        participants.length <= 1 && participants.contains(userId);
 
-    for (final doc in messagesSnap.docs) {
-      currentBatch.delete(doc.reference);
-      count++;
-      if (count >= 500) {
-        batchOps.add(currentBatch);
-        currentBatch = _firestore.batch();
-        count = 0;
+    if (isLastParticipant) {
+      final messagesSnap = await _messages(conversationId).get();
+
+      final batchOps = <WriteBatch>[];
+      var currentBatch = _firestore.batch();
+      var count = 0;
+
+      for (final doc in messagesSnap.docs) {
+        currentBatch.delete(doc.reference);
+        count++;
+        if (count >= 500) {
+          batchOps.add(currentBatch);
+          currentBatch = _firestore.batch();
+          count = 0;
+        }
       }
-    }
-    if (count > 0) batchOps.add(currentBatch);
+      if (count > 0) batchOps.add(currentBatch);
 
-    for (final batch in batchOps) {
-      await batch.commit();
-    }
+      for (final batch in batchOps) {
+        await batch.commit();
+      }
 
-    await _conversations.doc(conversationId).delete();
+      await convRef.delete();
+    } else {
+      await convRef.update({
+        'participants': FieldValue.arrayRemove([userId]),
+      });
+    }
   }
 
   @override
   Future<void> deleteConversations({
     required List<String> conversationIds,
+    required String userId,
   }) async {
     await Future.wait(
-      conversationIds.map((id) => deleteConversation(conversationId: id)),
+      conversationIds.map(
+        (id) => deleteConversation(conversationId: id, userId: userId),
+      ),
     );
   }
 

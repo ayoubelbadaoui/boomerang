@@ -82,6 +82,25 @@ class NotificationsRepo {
         .map((snap) => snap.size);
   }
 
+  /// Mark all unread notifications as read for the given user.
+  Future<void> markAllRead({required String uid}) async {
+    final snap = await _fs
+        .collection('users')
+        .doc(uid)
+        .collection('notifications')
+        .where('read', isEqualTo: false)
+        .get();
+    if (snap.docs.isEmpty) return;
+    final batch = _fs.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'read': true,
+        'readAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
   /// Mark a single notification as read (idempotent).
   Future<void> markRead({required String uid, required String notificationId}) {
     final canonical =

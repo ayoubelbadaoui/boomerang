@@ -309,7 +309,10 @@ class ChatController extends StateNotifier<ChatState> {
   // ── Delete conversation ────────────────────────────────────────────────
 
   Future<void> deleteConversation() async {
-    await _repo.deleteConversation(conversationId: conversationId);
+    await _repo.deleteConversation(
+      conversationId: conversationId,
+      userId: currentUserId,
+    );
   }
 
   // ── Seen ───────────────────────────────────────────────────────────────

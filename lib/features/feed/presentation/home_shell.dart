@@ -90,18 +90,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                     elevation: 0,
                     title: const Text('Home'),
                     actions: [
-                      IconButton(
-                        splashRadius: 24,
-                        icon: SvgPicture.asset(
-                          'assets/svgs/notification.svg',
-                          height: 24.h,
-                          width: 24.h,
-                          colorFilter: const ColorFilter.mode(
-                            Colors.black,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                        onPressed: () {
+                      _NotificationBell(
+                        onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const InboxTab()),
                           );
@@ -229,6 +219,66 @@ class _CreateButton extends StatelessWidget {
           child: Icon(Icons.add, size: 28.h, color: Colors.white),
         ),
       ),
+    );
+  }
+}
+
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final uid = ref.watch(currentUserProfileProvider).value?.uid ?? '';
+    final unread = uid.isEmpty
+        ? 0
+        : ref.watch(unreadCountProvider(uid)).valueOrNull ?? 0;
+
+    return IconButton(
+      splashRadius: 24,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          SvgPicture.asset(
+            'assets/svgs/notification.svg',
+            height: 24.h,
+            width: 24.h,
+            colorFilter: const ColorFilter.mode(
+              Colors.black,
+              BlendMode.srcIn,
+            ),
+          ),
+          if (unread > 0)
+            Positioned(
+              right: -4.w,
+              top: -4.h,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+                constraints: BoxConstraints(minWidth: 16.w, minHeight: 16.w),
+                child: Center(
+                  child: Text(
+                    unread > 99 ? '99+' : '$unread',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9.sp,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      onPressed: () {
+        if (uid.isNotEmpty) {
+          ref.read(notificationsRepoProvider).markAllRead(uid: uid);
+        }
+        onTap();
+      },
     );
   }
 }
