@@ -41,10 +41,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.didChangeDependencies();
     if (_container != null) return;
     _container = ProviderScope.containerOf(context);
+
+    _container!.read(activeConversationProvider.notifier).state =
+        widget.conversationId;
+    _container!.read(pendingSeenConversationIdsProvider.notifier).update(
+      (ids) => {...ids, widget.conversationId},
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _container!.read(activeConversationProvider.notifier).state =
-            widget.conversationId;
         _container!
             .read(chatControllerProvider(widget.conversationId).notifier)
             .setViewing(true);
@@ -54,10 +59,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
-    _container
-        ?.read(chatControllerProvider(widget.conversationId).notifier)
-        .setViewing(false);
-    _container?.read(activeConversationProvider.notifier).state = null;
+    final container = _container;
+    final convId = widget.conversationId;
+
+    Future(() {
+      try {
+        container
+            ?.read(chatControllerProvider(convId).notifier)
+            .setViewing(false);
+        container?.read(activeConversationProvider.notifier).state = null;
+      } catch (_) {}
+    });
+
+    Future.delayed(const Duration(seconds: 2), () {
+      try {
+        container?.read(pendingSeenConversationIdsProvider.notifier).update(
+          (ids) => Set<String>.from(ids)..remove(convId),
+        );
+      } catch (_) {}
+    });
+
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();

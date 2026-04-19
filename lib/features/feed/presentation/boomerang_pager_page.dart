@@ -261,6 +261,9 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   bool _showPauseIcon = false;
   late final AnimationController _anim;
 
+  bool? _likedOverride;
+  int? _likesOverride;
+
   @override
   void initState() {
     super.initState();
@@ -295,22 +298,43 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   }
 
   void _onDoubleTap() async {
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    if (uid == null) return;
+    final likedBy = (widget.data['likedBy'] as List?)?.cast<String>() ??
+        const <String>[];
+    final wasLiked = _likedOverride ?? likedBy.contains(uid);
+    final currentLikes =
+        _likesOverride ?? (widget.data['likes'] ?? 0) as int;
+
+    if (!wasLiked) {
+      setState(() {
+        _likedOverride = true;
+        _likesOverride = currentLikes + 1;
+      });
+    }
+
     setState(() => _showHeart = true);
     _anim.forward(from: 0);
-    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-    if (uid != null) {
-      final me = ref.read(currentUserProfileProvider).value;
-      await ref.read(boomerangRepoProvider).toggleLike(
-            boomerangId: widget.id,
-            userId: uid,
-            actorName: me != null
-                ? (me.nickname.isNotEmpty ? me.nickname : me.fullName)
-                : 'User',
-            actorAvatar: me?.avatarUrl,
-          );
-    }
+
+    final me = ref.read(currentUserProfileProvider).value;
+    await ref.read(boomerangRepoProvider).toggleLike(
+          boomerangId: widget.id,
+          userId: uid,
+          actorName: me != null
+              ? (me.nickname.isNotEmpty ? me.nickname : me.fullName)
+              : 'User',
+          actorAvatar: me?.avatarUrl,
+        );
+
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) setState(() => _showHeart = false);
+  }
+
+  void _onOverlayToggleLike(bool liked, int likes) {
+    setState(() {
+      _likedOverride = liked;
+      _likesOverride = likes;
+    });
   }
 
   @override
@@ -392,6 +416,9 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
           boomerangId: widget.id,
           data: widget.data,
           showTopBar: true,
+          likedOverride: _likedOverride,
+          likesOverride: _likesOverride,
+          onToggleLike: _onOverlayToggleLike,
         ),
       ],
     );

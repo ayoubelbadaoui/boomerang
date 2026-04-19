@@ -70,6 +70,51 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
     }
   }
 
+  void _showTileOptions(BuildContext context, WidgetRef ref, String boomerangId) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.only(top: 12.h, bottom: 8.h),
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                title: const Text(
+                  'Delete Boomerang',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDelete(context, ref, boomerangId);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(userBoomerangsControllerProvider);
@@ -127,7 +172,11 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                   onLongPress: () => _confirmDelete(context, ref, doc.id),
                   child: AspectRatio(
                     aspectRatio: aspectRatio,
-                    child: _GridTile(imageUrl: imageUrl, videoUrl: videoUrl),
+                    child: _GridTile(
+                      imageUrl: imageUrl,
+                      videoUrl: videoUrl,
+                      onMoreTap: () => _showTileOptions(context, ref, doc.id),
+                    ),
                   ),
                 );
               },
@@ -172,9 +221,14 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
 }
 
 class _GridTile extends StatelessWidget {
-  const _GridTile({required this.imageUrl, required this.videoUrl});
+  const _GridTile({
+    required this.imageUrl,
+    required this.videoUrl,
+    this.onMoreTap,
+  });
   final String? imageUrl;
   final String? videoUrl;
+  final VoidCallback? onMoreTap;
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +271,27 @@ class _GridTile extends StatelessWidget {
                       style: TextStyle(color: Colors.white, fontSize: 12.sp),
                     ),
                   ],
+                ),
+              ),
+            ),
+          if (onMoreTap != null)
+            Positioned(
+              top: 4.h,
+              right: 4.w,
+              child: GestureDetector(
+                onTap: onMoreTap,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: EdgeInsets.all(4.r),
+                  decoration: BoxDecoration(
+                    color: Colors.black.fade(0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.more_vert,
+                    color: Colors.white,
+                    size: 18.r,
+                  ),
                 ),
               ),
             ),

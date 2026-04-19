@@ -15,11 +15,17 @@ class BoomerangOverlay extends ConsumerWidget {
     required this.boomerangId,
     required this.data,
     this.showTopBar = true,
+    this.likedOverride,
+    this.likesOverride,
+    this.onToggleLike,
   });
 
   final String boomerangId;
   final Map<String, dynamic> data;
   final bool showTopBar;
+  final bool? likedOverride;
+  final int? likesOverride;
+  final void Function(bool liked, int likes)? onToggleLike;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,7 +34,7 @@ class BoomerangOverlay extends ConsumerWidget {
         '@${userName.replaceAll(' ', '_').toLowerCase()}';
     final avatar = data['userAvatar'] as String?;
     final video = data['videoUrl'] as String?;
-    final likes = (data['likes'] ?? 0) as int;
+    final likes = likesOverride ?? (data['likes'] ?? 0) as int;
     final userId = (data['userId'] ?? '') as String;
     final caption = (data['caption'] ?? '') as String;
     final initialCommentsCount = ((data['commentsCount'] ?? 0) as num).toInt();
@@ -70,7 +76,12 @@ class BoomerangOverlay extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _ActionBubble(
-                child: _LikeIcon(postId: boomerangId, data: data),
+                child: _LikeIcon(
+                  postId: boomerangId,
+                  data: data,
+                  likedOverride: likedOverride,
+                  onToggleLike: onToggleLike,
+                ),
               ),
               SizedBox(height: 4.h),
               Text(
@@ -239,26 +250,41 @@ class _ActionBubble extends StatelessWidget {
 }
 
 class _LikeIcon extends ConsumerWidget {
-  const _LikeIcon({required this.postId, required this.data});
+  const _LikeIcon({
+    required this.postId,
+    required this.data,
+    this.likedOverride,
+    this.onToggleLike,
+  });
   final String postId;
   final Map<String, dynamic> data;
+  final bool? likedOverride;
+  final void Function(bool liked, int likes)? onToggleLike;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(currentUserProfileProvider).value;
     final likedBy =
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
-    final isLiked = me != null && likedBy.contains(me.uid);
+    final isLiked =
+        likedOverride ?? (me != null && likedBy.contains(me.uid));
+    final currentLikes = (data['likes'] ?? 0) as int;
     return GestureDetector(
       onTap: me == null
           ? null
-          : () => ref.read(boomerangRepoProvider).toggleLike(
-                boomerangId: postId,
-                userId: me.uid,
-                actorName:
-                    me.nickname.isNotEmpty ? me.nickname : me.fullName,
-                actorAvatar: me.avatarUrl,
-              ),
+          : () {
+              final nextLiked = !isLiked;
+              final nextLikes =
+                  currentLikes + (nextLiked ? 1 : -1);
+              onToggleLike?.call(nextLiked, nextLikes < 0 ? 0 : nextLikes);
+              ref.read(boomerangRepoProvider).toggleLike(
+                    boomerangId: postId,
+                    userId: me.uid,
+                    actorName:
+                        me.nickname.isNotEmpty ? me.nickname : me.fullName,
+                    actorAvatar: me.avatarUrl,
+                  );
+            },
       child: AnimatedScale(
         scale: isLiked ? 1.1 : 1.0,
         duration: const Duration(milliseconds: 120),

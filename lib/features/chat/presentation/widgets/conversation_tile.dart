@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/chat/domain/conversation_entity.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 
@@ -46,7 +47,9 @@ class ConversationTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final unread = conversation.unreadCountFor(currentUserId);
+    final pendingSeen = ref.watch(pendingSeenConversationIdsProvider);
+    final rawUnread = conversation.unreadCountFor(currentUserId);
+    final unread = pendingSeen.contains(conversation.id) ? 0 : rawUnread;
     final hasUnread = unread > 0;
     final otherId = otherUser?.uid ?? '';
 
