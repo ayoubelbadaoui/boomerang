@@ -1,0 +1,58 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/profile/domain/app_settings.dart';
+import 'package:boomerang/features/profile/infrastructure/settings_repo.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+final settingsRepoProvider = Provider<SettingsRepo>((ref) {
+  final fs = ref.watch(firestoreProvider);
+  final auth = ref.watch(firebaseAuthProvider);
+  return SettingsRepo(fs, auth);
+});
+
+final settingsControllerProvider =
+    AsyncNotifierProvider<SettingsController, AppSettings>(
+      SettingsController.new,
+    );
+
+class SettingsController extends AsyncNotifier<AppSettings> {
+  @override
+  Future<AppSettings> build() async {
+    final repo = ref.read(settingsRepoProvider);
+    final sub = repo.watch().listen(
+      (value) => state = AsyncData(value),
+      onError: (_) {},
+    );
+    ref.onDispose(() => sub.cancel());
+    try {
+      return await repo.fetch();
+    } catch (_) {
+      return const AppSettings(languageCode: 'en_US');
+    }
+  }
+
+  Future<void> setLanguage(String code) async {
+    final repo = ref.read(settingsRepoProvider);
+    await repo.update({'languageCode': code});
+  }
+
+  Future<void> setBool(String key, bool value) async {
+    final repo = ref.read(settingsRepoProvider);
+    await repo.update({key: value});
+    if (key == 'privateAccount') {
+      final auth = ref.read(firebaseAuthProvider);
+      final uid = auth.currentUser?.uid;
+      if (uid != null) {
+        final fs = ref.read(firestoreProvider);
+        await fs
+            .collection('users')
+            .doc(uid)
+            .set({'isPrivate': value}, SetOptions(merge: true));
+        if (!value) {
+          // When switching to public, auto-accept all pending requests.
+          await ref.read(followRepoProvider).acceptAllPendingFor(uid);
+        }
+      }
+    }
+  }
+}
