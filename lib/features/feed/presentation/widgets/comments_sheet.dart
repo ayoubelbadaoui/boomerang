@@ -1,4 +1,5 @@
 import 'package:boomerang/core/widgets/avatar.dart';
+import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -139,6 +140,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
                       child: _CommentTile(
                         boomerangId: widget.boomerangId,
                         commentId: commentId,
+                        userId: (c['userId'] ?? '') as String,
                         userAvatar: c['userAvatar'] as String?,
                         userName: (c['userName'] ?? 'User') as String,
                         text: (c['text'] ?? '') as String,
@@ -171,6 +173,7 @@ class _CommentTile extends ConsumerWidget {
   const _CommentTile({
     required this.boomerangId,
     required this.commentId,
+    required this.userId,
     required this.userAvatar,
     required this.userName,
     required this.text,
@@ -183,6 +186,7 @@ class _CommentTile extends ConsumerWidget {
   });
   final String boomerangId;
   final String commentId;
+  final String userId;
   final String? userAvatar;
   final String userName;
   final String text;
@@ -205,20 +209,26 @@ class _CommentTile extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppAvatar(url: userAvatar, size: 56.r),
+              GestureDetector(
+                onTap: userId.isEmpty ? null : () => _openProfile(context),
+                child: AppAvatar(url: userAvatar, size: 56.r),
+              ),
               SizedBox(width: 12.w),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      userName,
-                      style: TextStyle(
-                        fontFamily: 'Urbanist',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16.sp,
-                        height: 1.4,
-                        letterSpacing: 0.2,
+                    GestureDetector(
+                      onTap: userId.isEmpty ? null : () => _openProfile(context),
+                      child: Text(
+                        userName,
+                        style: TextStyle(
+                          fontFamily: 'Urbanist',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16.sp,
+                          height: 1.4,
+                          letterSpacing: 0.2,
+                        ),
                       ),
                     ),
                     SizedBox(height: 6.h),
@@ -318,6 +328,22 @@ class _CommentTile extends ConsumerWidget {
     );
   }
 
+  void _openProfile(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ProfilePreviewSheet(
+        userId: userId,
+        handle: userName,
+        avatarUrl: userAvatar,
+      ),
+    );
+  }
+
   void _openReply(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
     showModalBottomSheet<void>(
@@ -400,6 +426,28 @@ class _RepliesList extends ConsumerWidget {
   final String commentId;
   final Map<String, GlobalKey> replyKeys;
   final String? targetReplyId;
+
+  void _openReplyProfile(
+    BuildContext context, {
+    required String userId,
+    required String handle,
+    required String? avatarUrl,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ProfilePreviewSheet(
+        userId: userId,
+        handle: handle,
+        avatarUrl: avatarUrl,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stream =
@@ -424,6 +472,7 @@ class _RepliesList extends ConsumerWidget {
                 docs.map((d) {
                   final r = d.data();
                   final replyId = d.id;
+                  final replyUserId = (r['userId'] ?? '') as String;
                   final avatar = r['userAvatar'] as String?;
                   final name = (r['userName'] ?? 'User') as String;
                   final text = (r['text'] ?? '') as String;
@@ -443,20 +492,40 @@ class _RepliesList extends ConsumerWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          AppAvatar(url: avatar, size: 40.r),
+                          GestureDetector(
+                            onTap: replyUserId.isEmpty
+                                ? null
+                                : () => _openReplyProfile(
+                                      context,
+                                      userId: replyUserId,
+                                      handle: name,
+                                      avatarUrl: avatar,
+                                    ),
+                            child: AppAvatar(url: avatar, size: 40.r),
+                          ),
                           SizedBox(width: 8.w),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  name,
-                                  style: TextStyle(
-                                    fontFamily: 'Urbanist',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14.sp,
-                                    height: 1.4,
-                                    letterSpacing: 0.2,
+                                GestureDetector(
+                                  onTap: replyUserId.isEmpty
+                                      ? null
+                                      : () => _openReplyProfile(
+                                            context,
+                                            userId: replyUserId,
+                                            handle: name,
+                                            avatarUrl: avatar,
+                                          ),
+                                  child: Text(
+                                    name,
+                                    style: TextStyle(
+                                      fontFamily: 'Urbanist',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14.sp,
+                                      height: 1.4,
+                                      letterSpacing: 0.2,
+                                    ),
                                   ),
                                 ),
                                 SizedBox(height: 4.h),
