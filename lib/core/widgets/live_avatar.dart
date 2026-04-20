@@ -44,7 +44,11 @@ class LiveAvatar extends ConsumerWidget {
     }
 
     final profileAsync = ref.watch(userProfileByIdProvider(userId));
-    final liveUrl = profileAsync.whenData((p) => p?.avatarUrl).value;
+    final liveUrl = profileAsync.when(
+      data: (p) => p?.avatarUrl,
+      loading: () => null,
+      error: (_, __) => null,
+    );
     final url = liveUrl ?? fallbackUrl;
 
     return AppAvatar(

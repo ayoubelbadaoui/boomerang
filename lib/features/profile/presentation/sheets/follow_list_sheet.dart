@@ -140,7 +140,11 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
         widget.handle,
         widget.userId,
       ),
-      leading: LiveAvatar(userId: widget.userId, fallbackUrl: widget.avatarFallback, size: 44.r),
+      leading: SizedBox(
+        width: 44.r,
+        height: 44.r,
+        child: LiveAvatar(userId: widget.userId, fallbackUrl: widget.avatarFallback, size: 44.r),
+      ),
       title: Text(
         widget.name,
         style: const TextStyle(fontWeight: FontWeight.w700),
