@@ -298,38 +298,30 @@ final followingIdsProvider = StreamProvider<Set<String>>((ref) {
       .handleError((e, st) {});
 });
 
-/// Counts read from the denormalized fields on the user profile doc.
-/// Zero extra listeners — piggybacks on the existing profile stream.
-final followersCountProvider = StreamProvider.family<int, String>((ref, uid) {
-  return ref.watch(userProfileByIdProvider(uid)).when(
-    data: (p) => Stream.value(p?.followersCount ?? 0),
-    loading: () => Stream.value(0),
-    error: (_, __) => Stream.value(0),
-  );
+/// Counts fetched once per tab-open / pull-to-refresh.
+/// Call ref.invalidate(…) to re-fetch.
+final followersCountProvider = FutureProvider.family<int, String>((ref, uid) async {
+  final fs = ref.read(firestoreProvider);
+  final snap = await fs.collection('users').doc(uid).get();
+  return (snap.data()?['followersCount'] ?? 0) as int;
 });
 
-final followingCountProvider = StreamProvider.family<int, String>((ref, uid) {
-  return ref.watch(userProfileByIdProvider(uid)).when(
-    data: (p) => Stream.value(p?.followingCount ?? 0),
-    loading: () => Stream.value(0),
-    error: (_, __) => Stream.value(0),
-  );
+final followingCountProvider = FutureProvider.family<int, String>((ref, uid) async {
+  final fs = ref.read(firestoreProvider);
+  final snap = await fs.collection('users').doc(uid).get();
+  return (snap.data()?['followingCount'] ?? 0) as int;
 });
 
-final userBoomerangsCountProvider = StreamProvider.family<int, String>((ref, uid) {
-  return ref.watch(userProfileByIdProvider(uid)).when(
-    data: (p) => Stream.value(p?.boomerangsCount ?? 0),
-    loading: () => Stream.value(0),
-    error: (_, __) => Stream.value(0),
-  );
+final userBoomerangsCountProvider = FutureProvider.family<int, String>((ref, uid) async {
+  final fs = ref.read(firestoreProvider);
+  final snap = await fs.collection('users').doc(uid).get();
+  return (snap.data()?['boomerangsCount'] ?? 0) as int;
 });
 
-final userTotalLikesProvider = StreamProvider.family<int, String>((ref, uid) {
-  return ref.watch(userProfileByIdProvider(uid)).when(
-    data: (p) => Stream.value(p?.totalLikes ?? 0),
-    loading: () => Stream.value(0),
-    error: (_, __) => Stream.value(0),
-  );
+final userTotalLikesProvider = FutureProvider.family<int, String>((ref, uid) async {
+  final fs = ref.read(firestoreProvider);
+  final snap = await fs.collection('users').doc(uid).get();
+  return (snap.data()?['totalLikes'] ?? 0) as int;
 });
 
 final boomerangProcessorProvider = Provider<BoomerangProcessor>((ref) {
