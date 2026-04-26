@@ -8,9 +8,6 @@ class UserProfile {
     this.email = '',
     this.phone = '',
     this.birthday,
-    this.instagram = '',
-    this.facebook = '',
-    this.twitter = '',
     this.isPrivate = false,
     this.followersCount = 0,
     this.followingCount = 0,
@@ -25,9 +22,6 @@ class UserProfile {
   final String email;
   final String phone;
   final DateTime? birthday;
-  final String instagram;
-  final String facebook;
-  final String twitter;
   final bool isPrivate;
   final int followersCount;
   final int followingCount;
@@ -53,9 +47,6 @@ class UserProfile {
       email: (data['email'] ?? '') as String,
       phone: (data['phone'] ?? '') as String,
       birthday: _parseBirthday(data['birthday']),
-      instagram: (data['instagram'] ?? '') as String,
-      facebook: (data['facebook'] ?? '') as String,
-      twitter: (data['twitter'] ?? '') as String,
       isPrivate: (data['isPrivate'] ?? false) as bool,
       followersCount: (data['followersCount'] ?? 0) as int,
       followingCount: (data['followingCount'] ?? 0) as int,

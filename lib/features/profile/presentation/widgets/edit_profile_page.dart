@@ -143,56 +143,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   ),
             ),
             SizedBox(height: 12.h),
-            const Divider(),
-            SizedBox(height: 12.h),
-            Text(
-              'Social',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18.sp),
-            ),
-            _NavItem(
-              icon: Icons.camera_alt_outlined,
-              label: 'Instagram',
-              value: p?.instagram ?? '',
-              onTap:
-                  () => _editValue(
-                    title: 'Instagram',
-                    initial: p?.instagram ?? '',
-                    onSubmit:
-                        (v) => ref
-                            .read(profileControllerProvider.notifier)
-                            .updateProfile(instagram: v.trim()),
-                  ),
-            ),
-            const Divider(height: 1),
-            _NavItem(
-              icon: Icons.facebook_outlined,
-              label: 'Facebook',
-              value: p?.facebook ?? '',
-              onTap:
-                  () => _editValue(
-                    title: 'Facebook',
-                    initial: p?.facebook ?? '',
-                    onSubmit:
-                        (v) => ref
-                            .read(profileControllerProvider.notifier)
-                            .updateProfile(facebook: v.trim()),
-                  ),
-            ),
-            const Divider(height: 1),
-            _NavItem(
-              icon: Icons.alternate_email,
-              label: 'Twitter',
-              value: p?.twitter ?? '',
-              onTap:
-                  () => _editValue(
-                    title: 'Twitter',
-                    initial: p?.twitter ?? '',
-                    onSubmit:
-                        (v) => ref
-                            .read(profileControllerProvider.notifier)
-                            .updateProfile(twitter: v.trim()),
-                  ),
-            ),
           ],
         ),
       ),

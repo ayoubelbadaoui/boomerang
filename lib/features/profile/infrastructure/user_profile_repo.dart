@@ -149,9 +149,6 @@ class UserProfileRepo {
     String? email,
     String? phone,
     String? bio,
-    String? instagram,
-    String? facebook,
-    String? twitter,
     DateTime? birthday,
   }) async {
     final uid = _auth.currentUser?.uid;
@@ -165,9 +162,6 @@ class UserProfileRepo {
       if (email != null) 'email': email,
       if (phone != null) 'phone': phone,
       if (bio != null) 'bio': bio,
-      if (instagram != null) 'instagram': instagram,
-      if (facebook != null) 'facebook': facebook,
-      if (twitter != null) 'twitter': twitter,
       if (birthday != null) 'birthday': birthday.toIso8601String(),
       'updatedAt': FieldValue.serverTimestamp(),
     };

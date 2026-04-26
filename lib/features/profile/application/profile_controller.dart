@@ -40,9 +40,6 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     String? avatarUrl,
     String? phone,
     String? bio,
-    String? instagram,
-    String? facebook,
-    String? twitter,
   }) async {
     final repo = ref.read(userProfileRepoProvider);
     await repo.updateCurrentUserProfile(
@@ -51,9 +48,6 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
       avatarUrl: avatarUrl,
       phone: phone,
       bio: bio,
-      instagram: instagram,
-      facebook: facebook,
-      twitter: twitter,
     );
 
     // Keep multi-account session data in sync for the switcher UI
