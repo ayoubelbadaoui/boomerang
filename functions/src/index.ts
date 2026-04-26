@@ -10,6 +10,7 @@ import {
   onFollowerAdded,
 } from './infrastructure/listeners/socialTriggers';
 import { onUserPrivacyChanged, backfillOwnerIsPrivate } from './infrastructure/listeners/privacySync';
+import { reconcileAllUsers } from './infrastructure/reconciliation';
 
 export { onNotificationCreated };
 export {
@@ -20,4 +21,5 @@ export {
   onFollowerAdded,
 };
 export { onUserPrivacyChanged, backfillOwnerIsPrivate };
+export { reconcileAllUsers };
 export const api = functions.region(FUNCTIONS_REGION).https.onRequest(app);

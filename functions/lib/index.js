@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.api = exports.backfillOwnerIsPrivate = exports.onUserPrivacyChanged = exports.onFollowerAdded = exports.onFollowRequestCreated = exports.onBoomerangLikeUpdated = exports.onReplyCreated = exports.onCommentCreated = exports.onNotificationCreated = void 0;
+exports.api = exports.reconcileAllUsers = exports.backfillOwnerIsPrivate = exports.onUserPrivacyChanged = exports.onFollowerAdded = exports.onFollowRequestCreated = exports.onBoomerangLikeUpdated = exports.onReplyCreated = exports.onCommentCreated = exports.onNotificationCreated = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const firestoreNotifications_1 = require("./infrastructure/listeners/firestoreNotifications");
 Object.defineProperty(exports, "onNotificationCreated", { enumerable: true, get: function () { return firestoreNotifications_1.onNotificationCreated; } });
@@ -48,5 +48,7 @@ Object.defineProperty(exports, "onFollowerAdded", { enumerable: true, get: funct
 const privacySync_1 = require("./infrastructure/listeners/privacySync");
 Object.defineProperty(exports, "onUserPrivacyChanged", { enumerable: true, get: function () { return privacySync_1.onUserPrivacyChanged; } });
 Object.defineProperty(exports, "backfillOwnerIsPrivate", { enumerable: true, get: function () { return privacySync_1.backfillOwnerIsPrivate; } });
+const reconciliation_1 = require("./infrastructure/reconciliation");
+Object.defineProperty(exports, "reconcileAllUsers", { enumerable: true, get: function () { return reconciliation_1.reconcileAllUsers; } });
 exports.api = functions.region(constants_1.FUNCTIONS_REGION).https.onRequest(app_1.app);
 //# sourceMappingURL=index.js.map
