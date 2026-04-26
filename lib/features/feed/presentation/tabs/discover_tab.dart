@@ -228,6 +228,7 @@ class _BmgGrid extends ConsumerWidget {
             : ref.watch(boomerangRepoProvider).watchPublicBoomerangs();
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
+    final myUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
     return StreamBuilder(
       stream: stream,
       builder: (context, snapshot) {
@@ -239,7 +240,7 @@ class _BmgGrid extends ConsumerWidget {
           final data = d.data();
           final uid = (data['userId'] ?? '') as String;
           if (blockedSet.contains(uid)) return false;
-          if (data['ownerIsPrivate'] == true) return false;
+          if (data['ownerIsPrivate'] == true && uid != myUid) return false;
           return true;
         }).toList();
         // Warm-cache first page posters once per snapshot.

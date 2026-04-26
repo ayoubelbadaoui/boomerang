@@ -1,3 +1,4 @@
+import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
@@ -214,10 +215,10 @@ class BoomerangOverlay extends ConsumerWidget {
               ),
               if (caption.isNotEmpty) ...[
                 SizedBox(height: 6.h),
-                Text(
-                  caption,
+                HashtagCaption(
+                  caption: caption,
                   maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  hashtagColor: Colors.white,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15.sp,

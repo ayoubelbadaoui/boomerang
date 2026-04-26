@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
@@ -380,11 +381,9 @@ class _BoomerangCard extends ConsumerWidget {
                       ),
                     ),
                     SizedBox(height: 4.h),
-                    Text(
-                      (data['caption'] ?? '') as String? ?? '',
-                      textAlign: TextAlign.left,
+                    HashtagCaption(
+                      caption: (data['caption'] ?? '') as String? ?? '',
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: Colors.black87, fontSize: 14.sp),
                     ),
                   ],

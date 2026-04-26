@@ -266,7 +266,6 @@ class BoomerangRepo {
     return _fs
         .collection('boomerangs')
         .where('hashtags', arrayContains: normalized)
-        .where('ownerIsPrivate', isEqualTo: false)
         .limit(100)
         .snapshots();
   }
