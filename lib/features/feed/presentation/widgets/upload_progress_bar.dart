@@ -53,12 +53,19 @@ class _UploadProgressBarState extends ConsumerState<UploadProgressBar> {
       UploadPhase.idle => ('', Colors.black87, null),
     };
 
+    final topInset = MediaQuery.paddingOf(context).top;
+
     return AnimatedSize(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
       child: Container(
         width: double.infinity,
-        margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 6.h),
+        margin: EdgeInsets.only(
+          left: 16.w,
+          right: 16.w,
+          top: topInset + 6.h,
+          bottom: 6.h,
+        ),
         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
         decoration: BoxDecoration(
           color: upload.phase == UploadPhase.failed
