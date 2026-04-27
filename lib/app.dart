@@ -37,7 +37,11 @@ class BoomerangApp extends ConsumerWidget {
           theme: buildAppTheme(),
           routerConfig: router,
           builder: (context, child) {
-            return InAppNotificationOverlay(child: child!);
+            return GestureDetector(
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              behavior: HitTestBehavior.translucent,
+              child: InAppNotificationOverlay(child: child!),
+            );
           },
         );
       },

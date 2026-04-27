@@ -46,9 +46,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) return;
       _container!.read(activeConversationProvider.notifier).state =
           widget.conversationId;
-      _container!.read(pendingSeenConversationIdsProvider.notifier).update(
-        (ids) => {...ids, widget.conversationId},
-      );
+      _container!
+          .read(pendingSeenConversationIdsProvider.notifier)
+          .update((ids) => {...ids, widget.conversationId});
       _container!
           .read(chatControllerProvider(widget.conversationId).notifier)
           .setViewing(true);
@@ -71,9 +71,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     Future.delayed(const Duration(seconds: 2), () {
       try {
-        container?.read(pendingSeenConversationIdsProvider.notifier).update(
-          (ids) => Set<String>.from(ids)..remove(convId),
-        );
+        container
+            ?.read(pendingSeenConversationIdsProvider.notifier)
+            .update((ids) => Set<String>.from(ids)..remove(convId));
       } catch (_) {}
     });
 
@@ -110,9 +110,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final newText = text.replaceRange(start, start, emoji.emoji);
     controller
       ..text = newText
-      ..selection = TextSelection.collapsed(
-        offset: start + emoji.emoji.length,
-      );
+      ..selection = TextSelection.collapsed(offset: start + emoji.emoji.length);
   }
 
   void _showMessageActions(MessageEntity message, bool isMine) {
@@ -124,32 +122,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
       ),
-      builder: (_) => MessageActionsSheet(
-        message: message,
-        isMine: isMine,
-        onReply: () {
-          ref
-              .read(chatControllerProvider(widget.conversationId).notifier)
-              .setReplyTo(message);
-          _inputKey.currentState?.focusNode.requestFocus();
-        },
-        onUnsend: () {
-          ref
-              .read(chatControllerProvider(widget.conversationId).notifier)
-              .unsendMessage(message.id);
-        },
-        onDelete: () {
-          ref
-              .read(chatControllerProvider(widget.conversationId).notifier)
-              .deleteMessage(message.id);
-        },
-      ),
+      builder:
+          (_) => MessageActionsSheet(
+            message: message,
+            isMine: isMine,
+            onReply: () {
+              ref
+                  .read(chatControllerProvider(widget.conversationId).notifier)
+                  .setReplyTo(message);
+              _inputKey.currentState?.focusNode.requestFocus();
+            },
+            onUnsend: () {
+              ref
+                  .read(chatControllerProvider(widget.conversationId).notifier)
+                  .unsendMessage(message.id);
+            },
+            onDelete: () {
+              ref
+                  .read(chatControllerProvider(widget.conversationId).notifier)
+                  .deleteMessage(message.id);
+            },
+          ),
     );
   }
 
   void _scrollToMessage(String messageId) {
-    final chatState =
-        ref.read(chatControllerProvider(widget.conversationId));
+    final chatState = ref.read(chatControllerProvider(widget.conversationId));
     final index = chatState.messages.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
 
@@ -168,10 +166,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     final estimatedOffset = targetIndex * 80.0;
     _scrollController.animateTo(
-      estimatedOffset.clamp(
-        0.0,
-        _scrollController.position.maxScrollExtent,
-      ),
+      estimatedOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
@@ -184,23 +179,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _confirmDeleteChat() {
     showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete chat?'),
-        content: const Text(
-          'This conversation will be removed from your inbox.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete chat?'),
+            content: const Text(
+              'This conversation will be removed from your inbox.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     ).then((confirmed) async {
       if (confirmed == true) {
         await ref
@@ -213,22 +209,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final chatState =
-        ref.watch(chatControllerProvider(widget.conversationId));
+    final chatState = ref.watch(chatControllerProvider(widget.conversationId));
     final currentUser = ref.watch(currentUserProfileProvider).value;
     final uid = currentUser?.uid ?? '';
 
     final conversation = _resolveConversation(ref);
     final otherUid = conversation?.otherParticipantId(uid) ?? '';
-    final otherProfile = otherUid.isNotEmpty
-        ? ref.watch(userProfileByIdProvider(otherUid)).value
-        : null;
+    final otherProfile =
+        otherUid.isNotEmpty
+            ? ref.watch(userProfileByIdProvider(otherUid)).value
+            : null;
 
     return Scaffold(
-      appBar: _ChatAppBar(
-        profile: otherProfile,
-        onDelete: _confirmDeleteChat,
-      ),
+      appBar: _ChatAppBar(profile: otherProfile, onDelete: _confirmDeleteChat),
       body: Column(
         children: [
           if (otherUid.isNotEmpty) _FollowBackBanner(otherUid: otherUid),
@@ -263,26 +256,39 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               currentUser,
               otherProfile,
             ),
-            onClearReply: () => ref
-                .read(
-                    chatControllerProvider(widget.conversationId).notifier)
-                .clearReply(),
-            onSendText: (text) => ref
-                .read(
-                    chatControllerProvider(widget.conversationId).notifier)
-                .sendMessage(text),
-            onSendImage: (path) => ref
-                .read(
-                    chatControllerProvider(widget.conversationId).notifier)
-                .sendImageMessage(path),
-            onSendGif: (url) => ref
-                .read(
-                    chatControllerProvider(widget.conversationId).notifier)
-                .sendGifMessage(url),
-            onSendAudio: (path, durationMs) => ref
-                .read(
-                    chatControllerProvider(widget.conversationId).notifier)
-                .sendAudioMessage(path, durationMs),
+            onClearReply:
+                () =>
+                    ref
+                        .read(
+                          chatControllerProvider(
+                            widget.conversationId,
+                          ).notifier,
+                        )
+                        .clearReply(),
+            onSendText:
+                (text) => ref
+                    .read(
+                      chatControllerProvider(widget.conversationId).notifier,
+                    )
+                    .sendMessage(text),
+            onSendImage:
+                (path) => ref
+                    .read(
+                      chatControllerProvider(widget.conversationId).notifier,
+                    )
+                    .sendImageMessage(path),
+            onSendGif:
+                (url) => ref
+                    .read(
+                      chatControllerProvider(widget.conversationId).notifier,
+                    )
+                    .sendGifMessage(url),
+            onSendAudio:
+                (path, durationMs) => ref
+                    .read(
+                      chatControllerProvider(widget.conversationId).notifier,
+                    )
+                    .sendAudioMessage(path, durationMs),
           ),
           if (_emojiOpen)
             SizedBox(
@@ -329,12 +335,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   ConversationEntity? _resolveConversation(WidgetRef ref) {
-    final conversations =
-        ref.watch(conversationsStreamProvider).value ?? [];
+    final conversations = ref.watch(conversationsStreamProvider).value ?? [];
     return conversations.cast<ConversationEntity?>().firstWhere(
-          (c) => c?.id == widget.conversationId,
-          orElse: () => null,
-        );
+      (c) => c?.id == widget.conversationId,
+      orElse: () => null,
+    );
   }
 
   String? _senderNameForReply(
@@ -382,14 +387,14 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       leading: const BackButton(),
       title: GestureDetector(
-        onTap: profile != null
-            ? () => Navigator.of(context).push(
+        onTap:
+            profile != null
+                ? () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        OtherUserProfilePage(userId: profile!.uid),
+                    builder: (_) => OtherUserProfilePage(userId: profile!.uid),
                   ),
                 )
-            : null,
+                : null,
         child: Text(
           profile?.fullName ?? profile?.nickname ?? '',
           style: theme.textTheme.titleMedium,
@@ -404,18 +409,19 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
           onSelected: (value) {
             if (value == 'delete') onDelete();
           },
-          itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete_outline, color: Colors.redAccent),
-                  SizedBox(width: 8),
-                  Text('Delete chat'),
-                ],
-              ),
-            ),
-          ],
+          itemBuilder:
+              (_) => [
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, color: Colors.redAccent),
+                      SizedBox(width: 8),
+                      Text('Delete chat'),
+                    ],
+                  ),
+                ),
+              ],
         ),
       ],
     );
@@ -457,7 +463,8 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
     final theme = Theme.of(context);
     final otherProfile =
         ref.watch(userProfileByIdProvider(widget.otherUid)).value;
-    final name = otherProfile?.fullName ?? otherProfile?.nickname ?? 'This user';
+    final name =
+        otherProfile?.fullName ?? otherProfile?.nickname ?? 'This user';
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
@@ -476,9 +483,7 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
           Expanded(
             child: Text(
               '$name follows you',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.black54,
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -497,16 +502,17 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child: _loading
-                  ? SizedBox(
-                      width: 14.w,
-                      height: 14.w,
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Follow back'),
+              child:
+                  _loading
+                      ? SizedBox(
+                        width: 14.w,
+                        height: 14.w,
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Text('Follow back'),
             ),
           ),
         ],
@@ -546,10 +552,9 @@ class _MessageList extends StatelessWidget {
       return Center(
         child: Text(
           'Say hello!',
-          style: Theme.of(context)
-              .textTheme
-              .bodyLarge
-              ?.copyWith(color: Colors.grey),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: Colors.grey),
         ),
       );
     }
@@ -592,12 +597,14 @@ class _MessageList extends StatelessWidget {
           isMine: isMine,
           replyToSenderName: replySenderName,
           onLongPress: () => onMessageLongPress(message, isMine),
-          onReplyTap: message.hasReply
-              ? () => onReplyTap(message.replyToMessageId!)
-              : null,
-          onSharedPostTap: message.isSharedPost && message.sharedPostId != null
-              ? () => onSharedPostTap(message.sharedPostId!)
-              : null,
+          onReplyTap:
+              message.hasReply
+                  ? () => onReplyTap(message.replyToMessageId!)
+                  : null,
+          onSharedPostTap:
+              message.isSharedPost && message.sharedPostId != null
+                  ? () => onSharedPostTap(message.sharedPostId!)
+                  : null,
         );
       },
     );

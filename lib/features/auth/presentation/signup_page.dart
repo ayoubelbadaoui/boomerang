@@ -1,4 +1,5 @@
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
 import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/core/widgets/ui.dart';
@@ -180,7 +181,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     final result = ref.read(authControllerProvider);
                     if (result.error == null) {
                       _storeConsent(ref);
-                      context.push('/setup/flow');
+                      context.go(SetupFlowPage.routeName);
                     }
                   },
                   child: Text(

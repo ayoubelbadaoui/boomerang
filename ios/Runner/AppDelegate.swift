@@ -14,6 +14,9 @@ import AVFoundation
     // Baseline: don't interrupt other audio (music, calls, etc.)
     setAmbientAudioSession()
 
+    // Clear stale badge on launch
+    application.applicationIconBadgeNumber = 0
+
     // Set up FCM (Firebase is initialized in Flutter main.dart)
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self
@@ -78,24 +81,28 @@ import AVFoundation
     print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
   }
   
-  // Handle notification when app is in foreground
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    application.applicationIconBadgeNumber = 0
+  }
+
+  // Handle notification when app is in foreground — don't update badge since
+  // the user is already in the app; in-app UI handles unread state.
   override func userNotificationCenter(_ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-    let userInfo = notification.request.content.userInfo
-    // Show notification even when app is in foreground
     if #available(iOS 14.0, *) {
-      completionHandler([[.banner, .badge, .sound]])
+      completionHandler([[.banner, .sound]])
     } else {
-      completionHandler([[.alert, .badge, .sound]])
+      completionHandler([[.alert, .sound]])
     }
   }
   
-  // Handle notification tap
+  // Handle notification tap — clear badge since user is entering the app
   override func userNotificationCenter(_ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void) {
-    let userInfo = response.notification.request.content.userInfo
+    UIApplication.shared.applicationIconBadgeNumber = 0
     completionHandler()
   }
 

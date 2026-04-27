@@ -81,25 +81,26 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final count = _selectedIds.length;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete chats?'),
-        content: Text(
-          count == 1
-              ? 'This conversation will be removed from your inbox.'
-              : '$count conversations will be removed from your inbox.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete chats?'),
+            content: Text(
+              count == 1
+                  ? 'This conversation will be removed from your inbox.'
+                  : '$count conversations will be removed from your inbox.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed != true || !mounted) return;
@@ -130,107 +131,109 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final uid = currentUser?.uid ?? '';
 
     return Scaffold(
-      appBar: _isSelectionMode
-          ? AppBar(
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: _exitSelectionMode,
-              ),
-              title: Text(
-                '${_selectedIds.length} selected',
-                style: theme.textTheme.titleLarge,
-              ),
-              actions: [
-                if (convAsync.hasValue)
+      appBar:
+          _isSelectionMode
+              ? AppBar(
+                leading: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: _exitSelectionMode,
+                ),
+                title: Text(
+                  '${_selectedIds.length} selected',
+                  style: theme.textTheme.titleLarge,
+                ),
+                actions: [
+                  if (convAsync.hasValue)
+                    IconButton(
+                      icon: Icon(
+                        _selectedIds.length == (convAsync.value?.length ?? 0)
+                            ? Icons.deselect
+                            : Icons.select_all,
+                      ),
+                      tooltip:
+                          _selectedIds.length == (convAsync.value?.length ?? 0)
+                              ? 'Deselect all'
+                              : 'Select all',
+                      onPressed: () => _selectAll(convAsync.value ?? []),
+                    ),
                   IconButton(
                     icon: Icon(
-                      _selectedIds.length == (convAsync.value?.length ?? 0)
-                          ? Icons.deselect
-                          : Icons.select_all,
+                      Icons.delete_outline_rounded,
+                      color:
+                          _selectedIds.isNotEmpty
+                              ? theme.colorScheme.error
+                              : Colors.grey,
                     ),
-                    tooltip: _selectedIds.length ==
-                            (convAsync.value?.length ?? 0)
-                        ? 'Deselect all'
-                        : 'Select all',
-                    onPressed: () => _selectAll(convAsync.value ?? []),
+                    onPressed: _selectedIds.isNotEmpty ? _deleteSelected : null,
                   ),
-                IconButton(
-                  icon: Icon(
-                    Icons.delete_outline_rounded,
-                    color: _selectedIds.isNotEmpty
-                        ? theme.colorScheme.error
-                        : Colors.grey,
+                ],
+              )
+              : AppBar(
+                leading: Navigator.canPop(context) ? const BackButton() : null,
+                automaticallyImplyLeading: false,
+                title: Text('Messages', style: theme.textTheme.titleLarge),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed:
+                        () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(24),
+                            ),
+                          ),
+                          builder:
+                              (_) => DraggableScrollableSheet(
+                                initialChildSize: 0.75,
+                                minChildSize: 0.4,
+                                maxChildSize: 0.92,
+                                expand: false,
+                                builder:
+                                    (_, scrollController) =>
+                                        const NewChatSheet(),
+                              ),
+                        ),
                   ),
-                  onPressed:
-                      _selectedIds.isNotEmpty ? _deleteSelected : null,
-                ),
-              ],
-            )
-          : AppBar(
-              leading:
-                  Navigator.canPop(context) ? const BackButton() : null,
-              automaticallyImplyLeading: false,
-              title:
-                  Text('Messages', style: theme.textTheme.titleLarge),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: () => showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(24),
-                      ),
-                    ),
-                    builder: (_) => DraggableScrollableSheet(
-                      initialChildSize: 0.75,
-                      minChildSize: 0.4,
-                      maxChildSize: 0.92,
-                      expand: false,
-                      builder: (_, scrollController) =>
-                          const NewChatSheet(),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.more_horiz),
-                  onPressed: () {},
-                ),
-              ],
-            ),
+                ],
+              ),
       body: convAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: EdgeInsets.all(32.w),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.chat_bubble_outline,
-                    size: 64.sp, color: Colors.grey),
-                SizedBox(height: 16.h),
-                Text(
-                  'No messages yet',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(color: Colors.grey),
+        error:
+            (e, _) => Center(
+              child: Padding(
+                padding: EdgeInsets.all(32.w),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 64.sp,
+                      color: Colors.grey,
+                    ),
+                    SizedBox(height: 16.h),
+                    Text(
+                      'No messages yet',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.grey,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Text(
+                      'Start a conversation with someone!',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.grey,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-                SizedBox(height: 8.h),
-                Text(
-                  'Start a conversation with someone!',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
         data: (conversations) {
-          final filtered = _query.isEmpty
-              ? conversations
-              : conversations;
+          final filtered = _query.isEmpty ? conversations : conversations;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,22 +253,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               SizedBox(height: 8.h),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
-                child:
-                    Text('Messages', style: theme.textTheme.titleSmall),
+                child: Text('Messages', style: theme.textTheme.titleSmall),
               ),
               SizedBox(height: 4.h),
               Expanded(
-                child: filtered.isEmpty
-                    ? _EmptyState(theme: theme)
-                    : _ConversationList(
-                        conversations: filtered,
-                        currentUid: uid,
-                        searchQuery: _query,
-                        onTap: _openChat,
-                        isSelectionMode: _isSelectionMode,
-                        selectedIds: _selectedIds,
-                        onEnterSelection: _enterSelectionMode,
-                      ),
+                child:
+                    filtered.isEmpty
+                        ? _EmptyState(theme: theme)
+                        : _ConversationList(
+                          conversations: filtered,
+                          currentUid: uid,
+                          searchQuery: _query,
+                          onTap: _openChat,
+                          isSelectionMode: _isSelectionMode,
+                          selectedIds: _selectedIds,
+                          onEnterSelection: _enterSelectionMode,
+                        ),
               ),
             ],
           );
@@ -314,7 +317,6 @@ class _SearchBar extends StatelessWidget {
                 style: theme.textTheme.bodyMedium,
               ),
             ),
-            Icon(Icons.tune, size: 20.sp, color: Colors.grey),
             SizedBox(width: 12.w),
           ],
         ),
@@ -338,12 +340,13 @@ class _RecentSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final otherUids = conversations
-        .map((c) => c.otherParticipantId(currentUid))
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .take(10)
-        .toList();
+    final otherUids =
+        conversations
+            .map((c) => c.otherParticipantId(currentUid))
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .take(10)
+            .toList();
 
     final profiles = <UserProfile>[];
     for (final uid in otherUids) {
@@ -351,10 +354,7 @@ class _RecentSection extends ConsumerWidget {
       if (p != null) profiles.add(p);
     }
 
-    return RecentContactsBar(
-      profiles: profiles,
-      onTap: (p) => onTap(p.uid),
-    );
+    return RecentContactsBar(profiles: profiles, onTap: (p) => onTap(p.uid));
   }
 }
 
@@ -418,14 +418,11 @@ class _ConversationList extends ConsumerWidget {
           isSelectionMode: isSelectionMode,
           isSelected: selectedIds.contains(conv.id),
           onTap: () => onTap(conv.id),
-          onLongPress: isSelectionMode
-              ? null
-              : () => _showConversationActions(
-                    context,
-                    ref,
-                    conv,
-                    isPinned,
-                  ),
+          onLongPress:
+              isSelectionMode
+                  ? null
+                  : () =>
+                      _showConversationActions(context, ref, conv, isPinned),
         );
       },
     );
@@ -445,124 +442,127 @@ class _ConversationList extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
       ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40.w,
-                height: 4.h,
-                margin: EdgeInsets.only(bottom: 16.h),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2.r),
-                ),
-              ),
-              ListTile(
-                leading: Icon(
-                  isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
-                  size: 22.sp,
-                ),
-                title: Text(
-                  isPinned ? 'Unpin chat' : 'Pin chat',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
-                dense: true,
-                onTap: () {
-                  Navigator.pop(context);
-                  final repo = ref.read(chatRepoProvider);
-                  if (isPinned) {
-                    repo.unpinConversation(
-                      conversationId: conv.id,
-                      userId: currentUid,
-                    );
-                  } else {
-                    repo.pinConversation(
-                      conversationId: conv.id,
-                      userId: currentUid,
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: Icon(
-                  Icons.checklist_rounded,
-                  size: 22.sp,
-                ),
-                title: Text(
-                  'Select chats',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
-                dense: true,
-                onTap: () {
-                  Navigator.pop(context);
-                  onEnterSelection?.call(conv.id);
-                },
-              ),
-              ListTile(
-                leading: Icon(
-                  Icons.delete_outline_rounded,
-                  size: 22.sp,
-                  color: theme.colorScheme.error,
-                ),
-                title: Text(
-                  'Delete chat',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
-                dense: true,
-                onTap: () {
-                  Navigator.pop(context);
-                  showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Delete chat?'),
-                      content: const Text(
-                        'This conversation will be removed from your inbox.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
-                          ),
-                          child: const Text('Delete'),
-                        ),
-                      ],
+      builder:
+          (_) => SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40.w,
+                    height: 4.h,
+                    margin: EdgeInsets.only(bottom: 16.h),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2.r),
                     ),
-                  ).then((confirmed) {
-                    if (confirmed == true) {
-                      ref.read(chatRepoProvider).deleteConversation(
-                            conversationId: conv.id,
-                            userId: currentUid,
-                          );
-                    }
-                  });
-                },
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      isPinned
+                          ? Icons.push_pin_outlined
+                          : Icons.push_pin_rounded,
+                      size: 22.sp,
+                    ),
+                    title: Text(
+                      isPinned ? 'Unpin chat' : 'Pin chat',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                    dense: true,
+                    onTap: () {
+                      Navigator.pop(context);
+                      final repo = ref.read(chatRepoProvider);
+                      if (isPinned) {
+                        repo.unpinConversation(
+                          conversationId: conv.id,
+                          userId: currentUid,
+                        );
+                      } else {
+                        repo.pinConversation(
+                          conversationId: conv.id,
+                          userId: currentUid,
+                        );
+                      }
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.checklist_rounded, size: 22.sp),
+                    title: Text(
+                      'Select chats',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                    dense: true,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onEnterSelection?.call(conv.id);
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 22.sp,
+                      color: theme.colorScheme.error,
+                    ),
+                    title: Text(
+                      'Delete chat',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
+                    dense: true,
+                    onTap: () {
+                      Navigator.pop(context);
+                      showDialog<bool>(
+                        context: context,
+                        builder:
+                            (ctx) => AlertDialog(
+                              title: const Text('Delete chat?'),
+                              content: const Text(
+                                'This conversation will be removed from your inbox.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                      ).then((confirmed) {
+                        if (confirmed == true) {
+                          ref
+                              .read(chatRepoProvider)
+                              .deleteConversation(
+                                conversationId: conv.id,
+                                userId: currentUid,
+                              );
+                        }
+                      });
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 }

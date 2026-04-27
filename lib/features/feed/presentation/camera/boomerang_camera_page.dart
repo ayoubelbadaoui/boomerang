@@ -137,6 +137,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     _cam = c;
     try {
       await c.initialize();
+      await c.lockCaptureOrientation(DeviceOrientation.portraitUp);
       _minZoom = await c.getMinZoomLevel();
       _maxZoom = await c.getMaxZoomLevel();
       _zoom = _minZoom;

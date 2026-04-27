@@ -89,11 +89,16 @@ final router = GoRouter(
       return isAuthFlow ? null : OnboardingPage.routeName;
     }
 
-    // User signed in: wait for nickname/profile checks
+    // User signed in: wait for nickname/profile checks.
+    // Treat loading OR error as "still resolving" — never redirect based on
+    // a transient Firestore error (it would bounce users to setup in a loop).
     if (hasNickname.asData == null ||
         profileExists.asData == null ||
-        profileComplete.asData == null) {
-      return null; // wait checks
+        profileComplete.asData == null ||
+        hasNickname.hasError ||
+        profileExists.hasError ||
+        profileComplete.hasError) {
+      return null;
     }
     final hasName = hasNickname.asData!.value;
     if (!hasName && !isSetupFlow) return SetupFlowPage.routeName;
@@ -105,7 +110,6 @@ final router = GoRouter(
         state.fullPath != SetupFlowPage.routeName) {
       return SetupFlowPage.routeName;
     }
-    // allow navigation in auth/setup flow otherwise
     return null;
   },
 );

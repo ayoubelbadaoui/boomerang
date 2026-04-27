@@ -112,7 +112,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     );
   }
 
-  void _next() async {
+  void _next() {
     if (_saving) return;
 
     if (_index == 1) {
@@ -125,78 +125,105 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
 
     if (_index == 2) {
       if (!_profileFormKey.currentState!.validate()) return;
+      // Animate to the congratulations step and save in parallel so the
+      // user doesn't stare at a spinner on the profile page.
+      _controller.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+      _saveProfile();
+      return;
     }
+
     if (_index < 3) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
-    } else {
-      if (!mounted) return;
-      setState(() => _saving = true);
-      final container = ProviderScope.containerOf(context, listen: false);
-      final repo = container.read(userProfileRepoProvider);
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (_saving) return;
+    if (!mounted) return;
+    setState(() => _saving = true);
+
+    final container = ProviderScope.containerOf(context, listen: false);
+    final repo = container.read(userProfileRepoProvider);
+
+    try {
       String? avatarUrl;
-      try {
-        if (_avatarFile != null) {
-          developer.log('Setup: uploading avatar', name: 'SetupFlow');
-          avatarUrl = await repo.uploadAvatar(_avatarFile!);
-        }
-        developer.log('Setup: upserting user profile', name: 'SetupFlow');
-        await repo.upsertCurrentUserProfile(
-          gender: _gender,
-          birthday: _birthday,
-          fullName: _fullName.text.trim(),
-          nickname: _nickname.text.trim(),
-          email: _email.text.trim(),
-          phone: '${_countryCode.dialCode} ${_phone.text.trim()}',
-          
-          avatarUrl: avatarUrl,
-        );
+      if (_avatarFile != null) {
+        developer.log('Setup: uploading avatar', name: 'SetupFlow');
+        avatarUrl = await repo.uploadAvatar(_avatarFile!);
+      }
+      if (!mounted) return;
+
+      developer.log('Setup: upserting user profile', name: 'SetupFlow');
+      await repo.upsertCurrentUserProfile(
+        gender: _gender,
+        birthday: _birthday,
+        fullName: _fullName.text.trim(),
+        nickname: _nickname.text.trim(),
+        email: _email.text.trim(),
+        phone: '${_countryCode.dialCode} ${_phone.text.trim()}',
+        avatarUrl: avatarUrl,
+      );
+      if (!mounted) return;
+
+      // Invalidate ALL relevant providers and wait for them to confirm
+      // the profile is fully visible. This prevents HomeShell / router
+      // redirect from seeing stale state and bouncing back to setup.
+      container.invalidate(userHasNicknameProvider);
+      container.invalidate(userProfileExistsProvider);
+      container.invalidate(userProfileCompleteProvider);
+
+      final (hasNickname, profileExists, profileComplete) = await (
+        container.read(userHasNicknameProvider.future),
+        container.read(userProfileExistsProvider.future),
+        container.read(userProfileCompleteProvider.future),
+      ).wait;
+      if (!mounted) return;
+
+      if (!hasNickname || !profileExists || !profileComplete) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
         if (!mounted) return;
-        final container = ProviderScope.containerOf(context, listen: false);
         container.invalidate(userHasNicknameProvider);
         container.invalidate(userProfileExistsProvider);
         container.invalidate(userProfileCompleteProvider);
-        // Wait for providers to refetch so HomeShell sees the new profile and does not redirect back to setup
-        bool hasNickname = await container.read(userHasNicknameProvider.future);
-        if (!mounted) return;
-        if (!hasNickname) {
-          await Future<void>.delayed(const Duration(milliseconds: 400));
-          if (!mounted) return;
-          container.invalidate(userHasNicknameProvider);
-          hasNickname = await container.read(userHasNicknameProvider.future);
-        }
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile created successfully'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        if (!mounted) return;
-        context.go(HomeShell.routeName);
-      } catch (e, stackTrace) {
-        developer.log(
-          'Setup failed: $e',
-          name: 'SetupFlow',
-          error: e,
-          stackTrace: stackTrace,
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not finish setup: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() => _saving = false);
-      } finally {
-        if (mounted) {
-          setState(() => _saving = false);
-        }
+        await (
+          container.read(userHasNicknameProvider.future),
+          container.read(userProfileExistsProvider.future),
+          container.read(userProfileCompleteProvider.future),
+        ).wait;
       }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile created successfully'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (!mounted) return;
+      context.go(HomeShell.routeName);
+    } catch (e, stackTrace) {
+      developer.log(
+        'Setup failed: $e',
+        name: 'SetupFlow',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not finish setup: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -225,13 +252,8 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           Expanded(
             child: PageView(
               controller: _controller,
-              onPageChanged: (i) {
-                setState(() => _index = i);
-                if (i == 3 && !_saving) {
-                  // auto save and redirect at last step
-                  _next();
-                }
-              },
+              physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (i) => setState(() => _index = i),
               children: [
                 _GenderStep(
                   gender: _gender,
@@ -258,22 +280,35 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 20.h),
-            child:
-                (_saving || _index == 3)
-                    ? const Center(child: CircularProgressIndicator())
-                    : SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _next,
-                        style: ElevatedButton.styleFrom(
-                          shape: const StadiumBorder(),
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 16.h),
+            child: _saving
+                ? const Center(child: CircularProgressIndicator())
+                : _index == 3
+                    ? SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _saveProfile,
+                          style: ElevatedButton.styleFrom(
+                            shape: const StadiumBorder(),
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 16.h),
+                          ),
+                          child: const Text('Retry'),
                         ),
-                        child: const Text('Continue'),
+                      )
+                    : SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _next,
+                          style: ElevatedButton.styleFrom(
+                            shape: const StadiumBorder(),
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 16.h),
+                          ),
+                          child: const Text('Continue'),
+                        ),
                       ),
-                    ),
           ),
         ],
       ),

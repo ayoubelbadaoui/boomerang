@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processNotification = processNotification;
+const firebase_1 = require("../infrastructure/firebase");
 const deviceTokenRepository_1 = require("../infrastructure/repositories/deviceTokenRepository");
 const userRepository_1 = require("../infrastructure/repositories/userRepository");
 const pushSender_1 = require("../infrastructure/push/pushSender");
@@ -36,8 +37,16 @@ async function processNotification(targetUserId, raw) {
         console.log('[notifications] no device tokens for user', targetUserId);
         return;
     }
+    const unreadSnap = await firebase_1.db
+        .collection('users')
+        .doc(targetUserId)
+        .collection('notifications')
+        .where('read', '==', false)
+        .count()
+        .get();
+    const unreadCount = unreadSnap.data().count;
     const template = (0, templates_1.renderTemplate)(payload, actorUser);
-    const message = buildPushMessage(payload, template, actorUser);
+    const message = buildPushMessage(payload, template, actorUser, unreadCount);
     await (0, pushSender_1.sendToUserDevices)(targetUserId, deviceTokens, message);
 }
 function normalizePayload(targetUserId, raw) {
@@ -56,7 +65,7 @@ function normalizePayload(targetUserId, raw) {
 function isSupportedType(type) {
     return ['follow', 'follow_back', 'follow_request', 'like', 'comment', 'reply'].includes(type);
 }
-function buildPushMessage(payload, template, actorUser) {
+function buildPushMessage(payload, template, actorUser, badgeCount = 1) {
     const data = {
         type: payload.type,
     };
@@ -80,7 +89,7 @@ function buildPushMessage(payload, template, actorUser) {
             payload: {
                 aps: {
                     sound: 'default',
-                    badge: 1,
+                    badge: badgeCount,
                     'mutable-content': 1,
                 },
             },

@@ -18,7 +18,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   PaintingBinding.instance.imageCache.maximumSizeBytes = 200 * 1024 * 1024;
 
   // Let background music (Spotify, Apple Music, etc.) keep playing.

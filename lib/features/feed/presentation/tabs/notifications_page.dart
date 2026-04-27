@@ -7,10 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
 
-class InboxTab extends ConsumerWidget {
-  const InboxTab({super.key});
+class NotificationsPage extends ConsumerWidget {
+  const NotificationsPage({super.key});
 
-  static const String routeName = '/inbox_tab';
+  static const String routeName = '/notifications';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,19 +26,11 @@ class InboxTab extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'All Activity',
+              'Notifications',
               style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(width: 6),
-            const Icon(Icons.expand_more, color: Colors.black),
           ],
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: Icon(Icons.send, color: Colors.black),
-          ),
-        ],
       ),
       body:
           uid == null
@@ -107,9 +99,10 @@ class InboxTab extends ConsumerWidget {
                               }
                               return _Item(
                                 id: doc.id,
-                                avatar: (avatar != null && avatar.isNotEmpty)
-                                    ? avatar
-                                    : '',
+                                avatar:
+                                    (avatar != null && avatar.isNotEmpty)
+                                        ? avatar
+                                        : '',
                                 title: title,
                                 subtitle: subtitle,
                                 trailingThumb: thumb,
@@ -286,7 +279,11 @@ class _ActivityTile extends StatelessWidget {
                 InkWell(
                   onTap: () => _openProfile(context, ref, item),
                   customBorder: const CircleBorder(),
-                  child: LiveAvatar(userId: item.actorId, fallbackUrl: item.avatar, size: 60.r),
+                  child: LiveAvatar(
+                    userId: item.actorId,
+                    fallbackUrl: item.avatar,
+                    size: 60.r,
+                  ),
                 ),
                 SizedBox(width: 12.w),
                 Expanded(
@@ -367,19 +364,20 @@ class _ActivityTile extends StatelessWidget {
                           ),
                         );
                       },
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 48.r,
-                        height: 48.r,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0F0F0),
-                          borderRadius: BorderRadius.circular(6.r),
-                        ),
-                        child: Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.grey.shade400,
-                          size: 20,
-                        ),
-                      ),
+                      errorBuilder:
+                          (_, __, ___) => Container(
+                            width: 48.r,
+                            height: 48.r,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0F0F0),
+                              borderRadius: BorderRadius.circular(6.r),
+                            ),
+                            child: Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.grey.shade400,
+                              size: 20,
+                            ),
+                          ),
                     ),
                   ),
               ],

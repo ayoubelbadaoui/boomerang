@@ -4,7 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/discover_tab.dart';
 import 'tabs/create_tab.dart';
-import 'tabs/inbox_tab.dart';
+import 'tabs/notifications_page.dart';
 import '../../profile/presentation/profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -65,17 +65,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       return const Scaffold();
     }
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final nicknameState = ref.watch(userHasNicknameProvider);
-    if (nicknameState.isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    if (nicknameState.isLoading || nicknameState.hasError) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final hasNickname = nicknameState.asData?.value ?? false;
+    final hasNickname = nicknameState.valueOrNull ?? false;
     if (!hasNickname) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go(SetupFlowPage.routeName);
@@ -83,85 +79,82 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       return const Scaffold();
     }
     return Scaffold(
-          appBar:
-              _currentIndex == 0
-                  ? AppBar(
-                    centerTitle: true,
-                    elevation: 0,
-                    title: const Text('Home'),
-                    actions: [
-                      _NotificationBell(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const InboxTab()),
-                          );
-                        },
-                      ),
-                    ],
-                  )
-                  : null,
-          body: Column(
-            children: [
-              const UploadProgressBar(),
-              Expanded(child: _tabs[_currentIndex]),
-            ],
-          ),
-
-          bottomNavigationBar: Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.paddingOf(context).bottom + 4.h,
-              top: 8.h,
-            ),
-            child: SizedBox(
-              height: 72.h,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _NavItem(
-                    label: 'Home',
-                    active: _currentIndex == 0,
-                    activeIcon:
-                        'assets/bottom_navigation/active_light/home.svg',
-                    inactiveIcon:
-                        'assets/bottom_navigation/inactive_light/home.svg',
-                    onTap: () => _setTab(0),
-                  ),
-                  _NavItem(
-                    label: 'Discover',
-                    active: _currentIndex == 1,
-                    activeIcon:
-                        'assets/bottom_navigation/active_light/discover.svg',
-                    inactiveIcon:
-                        'assets/bottom_navigation/inactive_light/discover.svg',
-                    onTap: () => _setTab(1),
-                  ),
-                  _CreateButton(
-                    active: _currentIndex == 2,
+      appBar:
+          _currentIndex == 0
+              ? AppBar(
+                centerTitle: true,
+                elevation: 0,
+                title: const Text('Home'),
+                actions: [
+                  _NotificationBell(
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const BoomerangCameraPage(),
+                          builder: (_) => const NotificationsPage(),
                         ),
                       );
                     },
                   ),
-                  _ChatNavItem(
-                    active: _currentIndex == 3,
-                    onTap: () => _setTab(3),
-                  ),
-                  _NavItem(
-                    label: 'Profile',
-                    active: _currentIndex == 4,
-                    activeIcon:
-                        'assets/bottom_navigation/active_light/profile.svg',
-                    inactiveIcon:
-                        'assets/bottom_navigation/inactive_light/profile.svg',
-                    onTap: () => _setTab(4),
-                  ),
                 ],
+              )
+              : null,
+      body: Column(
+        children: [
+          const UploadProgressBar(),
+          Expanded(child: _tabs[_currentIndex]),
+        ],
+      ),
+
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.paddingOf(context).bottom + 4.h,
+          top: 8.h,
+        ),
+        child: SizedBox(
+          height: 72.h,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _NavItem(
+                label: 'Home',
+                active: _currentIndex == 0,
+                activeIcon: 'assets/bottom_navigation/active_light/home.svg',
+                inactiveIcon:
+                    'assets/bottom_navigation/inactive_light/home.svg',
+                onTap: () => _setTab(0),
               ),
-            ),
+              _NavItem(
+                label: 'Discover',
+                active: _currentIndex == 1,
+                activeIcon:
+                    'assets/bottom_navigation/active_light/discover.svg',
+                inactiveIcon:
+                    'assets/bottom_navigation/inactive_light/discover.svg',
+                onTap: () => _setTab(1),
+              ),
+              _CreateButton(
+                active: _currentIndex == 2,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BoomerangCameraPage(),
+                    ),
+                  );
+                },
+              ),
+              _ChatNavItem(active: _currentIndex == 3, onTap: () => _setTab(3)),
+              _NavItem(
+                label: 'Profile',
+                active: _currentIndex == 4,
+                activeIcon: 'assets/bottom_navigation/active_light/profile.svg',
+                inactiveIcon:
+                    'assets/bottom_navigation/inactive_light/profile.svg',
+                onTap: () => _setTab(4),
+              ),
+            ],
           ),
+        ),
+      ),
     );
   }
 }
@@ -215,9 +208,7 @@ class _CreateButton extends StatelessWidget {
         height: 56.h,
         width: 56.h,
         decoration: BoxDecoration(color: Colors.black, shape: BoxShape.circle),
-        child: Center(
-          child: Icon(Icons.add, size: 28.h, color: Colors.white),
-        ),
+        child: Center(child: Icon(Icons.add, size: 28.h, color: Colors.white)),
       ),
     );
   }
@@ -230,9 +221,8 @@ class _NotificationBell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final uid = ref.watch(currentUserProfileProvider).value?.uid ?? '';
-    final unread = uid.isEmpty
-        ? 0
-        : ref.watch(unreadCountProvider(uid)).valueOrNull ?? 0;
+    final unread =
+        uid.isEmpty ? 0 : ref.watch(unreadCountProvider(uid)).valueOrNull ?? 0;
 
     return IconButton(
       splashRadius: 24,
@@ -243,10 +233,7 @@ class _NotificationBell extends ConsumerWidget {
             'assets/svgs/notification.svg',
             height: 24.h,
             width: 24.h,
-            colorFilter: const ColorFilter.mode(
-              Colors.black,
-              BlendMode.srcIn,
-            ),
+            colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn),
           ),
           if (unread > 0)
             Positioned(

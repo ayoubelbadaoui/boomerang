@@ -1,4 +1,4 @@
-import { admin } from '../infrastructure/firebase';
+import { admin, db } from '../infrastructure/firebase';
 import { getUserDeviceTokens } from '../infrastructure/repositories/deviceTokenRepository';
 import { fetchUserProfile } from '../infrastructure/repositories/userRepository';
 import { sendToUserDevices } from '../infrastructure/push/pushSender';
@@ -44,8 +44,17 @@ export async function processNotification(targetUserId: string, raw: RawNotifica
     return;
   }
 
+  const unreadSnap = await db
+    .collection('users')
+    .doc(targetUserId)
+    .collection('notifications')
+    .where('read', '==', false)
+    .count()
+    .get();
+  const unreadCount = unreadSnap.data().count;
+
   const template = renderTemplate(payload, actorUser);
-  const message = buildPushMessage(payload, template, actorUser);
+  const message = buildPushMessage(payload, template, actorUser, unreadCount);
   await sendToUserDevices(targetUserId, deviceTokens, message);
 }
 
@@ -71,6 +80,7 @@ function buildPushMessage(
   payload: NotificationPayload,
   template: { title: string; body: string },
   actorUser?: { avatarUrl?: string },
+  badgeCount = 1,
 ): admin.messaging.MulticastMessage {
   const data: Record<string, string> = {
     type: payload.type,
@@ -93,7 +103,7 @@ function buildPushMessage(
       payload: {
         aps: {
           sound: 'default',
-          badge: 1,
+          badge: badgeCount,
           'mutable-content': 1,
         },
       },

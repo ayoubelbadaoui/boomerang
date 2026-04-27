@@ -201,9 +201,11 @@ class _PushNotificationsBootstrap {
       developer.log('[notification push]    - Sound: ${settings.sound}');
       // Disable system-level foreground banners so we control display via
       // flutter_local_notifications (allows per-conversation suppression).
+      // Badge is false because in-app UI handles unread state; the native
+      // AppDelegate clears the OS badge on open/resume.
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: false,
-        badge: true,
+        badge: false,
         sound: false,
       );
     }

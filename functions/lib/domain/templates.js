@@ -18,7 +18,7 @@ const templates = {
     }),
     like: (_payload, actor) => ({
         title: 'New like',
-        body: `${fallbackActor(actor)} liked your post`,
+        body: `${fallbackActor(actor)} liked your boomerang`,
     }),
     comment: (payload, actor) => ({
         title: 'New comment',
