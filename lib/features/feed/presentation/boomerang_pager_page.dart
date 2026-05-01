@@ -33,30 +33,29 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   late final PageController _pageController;
   int _currentPage = 0;
 
-  bool _initialPostBlocked = false;
-
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
     _docs.add((id: widget.initialId, data: widget.initialData));
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkInitialPostPrivacy();
       _fetchNext();
     });
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   }
 
-  void _checkInitialPostPrivacy() {
-    final data = widget.initialData;
-    final ownerIsPrivate = data['ownerIsPrivate'] == true;
-    if (!ownerIsPrivate) return;
-    final me = ref.read(currentUserProfileProvider).value;
+  bool _isOwnerLockedFromMe(Map<String, dynamic> data) {
     final ownerId = (data['userId'] ?? '') as String;
-    if (me?.uid == ownerId) return;
-    final followingIds = ref.read(followingIdsProvider).value ?? const <String>{};
-    if (followingIds.contains(ownerId)) return;
-    setState(() => _initialPostBlocked = true);
+    if (ownerId.isEmpty) return false;
+    final me = ref.watch(currentUserProfileProvider).value;
+    if (me?.uid == ownerId) return false;
+    final liveProfile = ref.watch(userProfileByIdProvider(ownerId)).value;
+    final cached = data['ownerIsPrivate'] == true;
+    final isPrivate = (liveProfile?.isPrivate ?? cached) || cached;
+    if (!isPrivate) return false;
+    final followingIds =
+        ref.watch(followingIdsProvider).value ?? const <String>{};
+    return !followingIds.contains(ownerId);
   }
 
   @override
@@ -97,7 +96,8 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_initialPostBlocked) {
+    // Always re-evaluate privacy on every build so toggles propagate live.
+    if (_docs.isNotEmpty && _isOwnerLockedFromMe(_docs.first.data)) {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(

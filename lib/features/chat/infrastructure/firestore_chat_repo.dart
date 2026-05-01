@@ -10,6 +10,16 @@ import 'package:boomerang/features/chat/domain/message_entity.dart';
 import 'package:boomerang/features/chat/infrastructure/dto/conversation_dto.dart';
 import 'package:boomerang/features/chat/infrastructure/dto/message_dto.dart';
 
+/// Thrown when a chat write violates a privacy/permission rule.
+/// Surfaced via [FirestoreChatRepo.sendMessage] so the UI can present a
+/// friendly snackbar instead of leaking a Firestore error.
+class ChatPermissionException implements Exception {
+  ChatPermissionException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 class FirestoreChatRepo implements ChatRepo {
   FirestoreChatRepo(this._firestore, this._storage);
 
@@ -113,6 +123,34 @@ class FirestoreChatRepo implements ChatRepo {
     final messageRef = _messages(conversationId).doc();
     final conversationRef = _conversations.doc(conversationId);
 
+    // Privacy guard: block sends whenever the recipient runs a private
+    // account and the sender has not been accepted as a follower. This is
+    // the last line of defence even if the UI tries to bypass the gate.
+    final convSnap = await conversationRef.get();
+    final participants =
+        List<String>.from(convSnap.data()?['participants'] ?? []);
+    for (final recipient in participants) {
+      if (recipient == senderId) continue;
+      final recipientDoc =
+          await _firestore.collection('users').doc(recipient).get();
+      final recipientData = recipientDoc.data();
+      final recipientIsPrivate =
+          (recipientData?['isPrivate'] ?? false) == true;
+      if (!recipientIsPrivate) continue;
+      final followsRecipient = await _firestore
+          .collection('following')
+          .doc(senderId)
+          .collection('users')
+          .doc(recipient)
+          .get();
+      if (!followsRecipient.exists) {
+        throw ChatPermissionException(
+          'This account is private. They have to accept your follow request '
+          'before you can message them.',
+        );
+      }
+    }
+
     final now = FieldValue.serverTimestamp();
     final typeStr = MessageDto.typeToString(type);
 
@@ -153,10 +191,6 @@ class FirestoreChatRepo implements ChatRepo {
       if (sharedPostUserName != null) 'sharedPostUserName': sharedPostUserName,
       if (sharedPostCaption != null) 'sharedPostCaption': sharedPostCaption,
     };
-
-    final conversationSnap = await conversationRef.get();
-    final participants =
-        List<String>.from(conversationSnap.data()?['participants'] ?? []);
 
     final unreadUpdates = <String, dynamic>{};
     for (final uid in participants) {

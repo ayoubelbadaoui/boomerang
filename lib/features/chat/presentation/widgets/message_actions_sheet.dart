@@ -12,6 +12,7 @@ class MessageActionsSheet extends StatelessWidget {
     required this.onReply,
     required this.onUnsend,
     required this.onDelete,
+    this.canReply = true,
   });
 
   final MessageEntity message;
@@ -19,6 +20,7 @@ class MessageActionsSheet extends StatelessWidget {
   final VoidCallback onReply;
   final VoidCallback onUnsend;
   final VoidCallback onDelete;
+  final bool canReply;
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +44,15 @@ class MessageActionsSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2.r),
               ),
             ),
-            _ActionTile(
-              icon: Icons.reply_rounded,
-              label: 'Reply',
-              onTap: () {
-                Navigator.pop(context);
-                onReply();
-              },
-            ),
+            if (canReply)
+              _ActionTile(
+                icon: Icons.reply_rounded,
+                label: 'Reply',
+                onTap: () {
+                  Navigator.pop(context);
+                  onReply();
+                },
+              ),
             if (message.type == MessageType.text && !message.isUnsent)
               _ActionTile(
                 icon: Icons.copy_rounded,

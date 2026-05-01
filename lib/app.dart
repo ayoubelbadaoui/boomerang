@@ -6,6 +6,7 @@ import 'router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/notifications/push_notifications_service.dart';
 import 'core/notifications/in_app_notification_overlay.dart';
+import 'infrastructure/providers.dart';
 
 class BoomerangApp extends ConsumerWidget {
   const BoomerangApp({super.key});
@@ -26,6 +27,8 @@ class BoomerangApp extends ConsumerWidget {
 
     // Activate push notifications bootstrapper
     ref.read(pushNotificationsProvider);
+    // Keep boomerang privacy flags in sync with the current user's setting.
+    ref.watch(privacyBackfillGuardProvider);
     return ScreenUtilInit(
       designSize: const Size(428, 926),
       minTextAdapt: true,

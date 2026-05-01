@@ -263,11 +263,45 @@ class BoomerangRepo {
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchByHashtag(String tag) {
     final normalized = tag.toLowerCase();
+    // Server-side filter so private posts never leave Firestore for the
+    // hashtag feed. Combined with `arrayContains` this needs a composite
+    // index (hashtags arrayContains, ownerIsPrivate, ...).
     return _fs
         .collection('boomerangs')
         .where('hashtags', arrayContains: normalized)
+        .where('ownerIsPrivate', isEqualTo: false)
         .limit(100)
         .snapshots();
+  }
+
+  /// Synchronise the denormalised `ownerIsPrivate` flag on every boomerang
+  /// owned by [uid]. Run after the user toggles their account privacy so the
+  /// discover/hashtag queries (which filter server-side on this flag) stay
+  /// truthful even for posts created before the toggle.
+  Future<void> syncOwnerPrivacy({
+    required String uid,
+    required bool isPrivate,
+  }) async {
+    final snap = await _fs
+        .collection('boomerangs')
+        .where('userId', isEqualTo: uid)
+        .get();
+    if (snap.docs.isEmpty) return;
+
+    var batch = _fs.batch();
+    var pending = 0;
+    for (final doc in snap.docs) {
+      final current = doc.data()['ownerIsPrivate'];
+      if (current is bool && current == isPrivate) continue;
+      batch.update(doc.reference, {'ownerIsPrivate': isPrivate});
+      pending++;
+      if (pending >= 400) {
+        await batch.commit();
+        batch = _fs.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) await batch.commit();
   }
 
   /// Deletes a boomerang and adjusts denormalized counters (best-effort).

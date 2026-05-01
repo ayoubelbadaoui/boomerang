@@ -311,6 +311,14 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                         final me = ref.read(currentUserProfileProvider).value;
                         if (me == null) return;
                         final modRepo = ref.read(moderationRepoProvider);
+                        // Capture the ROOT messenger before we pop the
+                        // sheet — once popped, this widget's `context` is
+                        // gone and `ScaffoldMessenger.of(context)` would
+                        // crash. We need the messenger that lives below the
+                        // sheet route so the snackbar is visible after the
+                        // sheet closes.
+                        final rootMessenger = ScaffoldMessenger.of(context);
+                        final navigator = Navigator.of(context);
                         final iBlocked = await modRepo.isBlocked(
                           checkerUid: me.uid,
                           targetUid: widget.userId,
@@ -319,9 +327,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           checkerUid: widget.userId,
                           targetUid: me.uid,
                         );
-                        if (!context.mounted) return;
                         if (iBlocked || theyBlocked) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if (navigator.canPop()) navigator.pop();
+                          rootMessenger.showSnackBar(
                             const SnackBar(
                               content: Text('Unable to message this user'),
                             ),
@@ -329,7 +337,8 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           return;
                         }
                         if (targetIsPrivate && !isFollowing) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if (navigator.canPop()) navigator.pop();
+                          rootMessenger.showSnackBar(
                             const SnackBar(
                               content: Text(
                                 'Follow this account to send a message',

@@ -263,11 +263,17 @@ class _ActivityTile extends StatelessWidget {
       builder: (context, ref, _) {
         final isFollowing =
             ref.watch(isFollowingStreamProvider(item.actorId)).value ?? false;
-        final isPendingRequest =
-            item.type == _ItemType.followRequest &&
-            (item.status?.isEmpty == true || item.status == 'pending') &&
-            !item.read &&
-            !isFollowing;
+        // Use the live follow-request doc as the source of truth, not the
+        // notification's cached `status` (which may lag behind) or `read`
+        // flag (which would otherwise hide the buttons after a tap).
+        final liveRequest = item.type == _ItemType.followRequest
+            ? ref.watch(incomingFollowRequestProvider(item.actorId)).value
+            : null;
+        final isPendingRequest = item.type == _ItemType.followRequest &&
+            !isFollowing &&
+            (liveRequest?.isPending ??
+                ((item.status?.isEmpty ?? true) ||
+                    item.status == 'pending'));
 
         return InkWell(
           onTap: () => _handleTap(context, ref, item),

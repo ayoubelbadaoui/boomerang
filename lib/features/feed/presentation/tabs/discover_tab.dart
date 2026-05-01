@@ -241,6 +241,15 @@ class _BmgGrid extends ConsumerWidget {
           final uid = (data['userId'] ?? '') as String;
           if (blockedSet.contains(uid)) return false;
           if (data['ownerIsPrivate'] == true && uid != myUid) return false;
+          // Defensive check against stale denormalised flags: even when a
+          // boomerang doc says public, look up the owner's live profile and
+          // hide it if the account is private (and not ours).
+          final liveProfile = ref.watch(userProfileByIdProvider(uid)).value;
+          if (liveProfile != null &&
+              liveProfile.isPrivate &&
+              uid != myUid) {
+            return false;
+          }
           return true;
         }).toList();
         // Warm-cache first page posters once per snapshot.

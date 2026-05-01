@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/chat/domain/message_entity.dart';
+import 'package:boomerang/features/chat/infrastructure/firestore_chat_repo.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 
 class SendPostSheet extends ConsumerStatefulWidget {
@@ -40,6 +41,17 @@ class _SendPostSheetState extends ConsumerState<SendPostSheet> {
 
   Future<void> _sendToUser(String otherUid) async {
     if (_sendingToUserId != null || _sentTo.contains(otherUid)) return;
+    final permission = ref.read(canDirectMessageProvider(otherUid));
+    if (!permission.allowed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            permission.reason ?? 'You can\'t message this user.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _sendingToUserId = otherUid);
     try {
       final me = ref.read(currentUserProfileProvider).value;
@@ -63,6 +75,12 @@ class _SendPostSheetState extends ConsumerState<SendPostSheet> {
         _sentTo.add(otherUid);
         _sendingToUserId = null;
       });
+    } on ChatPermissionException catch (e) {
+      if (!mounted) return;
+      setState(() => _sendingToUserId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _sendingToUserId = null);

@@ -48,6 +48,15 @@ class SettingsController extends AsyncNotifier<AppSettings> {
             .collection('users')
             .doc(uid)
             .set({'isPrivate': value}, SetOptions(merge: true));
+        // Mirror the new privacy flag onto every existing boomerang so the
+        // discover/hashtag feeds (which filter on `ownerIsPrivate`) stop
+        // leaking content right away. Best-effort: failures here must not
+        // prevent the privacy toggle from completing.
+        try {
+          await ref
+              .read(boomerangRepoProvider)
+              .syncOwnerPrivacy(uid: uid, isPrivate: value);
+        } catch (_) {}
         if (!value) {
           // When switching to public, auto-accept all pending requests.
           await ref.read(followRepoProvider).acceptAllPendingFor(uid);

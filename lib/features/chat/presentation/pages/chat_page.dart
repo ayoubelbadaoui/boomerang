@@ -116,6 +116,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _showMessageActions(MessageEntity message, bool isMine) {
     if (message.isUnsent) return;
 
+    final conversations =
+        ref.read(conversationsStreamProvider).value ?? const [];
+    final myUid = ref.read(currentUserProfileProvider).value?.uid ?? '';
+    final conversation = conversations.cast<ConversationEntity?>().firstWhere(
+      (c) => c?.id == widget.conversationId,
+      orElse: () => null,
+    );
+    final otherUid = conversation?.otherParticipantId(myUid) ?? '';
+    final canReply = otherUid.isEmpty
+        ? true
+        : ref.read(canDirectMessageProvider(otherUid)).allowed;
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -126,6 +138,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           (_) => MessageActionsSheet(
             message: message,
             isMine: isMine,
+            canReply: canReply,
             onReply: () {
               ref
                   .read(chatControllerProvider(widget.conversationId).notifier)
@@ -220,6 +233,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ? ref.watch(userProfileByIdProvider(otherUid)).value
             : null;
 
+    final permission = otherUid.isNotEmpty
+        ? ref.watch(canDirectMessageProvider(otherUid))
+        : const CanDirectMessage(allowed: true, reason: null);
+
     return Scaffold(
       appBar: _ChatAppBar(profile: otherProfile, onDelete: _confirmDeleteChat),
       body: Column(
@@ -244,53 +261,56 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
           ),
-          ChatInputField(
-            key: _inputKey,
-            isSending: chatState.isSending,
-            emojiOpen: _emojiOpen,
-            onToggleEmoji: _toggleEmoji,
-            replyingTo: chatState.replyingTo,
-            replyToSenderName: _senderNameForReply(
-              chatState.replyingTo,
-              uid,
-              currentUser,
-              otherProfile,
+          if (!permission.allowed)
+            _DirectMessageLockBanner(reason: permission.reason)
+          else
+            ChatInputField(
+              key: _inputKey,
+              isSending: chatState.isSending,
+              emojiOpen: _emojiOpen,
+              onToggleEmoji: _toggleEmoji,
+              replyingTo: chatState.replyingTo,
+              replyToSenderName: _senderNameForReply(
+                chatState.replyingTo,
+                uid,
+                currentUser,
+                otherProfile,
+              ),
+              onClearReply:
+                  () =>
+                      ref
+                          .read(
+                            chatControllerProvider(
+                              widget.conversationId,
+                            ).notifier,
+                          )
+                          .clearReply(),
+              onSendText:
+                  (text) => ref
+                      .read(
+                        chatControllerProvider(widget.conversationId).notifier,
+                      )
+                      .sendMessage(text),
+              onSendImage:
+                  (path) => ref
+                      .read(
+                        chatControllerProvider(widget.conversationId).notifier,
+                      )
+                      .sendImageMessage(path),
+              onSendGif:
+                  (url) => ref
+                      .read(
+                        chatControllerProvider(widget.conversationId).notifier,
+                      )
+                      .sendGifMessage(url),
+              onSendAudio:
+                  (path, durationMs) => ref
+                      .read(
+                        chatControllerProvider(widget.conversationId).notifier,
+                      )
+                      .sendAudioMessage(path, durationMs),
             ),
-            onClearReply:
-                () =>
-                    ref
-                        .read(
-                          chatControllerProvider(
-                            widget.conversationId,
-                          ).notifier,
-                        )
-                        .clearReply(),
-            onSendText:
-                (text) => ref
-                    .read(
-                      chatControllerProvider(widget.conversationId).notifier,
-                    )
-                    .sendMessage(text),
-            onSendImage:
-                (path) => ref
-                    .read(
-                      chatControllerProvider(widget.conversationId).notifier,
-                    )
-                    .sendImageMessage(path),
-            onSendGif:
-                (url) => ref
-                    .read(
-                      chatControllerProvider(widget.conversationId).notifier,
-                    )
-                    .sendGifMessage(url),
-            onSendAudio:
-                (path, durationMs) => ref
-                    .read(
-                      chatControllerProvider(widget.conversationId).notifier,
-                    )
-                    .sendAudioMessage(path, durationMs),
-          ),
-          if (_emojiOpen)
+          if (_emojiOpen && permission.allowed)
             SizedBox(
               height: 280.h,
               child: EmojiPicker(
@@ -513,6 +533,52 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
                         ),
                       )
                       : const Text('Follow back'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Direct-message permission lock ──────────────────────────────────────
+
+class _DirectMessageLockBanner extends StatelessWidget {
+  const _DirectMessageLockBanner({required this.reason});
+  final String? reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomSafe = MediaQuery.paddingOf(context).bottom;
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        16.w,
+        16.h,
+        16.w,
+        16.h + (bottomSafe > 0 ? bottomSafe : 0),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_outline, size: 20.sp, color: Colors.black54),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Text(
+              reason ??
+                  'You can\'t reply to this conversation right now.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.black54,
+                height: 1.3,
+              ),
             ),
           ),
         ],

@@ -64,6 +64,50 @@ final chatControllerProvider =
   },
 );
 
+// ── DM permission gate ──────────────────────────────────────────────────
+//
+// Privacy rule: when the recipient runs a private account, only people they
+// have accepted as followers (i.e. the current user already follows them)
+// may direct-message them. Pending follow requests do NOT unlock the inbox.
+// Public accounts remain freely messageable.
+
+class CanDirectMessage {
+  const CanDirectMessage({required this.allowed, required this.reason});
+
+  final bool allowed;
+  final String? reason;
+}
+
+final canDirectMessageProvider =
+    Provider.family<CanDirectMessage, String>((ref, otherUid) {
+  if (otherUid.isEmpty) {
+    return const CanDirectMessage(allowed: true, reason: null);
+  }
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null || me.uid == otherUid) {
+    return const CanDirectMessage(allowed: true, reason: null);
+  }
+  final other = ref.watch(userProfileByIdProvider(otherUid)).value;
+  if (other == null) {
+    // Wait until the profile has loaded before locking the input. The
+    // firestore_chat_repo guard catches the race.
+    return const CanDirectMessage(allowed: true, reason: null);
+  }
+  if (!other.isPrivate) {
+    return const CanDirectMessage(allowed: true, reason: null);
+  }
+  final iFollow =
+      ref.watch(isFollowingStreamProvider(otherUid)).value ?? false;
+  if (iFollow) {
+    return const CanDirectMessage(allowed: true, reason: null);
+  }
+  return const CanDirectMessage(
+    allowed: false,
+    reason: 'This account is private. They have to accept your follow '
+        'request before you can message them.',
+  );
+});
+
 // ── Total unread badge across all conversations ─────────────────────────
 
 final totalUnreadProvider = Provider<int>((ref) {

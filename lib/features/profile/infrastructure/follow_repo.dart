@@ -55,7 +55,10 @@ class FollowRepo {
 
   /// Start following a user or create a follow request if their profile is private.
   /// - Public: creates documents under following/{me}/users/{target} and followers/{target}/users/{me}.
-  /// - Private: creates/keeps a pending follow request and a follow_request notification.
+  /// - Private: creates a pending follow request. The receiver's activity
+  ///   notification is produced server-side by the `onFollowRequestCreated`
+  ///   Cloud Function — we deliberately don't write it from the client to
+  ///   avoid duplicate cards in the inbox.
   Future<FollowOutcome> followOrRequest(String targetUserId) async {
     final me = _uid;
     if (me == null || me == targetUserId) return FollowOutcome.followed;
@@ -73,32 +76,41 @@ class FollowRepo {
           .doc(targetUserId)
           .collection('followRequests')
           .doc(me);
-      var created = false;
-      await _fs.runTransaction((tx) async {
-        final existing = await tx.get(reqRef);
-        if (existing.exists) {
-          final data = existing.data() ?? <String, dynamic>{};
-          // Honour a 24-hour cooldown after rejection.
-          if (data['status'] == 'rejected') {
-            final rejTs = data['rejectedAt'];
-            if (rejTs is Timestamp) {
-              final elapsed =
-                  DateTime.now().difference(rejTs.toDate()).inHours;
-              if (elapsed < 24) return;
-            }
-          } else {
-            return;
+
+      // Determine whether we should issue a new request. We do this in two
+      // phases (read, optional delete, set) instead of one transaction so
+      // that re-requests after the 24-hour cooldown go through Firestore as
+      // a fresh `onCreate` (and therefore retrigger the Cloud Function that
+      // produces the in-app notification).
+      final existing = await reqRef.get();
+      var shouldCreate = !existing.exists;
+      if (existing.exists) {
+        final data = existing.data() ?? <String, dynamic>{};
+        if (data['status'] == 'rejected') {
+          final rejTs = data['rejectedAt'];
+          final elapsed = rejTs is Timestamp
+              ? DateTime.now().difference(rejTs.toDate()).inHours
+              : 24;
+          if (elapsed >= 24) {
+            // Cooldown expired: nuke the old doc so the next set is a true
+            // create (which is what the Cloud Function listens on).
+            await reqRef.delete();
+            shouldCreate = true;
           }
+          // else: still cooling down — silently noop.
         }
-        tx.set(reqRef, {
+        // status == 'pending' or anything else: another request is already
+        // outstanding, don't create a duplicate.
+      }
+
+      if (shouldCreate) {
+        await reqRef.set({
           'senderId': me,
           'receiverId': targetUserId,
           'status': 'pending',
           'createdAt': FieldValue.serverTimestamp(),
         });
-        created = true;
-      });
-      if (!created) return FollowOutcome.requested;
+      }
       return FollowOutcome.requested;
     }
 
@@ -146,6 +158,27 @@ class FollowRepo {
 
   Future<void> follow(String targetUserId) async {
     await followOrRequest(targetUserId);
+  }
+
+  /// Remove any in-app follow_request notification for the given sender
+  /// in the current user's inbox (used when the receiver accepts/rejects
+  /// or the sender cancels). Best-effort.
+  Future<void> _clearFollowRequestNotifications({
+    required String receiverId,
+    required String senderId,
+  }) async {
+    try {
+      final query = await _fs
+          .collection('users')
+          .doc(receiverId)
+          .collection('notifications')
+          .where('type', isEqualTo: 'follow_request')
+          .where('senderId', isEqualTo: senderId)
+          .get();
+      for (final doc in query.docs) {
+        await doc.reference.delete();
+      }
+    } catch (_) {}
   }
 
   /// Accept a pending follow request (current user is receiver).
@@ -218,26 +251,28 @@ class FollowRepo {
         {
           'read': true,
           'type': 'follow',
+          'status': 'accepted',
         },
         SetOptions(merge: true),
       );
-    } else {
-      // Find and merge the matching follow_request notification so the inbox
-      // doesn't show stale accept/reject buttons.
-      final notifQuery = await _fs
-          .collection('users')
-          .doc(receiver)
-          .collection('notifications')
-          .where('type', isEqualTo: 'follow_request')
-          .where('senderId', isEqualTo: senderId)
-          .limit(1)
-          .get();
-      for (final doc in notifQuery.docs) {
-        await doc.reference.set(
-          {'read': true, 'type': 'follow'},
-          SetOptions(merge: true),
-        );
-      }
+    }
+    // Always sweep up sibling follow_request notifications for the same
+    // sender (there may be more than one if duplicate cloud-function and
+    // client-side writes happened) so the inbox can never show stale
+    // accept/reject buttons.
+    final notifQuery = await _fs
+        .collection('users')
+        .doc(receiver)
+        .collection('notifications')
+        .where('type', isEqualTo: 'follow_request')
+        .where('senderId', isEqualTo: senderId)
+        .get();
+    for (final doc in notifQuery.docs) {
+      if (notificationId != null && doc.id == notificationId) continue;
+      await doc.reference.set(
+        {'read': true, 'type': 'follow', 'status': 'accepted'},
+        SetOptions(merge: true),
+      );
     }
   }
 
@@ -260,13 +295,19 @@ class FollowRepo {
       'rejectedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     if (notificationId != null) {
-      final notifRef = _fs
-          .collection('users')
-          .doc(receiver)
-          .collection('notifications')
-          .doc(notificationId);
-      await notifRef.delete();
+      try {
+        await _fs
+            .collection('users')
+            .doc(receiver)
+            .collection('notifications')
+            .doc(notificationId)
+            .delete();
+      } catch (_) {}
     }
+    await _clearFollowRequestNotifications(
+      receiverId: receiver,
+      senderId: senderId,
+    );
   }
 
   /// Cancel an outgoing pending follow request (current user is sender).
@@ -279,6 +320,12 @@ class FollowRepo {
         .collection('followRequests')
         .doc(me)
         .delete();
+    // Tidy up the receiver's notification feed so a stale accept/reject
+    // card doesn't keep haunting them.
+    await _clearFollowRequestNotifications(
+      receiverId: targetUserId,
+      senderId: me,
+    );
   }
 
   /// Stop following a user. Removes relationship documents.

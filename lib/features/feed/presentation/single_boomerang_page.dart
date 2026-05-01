@@ -18,9 +18,11 @@ class SingleBoomerangPage extends ConsumerStatefulWidget {
 
 class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
   Map<String, dynamic>? _data;
+  String? _ownerId;
   bool _loading = true;
   String? _error;
   VideoPlayerController? _videoController;
+  bool _videoInitStarted = false;
 
   @override
   void initState() {
@@ -43,9 +45,9 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
       final (_, data) = result;
       setState(() {
         _data = data;
+        _ownerId = (data['userId'] ?? '') as String;
         _loading = false;
       });
-      _initVideo(data['videoUrl'] as String?);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -55,8 +57,10 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
     }
   }
 
-  void _initVideo(String? url) {
+  void _maybeStartVideo(String? url) {
+    if (_videoInitStarted) return;
     if (url == null || url.isEmpty) return;
+    _videoInitStarted = true;
     final controller = VideoPlayerController.networkUrl(Uri.parse(url));
     _videoController = controller;
     controller
@@ -95,31 +99,34 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
       );
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(32.w),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, color: Colors.white54, size: 56.sp),
-              SizedBox(height: 16.h),
-              Text(
-                _error!,
-                style: TextStyle(color: Colors.white70, fontSize: 16.sp),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 24.h),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Go back'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildMessage(_error!);
     }
 
     final data = _data!;
+    final ownerId = _ownerId ?? '';
+
+    // Privacy gate: a private post must only be viewable by the owner or by
+    // someone the owner has accepted as a follower. We rely on the live
+    // owner profile, never the cached `ownerIsPrivate` flag, to avoid
+    // serving stale data after a privacy toggle.
+    final me = ref.watch(currentUserProfileProvider).value;
+    final ownerProfile = ownerId.isEmpty
+        ? null
+        : ref.watch(userProfileByIdProvider(ownerId)).value;
+    final cachedFlag = data['ownerIsPrivate'] == true;
+    final ownerIsPrivate =
+        (ownerProfile?.isPrivate ?? cachedFlag) || cachedFlag;
+    final isOwner = me != null && me.uid == ownerId;
+    final iFollow = ownerId.isEmpty
+        ? false
+        : (ref.watch(isFollowingStreamProvider(ownerId)).value ?? false);
+
+    if (ownerIsPrivate && !isOwner && !iFollow) {
+      return _buildPrivateNotice();
+    }
+
+    _maybeStartVideo(data['videoUrl'] as String?);
+
     final imageUrl = data['imageUrl'] as String?;
 
     return Stack(
@@ -143,6 +150,88 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
           data: data,
         ),
       ],
+    );
+  }
+
+  Widget _buildPrivateNotice() {
+    return Stack(
+      children: [
+        const ColoredBox(color: Colors.black),
+        Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 32.w),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock_outline, color: Colors.white70, size: 56.sp),
+                SizedBox(height: 16.h),
+                Text(
+                  'This post is from a private account',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 8.h),
+                Text(
+                  'Follow this account to see their boomerangs.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14.sp,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 24.h),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Go back',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 8.w,
+          top: MediaQuery.viewPaddingOf(context).top + 8.h,
+          child: IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessage(String text) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, color: Colors.white54, size: 56.sp),
+            SizedBox(height: 16.h),
+            Text(
+              text,
+              style: TextStyle(color: Colors.white70, fontSize: 16.sp),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.h),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Go back',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

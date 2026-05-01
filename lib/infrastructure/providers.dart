@@ -349,6 +349,27 @@ final profileGuardProvider = Provider<void>((ref) {
   });
 });
 
+/// Guard: keep the denormalised `ownerIsPrivate` flag on every boomerang in
+/// sync with the current user's `isPrivate` setting. Without this, posts
+/// created before a privacy toggle would keep leaking through the discover
+/// and hashtag feeds (which filter server-side on this flag). Idempotent —
+/// only writes documents whose flag actually drifted.
+final privacyBackfillGuardProvider = Provider<void>((ref) {
+  final lastSynced = <String, bool>{};
+  ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider,
+      (prev, next) {
+    final profile = next.asData?.value;
+    if (profile == null) return;
+    if (lastSynced[profile.uid] == profile.isPrivate) return;
+    lastSynced[profile.uid] = profile.isPrivate;
+    // Fire-and-forget: this is a best-effort consistency backfill.
+    ref
+        .read(boomerangRepoProvider)
+        .syncOwnerPrivacy(uid: profile.uid, isPrivate: profile.isPrivate)
+        .catchError((_) {});
+  });
+});
+
 /// Call on logout (and optionally after login) so the UI never shows the previous user.
 /// Invalidates all providers that cache or stream current-user data.
 void invalidateUserScopedProviders(ProviderContainer container) {

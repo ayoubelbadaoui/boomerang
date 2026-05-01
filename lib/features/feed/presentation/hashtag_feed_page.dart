@@ -52,6 +52,14 @@ class HashtagFeedPage extends ConsumerWidget {
             final uid = (data['userId'] ?? '') as String;
             if (blockedSet.contains(uid)) return false;
             if (data['ownerIsPrivate'] == true && uid != myUid) return false;
+            // Defensive: rely on the live user profile, not just the
+            // denormalised flag, in case it's stale.
+            final liveProfile = ref.watch(userProfileByIdProvider(uid)).value;
+            if (liveProfile != null &&
+                liveProfile.isPrivate &&
+                uid != myUid) {
+              return false;
+            }
             return true;
           }).toList();
           if (docs.isEmpty) {
