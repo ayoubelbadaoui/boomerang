@@ -1,4 +1,5 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
+import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:flutter/material.dart';
@@ -81,7 +82,9 @@ class FollowListSheet extends ConsumerWidget {
                         handle: handle,
                         avatarFallback: avatarFallback,
                         userId: userId,
-                        showFollowBack: mode == FollowMode.followers,
+                        // Only the followers list can render an action button.
+                        // For the "following" list we keep a plain chevron.
+                        showAction: mode == FollowMode.followers,
                       );
                     },
                   );
@@ -101,14 +104,14 @@ class _FollowListTile extends ConsumerStatefulWidget {
     required this.handle,
     required this.avatarFallback,
     required this.userId,
-    required this.showFollowBack,
+    required this.showAction,
   });
 
   final String name;
   final String handle;
   final String? avatarFallback;
   final String userId;
-  final bool showFollowBack;
+  final bool showAction;
 
   @override
   ConsumerState<_FollowListTile> createState() => _FollowListTileState();
@@ -117,11 +120,31 @@ class _FollowListTile extends ConsumerStatefulWidget {
 class _FollowListTileState extends ConsumerState<_FollowListTile> {
   bool _loading = false;
 
-  Future<void> _followBack() async {
-    if (_loading) return;
+  /// Short-lived optimistic flag bridging write latency. Cleared the moment
+  /// the authoritative Firestore stream contradicts it (rejected / accepted /
+  /// canceled), so the tile can never get stuck on "Pending".
+  bool _optimisticRequested = false;
+
+  Future<void> _toggle({
+    required bool iFollow,
+    required bool requested,
+  }) async {
+    if (_loading || widget.userId.isEmpty) return;
     setState(() => _loading = true);
+    final repo = ref.read(followRepoProvider);
     try {
-      await ref.read(followRepoProvider).followOrRequest(widget.userId);
+      if (iFollow) {
+        await repo.unfollow(widget.userId);
+        if (mounted) _optimisticRequested = false;
+      } else if (requested) {
+        await repo.cancelRequest(widget.userId);
+        if (mounted) _optimisticRequested = false;
+      } else {
+        final outcome = await repo.followOrRequest(widget.userId);
+        if (mounted) {
+          _optimisticRequested = outcome == FollowOutcome.requested;
+        }
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -129,21 +152,77 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
 
   @override
   Widget build(BuildContext context) {
-    final iFollow = widget.userId.isNotEmpty
+    final myUid = ref.watch(currentUserProfileProvider).value?.uid;
+    final isSelf = widget.userId.isNotEmpty && widget.userId == myUid;
+    final hasValidTarget = widget.userId.isNotEmpty && !isSelf;
+
+    // Keep the optimistic flag honest with respect to the real request doc
+    // and the real edge doc. These listens run outside build so calling
+    // setState inside them is safe.
+    if (hasValidTarget) {
+      ref.listen<AsyncValue<FollowRequest?>>(
+        outgoingFollowRequestProvider(widget.userId),
+        (prev, next) {
+          final req = next.valueOrNull;
+          // Request was rejected, canceled, or cleaned up: drop optimistic.
+          if (_optimisticRequested && (req == null || !req.isPending)) {
+            if (mounted) setState(() => _optimisticRequested = false);
+          }
+        },
+      );
+      ref.listen<AsyncValue<bool>>(
+        isFollowingStreamProvider(widget.userId),
+        (prev, next) {
+          if ((next.valueOrNull ?? false) && _optimisticRequested) {
+            if (mounted) setState(() => _optimisticRequested = false);
+          }
+        },
+      );
+    }
+
+    final iFollow = hasValidTarget
         ? (ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false)
         : false;
-    final canFollowBack = widget.showFollowBack && !iFollow;
+    final theyFollowMe = hasValidTarget
+        ? (ref.watch(isFollowedByProvider(widget.userId)).value ?? false)
+        : false;
+    final outgoing = hasValidTarget
+        ? ref.watch(outgoingFollowRequestProvider(widget.userId)).value
+        : null;
+    final requested =
+        _optimisticRequested || (outgoing?.isPending == true);
+
+    // The action button is only meaningful when we actually have something
+    // useful to render: a live relationship (following/pending) OR the
+    // user genuinely follows me (so "Follow back" is truthful).
+    final renderAction = widget.showAction &&
+        hasValidTarget &&
+        (iFollow || requested || theyFollowMe);
+
+    String label;
+    if (iFollow) {
+      label = 'Following';
+    } else if (requested) {
+      label = 'Pending';
+    } else {
+      label = 'Follow back';
+    }
+
+    final filled = !iFollow && !requested; // filled for primary CTA
+    final bgColor = filled ? Colors.black : Colors.white;
+    final fgColor = filled ? Colors.white : Colors.black;
+    final borderColor = filled ? Colors.black : Colors.black26;
 
     return ListTile(
-      onTap: () => _showProfilePreview(
-        context,
-        widget.handle,
-        widget.userId,
-      ),
+      onTap: () => _showProfilePreview(context, widget.handle, widget.userId),
       leading: SizedBox(
         width: 44.r,
         height: 44.r,
-        child: LiveAvatar(userId: widget.userId, fallbackUrl: widget.avatarFallback, size: 44.r),
+        child: LiveAvatar(
+          userId: widget.userId,
+          fallbackUrl: widget.avatarFallback,
+          size: 44.r,
+        ),
       ),
       title: Text(
         widget.name,
@@ -153,16 +232,21 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
         widget.handle,
         style: const TextStyle(color: Colors.black54),
       ),
-      trailing: canFollowBack
+      trailing: renderAction
           ? SizedBox(
-              height: 30.h,
+              height: 32.h,
               child: ElevatedButton(
-                onPressed: _loading ? null : _followBack,
+                onPressed: _loading
+                    ? null
+                    : () => _toggle(iFollow: iFollow, requested: requested),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
+                  backgroundColor: bgColor,
+                  foregroundColor: fgColor,
+                  elevation: 0,
                   padding: EdgeInsets.symmetric(horizontal: 14.w),
-                  shape: const StadiumBorder(),
+                  shape: StadiumBorder(
+                    side: BorderSide(color: borderColor, width: 1),
+                  ),
                   textStyle: TextStyle(
                     fontSize: 12.sp,
                     fontWeight: FontWeight.w700,
@@ -172,12 +256,12 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
                     ? SizedBox(
                         width: 14.w,
                         height: 14.w,
-                        child: const CircularProgressIndicator(
+                        child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: fgColor,
                         ),
                       )
-                    : const Text('Follow back'),
+                    : Text(label),
               ),
             )
           : const Icon(Icons.chevron_right),
@@ -185,11 +269,7 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
   }
 }
 
-void _showProfilePreview(
-  BuildContext context,
-  String handle,
-  String userId,
-) {
+void _showProfilePreview(BuildContext context, String handle, String userId) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -197,10 +277,6 @@ void _showProfilePreview(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder:
-        (_) => ProfilePreviewSheet(
-          userId: userId,
-          handle: handle,
-        ),
+    builder: (_) => ProfilePreviewSheet(userId: userId, handle: handle),
   );
 }
