@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
@@ -39,18 +42,50 @@ class ChatInputField extends StatefulWidget {
   State<ChatInputField> createState() => ChatInputFieldState();
 }
 
-class ChatInputFieldState extends State<ChatInputField> {
+/// Sub-states of the voice recorder.
+enum _RecordPhase { idle, recording, locked }
+
+class ChatInputFieldState extends State<ChatInputField>
+    with TickerProviderStateMixin {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   bool _hasText = false;
 
-  // Audio recording state
+  // ── Audio recording ────────────────────────────────────────────────────
   final _recorder = AudioRecorder();
-  bool _isRecording = false;
+  _RecordPhase _phase = _RecordPhase.idle;
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
-  double _dragOffset = 0;
-  static const _cancelThreshold = -80.0;
+  String? _currentRecordingPath;
+
+  // Live drag offset from the press origin (mic center at press time).
+  double _dragDx = 0;
+  double _dragDy = 0;
+  // Whether we've already fired the haptic for crossing the cancel edge.
+  bool _hapticCancelFired = false;
+  // A start is considered "in-flight" between pointer-down and the recorder
+  // actually being ready. We guard against pointer-up arriving in that window.
+  bool _starting = false;
+  // If the pointer is lifted while we were still starting, honor that by
+  // stopping as soon as recording actually begins.
+  bool _abortRequested = false;
+  // Track whether the user has dragged past the lock threshold since press
+  // (so a swipe-up past the lock icon reliably latches into locked mode).
+  bool _lockArmed = false;
+
+  // Thresholds (logical pixels). Kept generous for forgiving gestures.
+  static const double _cancelThresholdX = -80;
+  static const double _lockThresholdY = -80;
+  static const int _minDurationMs = 500;
+
+  // Animation controller for the pulsing red dot. Eagerly created in
+  // initState (NOT via a `late final` lazy initializer) so that dispose()
+  // never triggers createTicker -> ancestor lookup on a deactivated State.
+  // The old `late final` form crashed with "Looking up a deactivated
+  // widget's ancestor is unsafe" whenever the input field was torn down
+  // before it ever built (AnimatedSwitcher swaps / quick back navigation).
+  late final AnimationController _pulseController;
+  bool _pulseReady = false;
 
   TextEditingController get controller => _controller;
   FocusNode get focusNode => _focusNode;
@@ -58,6 +93,11 @@ class ChatInputFieldState extends State<ChatInputField> {
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulseReady = true;
     _controller.addListener(() {
       final has = _controller.text.trim().isNotEmpty;
       if (has != _hasText) setState(() => _hasText = has);
@@ -66,6 +106,7 @@ class ChatInputFieldState extends State<ChatInputField> {
 
   @override
   void dispose() {
+    if (_pulseReady) _pulseController.dispose();
     _controller.dispose();
     _focusNode.dispose();
     _recordingTimer?.cancel();
@@ -99,52 +140,269 @@ class ChatInputFieldState extends State<ChatInputField> {
     }
   }
 
-  // ── Audio recording ──────────────────────────────────────────────────
+  // ── Audio recording — gesture handlers ───────────────────────────────
 
-  Future<void> _startRecording() async {
-    if (!await _recorder.hasPermission()) return;
+  Future<void> _onLongPressStart() async {
+    // Ignore if we're already in a recording flow.
+    if (_phase != _RecordPhase.idle || _starting) return;
+    _starting = true;
+    _abortRequested = false;
+    _dragDx = 0;
+    _dragDy = 0;
+    _hapticCancelFired = false;
+    _lockArmed = false;
 
-    final dir = await getTemporaryDirectory();
-    final path =
-        '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    try {
+      if (!await _recorder.hasPermission()) {
+        _starting = false;
+        _showMicMessage(
+          'Microphone permission is required to record voice messages.',
+        );
+        return;
+      }
 
-    await _recorder.start(
-      const RecordConfig(encoder: AudioEncoder.aacLc),
-      path: path,
-    );
+      // Reconfigure the shared audio session for speech recording.
+      // We do NOT treat `setActive == false` as a hard failure here because
+      // it can also return false on Android when another app simply holds
+      // audio focus (e.g. music). The recorder.start() call below is the
+      // authoritative signal — if the mic is really in use (phone call,
+      // Siri, voice memo, etc.) it will throw, and we'll show a friendly
+      // "end your call" message at that point.
+      await _ensureRecordableAudioSession();
 
-    setState(() {
-      _isRecording = true;
-      _recordingDuration = Duration.zero;
-      _dragOffset = 0;
-    });
+      final dir = await getTemporaryDirectory();
+      final path =
+          '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      try {
+        await _recorder.start(
+          const RecordConfig(encoder: AudioEncoder.aacLc),
+          path: path,
+        );
+      } catch (e) {
+        // Most common cause: another app (phone call, Siri, voice memo,
+        // etc.) already holds the microphone. The error surface differs
+        // by platform/version so we don't try to interpret it; we simply
+        // surface an actionable message.
+        _starting = false;
+        _currentRecordingPath = null;
+        _showMicBusyMessage();
+        return;
+      }
+      _currentRecordingPath = path;
+
+      if (!mounted) {
+        await _recorder.stop();
+        _starting = false;
+        return;
+      }
+
+      HapticFeedback.mediumImpact();
+
+      setState(() {
+        _phase = _RecordPhase.recording;
+        _recordingDuration = Duration.zero;
+      });
+
+      _recordingTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (!mounted) return;
+        setState(() {
+          _recordingDuration += const Duration(milliseconds: 200);
+        });
+      });
+
+      _starting = false;
+
+      // If pointer was released during the async start, honor the release now.
+      if (_abortRequested) {
+        _abortRequested = false;
+        await _finalizeRecording(cancelled: false);
+      }
+    } catch (_) {
+      _starting = false;
+      _currentRecordingPath = null;
       if (mounted) {
         setState(() {
-          _recordingDuration += const Duration(seconds: 1);
+          _phase = _RecordPhase.idle;
+          _recordingDuration = Duration.zero;
         });
       }
+    }
+  }
+
+  /// Reconfigure the shared audio session for speech recording. Best effort:
+  /// if this fails, the recorder.start() call will still surface the issue.
+  Future<void> _ensureRecordableAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.speech());
+      await session.setActive(true);
+    } catch (_) {}
+  }
+
+  void _showMicMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showMicBusyMessage() {
+    _showMicMessage(
+      "Your microphone is in use. If you're on a call or using another voice "
+      'app, please end it and try again.',
+    );
+  }
+
+  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+    if (_phase != _RecordPhase.recording) return;
+    // `offsetFromOrigin` is the delta from press origin.
+    final dx = details.offsetFromOrigin.dx;
+    final dy = details.offsetFromOrigin.dy;
+
+    // Prefer whichever axis is dominant, so a tiny horizontal wobble while
+    // swiping up doesn't accidentally trigger the cancel zone.
+    final useLockAxis = dy.abs() > dx.abs();
+    final clampedDx = useLockAxis ? 0.0 : dx.clamp(-240.0, 0.0);
+    final clampedDy = useLockAxis ? dy.clamp(-240.0, 0.0) : 0.0;
+
+    // Haptic tick when entering the cancel zone.
+    if (clampedDx < _cancelThresholdX && !_hapticCancelFired) {
+      _hapticCancelFired = true;
+      HapticFeedback.selectionClick();
+    } else if (clampedDx > _cancelThresholdX + 8) {
+      _hapticCancelFired = false;
+    }
+
+    // Latch into locked mode as soon as the user passes the lock threshold.
+    if (clampedDy < _lockThresholdY) {
+      _lockArmed = true;
+    }
+    if (_lockArmed && clampedDy < _lockThresholdY - 40) {
+      _transitionToLocked();
+      return;
+    }
+
+    setState(() {
+      _dragDx = clampedDx;
+      _dragDy = clampedDy;
     });
   }
 
-  Future<void> _stopRecording({bool cancelled = false}) async {
+  Future<void> _onLongPressEnd(LongPressEndDetails details) async {
+    // If start is still in-flight, request abort and bail; the start path
+    // will finalize once the recorder actually comes up.
+    if (_starting) {
+      _abortRequested = true;
+      return;
+    }
+    if (_phase != _RecordPhase.recording) return;
+
+    final cancel = _dragDx < _cancelThresholdX;
+    await _finalizeRecording(cancelled: cancel);
+  }
+
+  Future<void> _onLongPressCancel() async {
+    if (_starting) {
+      _abortRequested = true;
+      return;
+    }
+    if (_phase != _RecordPhase.recording) return;
+    await _finalizeRecording(cancelled: true);
+  }
+
+  void _transitionToLocked() {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _phase = _RecordPhase.locked;
+      _dragDx = 0;
+      _dragDy = 0;
+    });
+  }
+
+  Future<void> _stopAndSend() async {
+    if (_phase != _RecordPhase.locked) return;
+    await _finalizeRecording(cancelled: false);
+  }
+
+  Future<void> _cancelLocked() async {
+    if (_phase != _RecordPhase.locked) return;
+    HapticFeedback.lightImpact();
+    await _finalizeRecording(cancelled: true);
+  }
+
+  /// Stops the recorder, optionally deletes the temp file, and sends the
+  /// captured audio up if the recording was long enough and not cancelled.
+  Future<void> _finalizeRecording({required bool cancelled}) async {
     _recordingTimer?.cancel();
     _recordingTimer = null;
 
-    final path = await _recorder.stop();
-
-    if (!cancelled && path != null && _recordingDuration.inSeconds >= 1) {
-      widget.onSendAudio(path, _recordingDuration.inMilliseconds);
+    final capturedMs = _recordingDuration.inMilliseconds;
+    final desiredPath = _currentRecordingPath;
+    String? actualPath;
+    try {
+      actualPath = await _recorder.stop();
+    } catch (_) {
+      actualPath = null;
     }
 
+    final path = actualPath ?? desiredPath;
+    final tooShort = capturedMs < _minDurationMs;
+
+    if (cancelled || tooShort || path == null) {
+      // Best-effort cleanup of the orphaned file.
+      if (path != null) {
+        try {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+      if (!cancelled && tooShort && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Hold to record — release to send.'),
+            duration: Duration(milliseconds: 1500),
+          ),
+        );
+      }
+    } else {
+      widget.onSendAudio(path, capturedMs);
+    }
+
+    _currentRecordingPath = null;
     if (mounted) {
       setState(() {
-        _isRecording = false;
+        _phase = _RecordPhase.idle;
         _recordingDuration = Duration.zero;
-        _dragOffset = 0;
+        _dragDx = 0;
+        _dragDy = 0;
+        _hapticCancelFired = false;
+        _lockArmed = false;
       });
     }
+
+    // Restore the app-wide ambient session so background music resumes
+    // mixing and nothing else gets disturbed after the recording ends.
+    unawaited(_restoreAmbientAudioSession());
+  }
+
+  Future<void> _restoreAmbientAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.ambient,
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.movie,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType:
+            AndroidAudioFocusGainType.gainTransientMayDuck,
+      ));
+    } catch (_) {}
   }
 
   String _formatTimer(Duration d) {
@@ -152,6 +410,8 @@ class ChatInputFieldState extends State<ChatInputField> {
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -178,9 +438,28 @@ class ChatInputFieldState extends State<ChatInputField> {
               16.w,
               12.h + (bottomSafe > 0 ? bottomSafe : 8.h),
             ),
-            child: _isRecording
-                ? _buildRecordingRow(theme)
-                : _buildInputRow(theme),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SizeTransition(
+                  sizeFactor: anim,
+                  axisAlignment: -1,
+                  child: child,
+                ),
+              ),
+              child: _phase == _RecordPhase.locked
+                  ? KeyedSubtree(
+                      key: const ValueKey('locked'),
+                      child: _buildLockedRow(theme),
+                    )
+                  : KeyedSubtree(
+                      key: const ValueKey('input'),
+                      child: _buildActiveRow(theme),
+                    ),
+            ),
           ),
         ],
       ),
@@ -255,102 +534,228 @@ class ChatInputFieldState extends State<ChatInputField> {
     );
   }
 
-  Widget _buildRecordingRow(ThemeData theme) {
-    return GestureDetector(
-      onHorizontalDragUpdate: (details) {
-        setState(() => _dragOffset += details.delta.dx);
-        if (_dragOffset < _cancelThreshold) {
-          _stopRecording(cancelled: true);
-        }
-      },
+  /// Idle or unlocked-recording: same shell so the mic GestureDetector never
+  /// gets unmounted mid-gesture. The left side crossfades between the text
+  /// field and a recording readout.
+  Widget _buildActiveRow(ThemeData theme) {
+    final recording = _phase == _RecordPhase.recording;
+    final cancelProgress =
+        (_dragDx / _cancelThresholdX).clamp(0.0, 1.0).toDouble();
+    final lockProgress =
+        (_dragDy / _lockThresholdY).clamp(0.0, 1.0).toDouble();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Lock indicator floats above the mic during unlocked recording.
+        AnimatedAlign(
+          duration: const Duration(milliseconds: 140),
+          alignment: Alignment.centerRight,
+          heightFactor: recording ? 1 : 0,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: 8.h, right: 12.w),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 140),
+              opacity: recording ? 1 : 0,
+              child: _LockIndicator(progress: lockProgress),
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                transitionBuilder: (child, anim) =>
+                    FadeTransition(opacity: anim, child: child),
+                child: recording
+                    ? _RecordingBar(
+                        key: const ValueKey('rec-bar'),
+                        duration: _recordingDuration,
+                        cancelProgress: cancelProgress,
+                        pulse: _pulseController,
+                        formatter: _formatTimer,
+                      )
+                    : KeyedSubtree(
+                        key: const ValueKey('text-bar'),
+                        child: _buildTextBar(theme),
+                      ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            _buildMicOrSend(theme),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextBar(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(24.r),
+      ),
       child: Row(
         children: [
-          Container(
-            width: 10.w,
-            height: 10.w,
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
+          _IconBtn(
+            icon: widget.emojiOpen
+                ? Icons.keyboard_outlined
+                : Icons.emoji_emotions_outlined,
+            onTap: widget.onToggleEmoji,
           ),
-          SizedBox(width: 10.w),
-          Text(
-            _formatTimer(_recordingDuration),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            '< Slide to cancel',
-            style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => _stopRecording(),
-            child: Container(
-              width: 48.w,
-              height: 48.w,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                shape: BoxShape.circle,
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                hintText: 'Message...',
+                hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 10.h),
               ),
-              child: Icon(Icons.stop_rounded, color: Colors.white, size: 22.sp),
+              style: theme.textTheme.bodyMedium,
+              onSubmitted: (_) => _send(),
+              onTap: () {
+                if (widget.emojiOpen) widget.onToggleEmoji();
+              },
             ),
+          ),
+          _IconBtn(
+            icon: Icons.gif_box_outlined,
+            onTap: _openGifPicker,
+          ),
+          _IconBtn(
+            icon: Icons.photo_outlined,
+            onTap: () => _pickImage(ImageSource.gallery),
+          ),
+          _IconBtn(
+            icon: Icons.camera_alt_outlined,
+            onTap: () => _pickImage(ImageSource.camera),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInputRow(ThemeData theme) {
+  /// The mic slot. While recording, the mic follows the finger (pull-left
+  /// for cancel, up for lock) while the underlying GestureDetector stays put.
+  Widget _buildMicOrSend(ThemeData theme) {
+    final recording = _phase == _RecordPhase.recording;
+    final showSend = _hasText && !recording;
+    final scale = recording ? 1.25 : 1.0;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.isSending
+          ? null
+          : (showSend ? _send : null),
+      onLongPressStart: _hasText || widget.isSending
+          ? null
+          : (_) => _onLongPressStart(),
+      onLongPressMoveUpdate: _hasText || widget.isSending
+          ? null
+          : _onLongPressMoveUpdate,
+      onLongPressEnd: _hasText || widget.isSending
+          ? null
+          : _onLongPressEnd,
+      onLongPressCancel: _hasText || widget.isSending
+          ? null
+          : _onLongPressCancel,
+      child: SizedBox(
+        width: 48.w,
+        height: 48.w,
+        child: Transform.translate(
+          offset: Offset(_dragDx, _dragDy),
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 140),
+            scale: scale,
+            child: Container(
+              width: 48.w,
+              height: 48.w,
+              decoration: BoxDecoration(
+                color: recording ? Colors.red : theme.colorScheme.primary,
+                shape: BoxShape.circle,
+                boxShadow: recording
+                    ? [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.35),
+                          blurRadius: 18,
+                          spreadRadius: 2,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: widget.isSending
+                  ? Padding(
+                      padding: EdgeInsets.all(12.w),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.w,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      showSend ? Icons.send_rounded : Icons.mic,
+                      color: Colors.white,
+                      size: 22.sp,
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLockedRow(ThemeData theme) {
     return Row(
       children: [
+        GestureDetector(
+          onTap: _cancelLocked,
+          child: Container(
+            width: 44.w,
+            height: 44.w,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEECEC),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.delete_outline,
+              color: Colors.red.shade600,
+              size: 22.sp,
+            ),
+          ),
+        ),
+        SizedBox(width: 10.w),
         Expanded(
           child: Container(
+            height: 44.h,
+            padding: EdgeInsets.symmetric(horizontal: 14.w),
             decoration: BoxDecoration(
               color: const Color(0xFFF5F5F5),
-              borderRadius: BorderRadius.circular(24.r),
+              borderRadius: BorderRadius.circular(22.r),
             ),
             child: Row(
               children: [
-                _IconBtn(
-                  icon: widget.emojiOpen
-                      ? Icons.keyboard_outlined
-                      : Icons.emoji_emotions_outlined,
-                  onTap: widget.onToggleEmoji,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'Message...',
-                      hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 10.h),
-                    ),
-                    style: theme.textTheme.bodyMedium,
-                    onSubmitted: (_) => _send(),
-                    onTap: () {
-                      if (widget.emojiOpen) widget.onToggleEmoji();
-                    },
+                _PulsingDot(controller: _pulseController),
+                SizedBox(width: 10.w),
+                Text(
+                  _formatTimer(_recordingDuration),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                _IconBtn(
-                  icon: Icons.gif_box_outlined,
-                  onTap: _openGifPicker,
-                ),
-                _IconBtn(
-                  icon: Icons.photo_outlined,
-                  onTap: () => _pickImage(ImageSource.gallery),
-                ),
-                _IconBtn(
-                  icon: Icons.camera_alt_outlined,
-                  onTap: () => _pickImage(ImageSource.camera),
+                const Spacer(),
+                Icon(Icons.lock_outlined, size: 16.sp, color: Colors.black45),
+                SizedBox(width: 6.w),
+                Text(
+                  'Locked',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.black45,
+                  ),
                 ),
               ],
             ),
@@ -358,17 +763,7 @@ class ChatInputFieldState extends State<ChatInputField> {
         ),
         SizedBox(width: 8.w),
         GestureDetector(
-          onTap: widget.isSending
-              ? null
-              : (_hasText ? _send : null),
-          onLongPressStart: _hasText || widget.isSending
-              ? null
-              : (_) => _startRecording(),
-          onLongPressEnd: _hasText || widget.isSending
-              ? null
-              : (_) {
-                  if (_isRecording) _stopRecording();
-                },
+          onTap: _stopAndSend,
           child: Container(
             width: 48.w,
             height: 48.w,
@@ -376,25 +771,15 @@ class ChatInputFieldState extends State<ChatInputField> {
               color: theme.colorScheme.primary,
               shape: BoxShape.circle,
             ),
-            child: widget.isSending
-                ? Padding(
-                    padding: EdgeInsets.all(12.w),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.w,
-                      color: Colors.white,
-                    ),
-                  )
-                : Icon(
-                    _hasText ? Icons.send_rounded : Icons.mic,
-                    color: Colors.white,
-                    size: 22.sp,
-                  ),
+            child: Icon(Icons.send_rounded, color: Colors.white, size: 22.sp),
           ),
         ),
       ],
     );
   }
 }
+
+// ── Sub-widgets ────────────────────────────────────────────────────────
 
 class _IconBtn extends StatelessWidget {
   const _IconBtn({required this.icon, required this.onTap});
@@ -412,6 +797,140 @@ class _IconBtn extends StatelessWidget {
           icon,
           size: 22.sp,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Red capsule shown in the text-bar slot while the user holds to record.
+/// Fades toward a "cancelling" look as the finger drags left.
+class _RecordingBar extends StatelessWidget {
+  const _RecordingBar({
+    super.key,
+    required this.duration,
+    required this.cancelProgress,
+    required this.pulse,
+    required this.formatter,
+  });
+
+  final Duration duration;
+  final double cancelProgress;
+  final AnimationController pulse;
+  final String Function(Duration) formatter;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 48.h,
+      padding: EdgeInsets.symmetric(horizontal: 14.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(24.r),
+      ),
+      child: Opacity(
+        opacity: (1.0 - cancelProgress * 0.6).clamp(0.0, 1.0).toDouble(),
+        child: Row(
+          children: [
+            _PulsingDot(controller: pulse),
+            SizedBox(width: 10.w),
+            Text(
+              formatter(duration),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Icon(
+              Icons.chevron_left,
+              size: 16.sp,
+              color: Colors.black45,
+            ),
+            SizedBox(width: 4.w),
+            Text(
+              cancelProgress >= 1 ? 'Release to cancel' : 'Slide to cancel',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cancelProgress >= 1
+                    ? Colors.red.shade600
+                    : Colors.black45,
+                fontWeight:
+                    cancelProgress >= 1 ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulsingDot extends StatelessWidget {
+  const _PulsingDot({required this.controller});
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) {
+        final t = controller.value;
+        return Container(
+          width: 10.w,
+          height: 10.w,
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.55 + 0.45 * t),
+            shape: BoxShape.circle,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Floating lock affordance shown above the mic during unlocked recording.
+/// Grows and lights up as the user drags upward.
+class _LockIndicator extends StatelessWidget {
+  const _LockIndicator({required this.progress});
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final locked = progress >= 1;
+    final color = locked ? Colors.white : Colors.black87;
+    final bg = locked ? Colors.red : Colors.white;
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 140),
+      scale: 1.0 + progress * 0.1,
+      child: Container(
+        width: 36.w,
+        height: 56.h,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              locked ? Icons.lock : Icons.lock_open_outlined,
+              size: 18.sp,
+              color: color,
+            ),
+            SizedBox(height: 2.h),
+            Icon(
+              Icons.keyboard_arrow_up_rounded,
+              size: 14.sp,
+              color: color.withValues(alpha: 0.7),
+            ),
+          ],
         ),
       ),
     );

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class AudioMessagePlayer extends StatefulWidget {
@@ -23,29 +25,28 @@ class AudioMessagePlayer extends StatefulWidget {
 }
 
 class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
-  final _player = AudioPlayer();
+  // Player is created lazily on first tap. Eager construction as a field
+  // initializer previously triggered `GlobalAudioScope.ensureInitialized`
+  // on every bubble build, which throws MissingPluginException if the
+  // audioplayers native side isn't reachable (e.g. stale build, or while
+  // the Flutter engine is still attaching plugins). Deferring it makes
+  // listing the chat a read-only operation again.
+  AudioPlayer? _player;
+  final List<StreamSubscription<Object?>> _subs = [];
+
   bool _playing = false;
+  bool _busy = false;
+  bool _unavailable = false;
+
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  late List<double> _bars;
+  late final List<double> _bars;
 
   @override
   void initState() {
     super.initState();
     _duration = Duration(milliseconds: widget.durationMs);
     _bars = _generateBars(widget.messageId);
-
-    _player.onPositionChanged.listen((pos) {
-      if (mounted) setState(() => _position = pos);
-    });
-    _player.onPlayerStateChanged.listen((s) {
-      if (mounted) {
-        setState(() => _playing = s == PlayerState.playing);
-      }
-    });
-    _player.onPlayerComplete.listen((_) {
-      if (mounted) setState(() => _position = Duration.zero);
-    });
   }
 
   List<double> _generateBars(String seed) {
@@ -55,16 +56,75 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
 
   @override
   void dispose() {
-    _player.dispose();
+    for (final s in _subs) {
+      s.cancel();
+    }
+    _subs.clear();
+    _player?.dispose();
     super.dispose();
   }
 
-  Future<void> _toggle() async {
-    if (_playing) {
-      await _player.pause();
-    } else {
-      await _player.play(UrlSource(widget.url));
+  /// Create the native player on first use so a missing or still-attaching
+  /// plugin can't crash widget construction. Returns null (and flips the
+  /// bubble to an "unavailable" state) if the plugin simply isn't there.
+  Future<AudioPlayer?> _ensurePlayer() async {
+    if (_player != null) return _player;
+    try {
+      final p = AudioPlayer();
+      _subs.add(p.onPositionChanged.listen((pos) {
+        if (mounted) setState(() => _position = pos);
+      }));
+      _subs.add(p.onPlayerStateChanged.listen((s) {
+        if (mounted) setState(() => _playing = s == PlayerState.playing);
+      }));
+      _subs.add(p.onPlayerComplete.listen((_) {
+        if (mounted) setState(() => _position = Duration.zero);
+      }));
+      _player = p;
+      return p;
+    } on MissingPluginException {
+      if (mounted) setState(() => _unavailable = true);
+      return null;
+    } catch (_) {
+      if (mounted) setState(() => _unavailable = true);
+      return null;
     }
+  }
+
+  Future<void> _toggle() async {
+    if (_busy || _unavailable) return;
+    setState(() => _busy = true);
+    try {
+      final p = await _ensurePlayer();
+      if (p == null) {
+        _showUnavailable();
+        return;
+      }
+      if (_playing) {
+        await p.pause();
+      } else {
+        await p.play(UrlSource(widget.url));
+      }
+    } on MissingPluginException {
+      if (mounted) setState(() => _unavailable = true);
+      _showUnavailable();
+    } catch (_) {
+      // Generic playback error — silent; UI stays in non-playing state.
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _showUnavailable() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Audio playback isn't available right now. Try reopening the app.",
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   String _formatDuration(Duration d) {
@@ -93,7 +153,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: _toggle,
+          onTap: _unavailable ? _showUnavailable : _toggle,
           child: Container(
             width: 36.w,
             height: 36.w,
@@ -106,11 +166,23 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
                       .primary
                       .withValues(alpha: 0.1),
             ),
-            child: Icon(
-              _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              color: iconColor,
-              size: 22.sp,
-            ),
+            child: _busy
+                ? Padding(
+                    padding: EdgeInsets.all(8.w),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.w,
+                      color: iconColor,
+                    ),
+                  )
+                : Icon(
+                    _unavailable
+                        ? Icons.error_outline_rounded
+                        : (_playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded),
+                    color: iconColor,
+                    size: 22.sp,
+                  ),
           ),
         ),
         SizedBox(width: 8.w),
