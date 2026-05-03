@@ -211,31 +211,74 @@ class _UsersSearchList extends ConsumerWidget {
 class _BmgGrid extends ConsumerWidget {
   const _BmgGrid({required this.query});
   final String query;
-  static int _lastWarmedHash = 0;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final trimmed = query.trim();
-    final isHashtag = trimmed.isNotEmpty;
-    final tag =
-        isHashtag
+    final hasQuery = trimmed.isNotEmpty;
+    final substring =
+        hasQuery
             ? (trimmed.startsWith('#')
                 ? trimmed.substring(1).toLowerCase()
                 : trimmed.toLowerCase())
             : '';
-    final stream =
-        isHashtag
-            ? ref.watch(boomerangRepoProvider).watchByHashtag(tag)
-            : ref.watch(boomerangRepoProvider).watchPublicBoomerangs();
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     final myUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final repo = ref.watch(boomerangRepoProvider);
+
+    if (!hasQuery) {
+      return _BmgGridContent(
+        stream: repo.watchPublicBoomerangs().map((s) => s.docs),
+        blockedSet: blockedSet,
+        myUid: myUid,
+      );
+    }
+
+    final hashtagStream = ref.watch(hashtagRepoProvider).watchTop();
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: hashtagStream,
+      builder: (context, hashtagSnap) {
+        if (!hashtagSnap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final matches = hashtagSnap.data!.docs
+            .map((d) => d.id)
+            .where((id) => id.contains(substring))
+            .take(30)
+            .toList();
+        if (matches.isEmpty) {
+          return const Center(child: Text('No posts for this search'));
+        }
+        return _BmgGridContent(
+          stream: repo.watchByHashtagsAny(matches, currentUserId: myUid),
+          blockedSet: blockedSet,
+          myUid: myUid,
+        );
+      },
+    );
+  }
+}
+
+/// Builds the actual masonry grid given a stream of post documents.
+class _BmgGridContent extends ConsumerWidget {
+  const _BmgGridContent({
+    required this.stream,
+    required this.blockedSet,
+    required this.myUid,
+  });
+  final Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> stream;
+  final Set<String> blockedSet;
+  final String? myUid;
+  static int _lastWarmedHash = 0;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     return StreamBuilder(
       stream: stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final allDocs = snapshot.data!.docs;
+        final allDocs = snapshot.data!;
         final docs = allDocs.where((d) {
           final data = d.data();
           final uid = (data['userId'] ?? '') as String;
@@ -378,136 +421,92 @@ class _BmgGrid extends ConsumerWidget {
   }
 }
 
-class _TagsSearchList extends ConsumerStatefulWidget {
+class _TagsSearchList extends ConsumerWidget {
   const _TagsSearchList({required this.query});
   final String query;
-  @override
-  ConsumerState<_TagsSearchList> createState() => _TagsSearchListState();
-}
-
-class _TagsSearchListState extends ConsumerState<_TagsSearchList> {
-  final _items = <String>[];
-  DocumentSnapshot<Map<String, dynamic>>? _last;
-  bool _loading = false;
-  bool _hasMore = true;
-  @override
-  void didUpdateWidget(covariant _TagsSearchList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.query != widget.query) {
-      _items.clear();
-      _last = null;
-      _hasMore = true;
-      _loading = false;
-      setState(() {});
-      _fetch();
-    }
-  }
 
   @override
-  void initState() {
-    super.initState();
-    _fetch();
-  }
-
-  Future<void> _fetch() async {
-    if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
-    try {
-      final q =
-          widget.query.startsWith('#')
-              ? widget.query.substring(1)
-              : widget.query;
-      final pref = q.trim().toLowerCase();
-      if (pref.isEmpty) {
-        setState(() {
-          _items.clear();
-          _loading = false;
-          _hasMore = false;
-        });
-        return;
-      }
-      final snap = await ref
-          .read(hashtagRepoProvider)
-          .searchPrefixPage(prefix: pref, startAfter: _last, limit: 30);
-      setState(() {
-        _items.addAll(snap.docs.map((d) => d.id));
-        if (snap.docs.isNotEmpty) _last = snap.docs.last;
-        if (snap.docs.length < 30) _hasMore = false;
-      });
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final normalizedQuery = widget.query.startsWith('#')
-        ? widget.query.substring(1).trim()
-        : widget.query.trim();
-    final tag = normalizedQuery.toLowerCase();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final normalizedQuery = query.startsWith('#')
+        ? query.substring(1).trim()
+        : query.trim();
+    final needle = normalizedQuery.toLowerCase();
 
     if (normalizedQuery.isEmpty) {
       return const Center(child: Text('Search hashtags by typing #tag'));
     }
-    if (_items.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_items.isEmpty) {
-      return ListView(
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-        children: [
-          ListTile(
-            leading: const Icon(Icons.tag),
-            title: Text('#$tag'),
-            subtitle: const Text('Search posts with this hashtag'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => HashtagFeedPage(tag: tag)),
-              );
-            },
-          ),
-          SizedBox(height: 16.h),
-          const Center(child: Text('No hashtags found')),
-        ],
-      );
-    }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (n) {
-        if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200 &&
-            !_loading &&
-            _hasMore) {
-          _fetch();
+
+    final stream = ref.watch(hashtagRepoProvider).watchTop();
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
         }
-        return false;
-      },
-      child: ListView.separated(
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-        itemCount: _items.length + (_hasMore ? 1 : 0),
-        separatorBuilder: (_, __) => SizedBox(height: 8.h),
-        itemBuilder: (context, i) {
-          if (i >= _items.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
-            );
+        // Client-side substring filter + simple relevance ranking:
+        // exact match first, then prefix matches, then any-position
+        // contains. Within each bucket the original order from the
+        // server (count desc) is preserved.
+        final exact = <String>[];
+        final prefixed = <String>[];
+        final contains = <String>[];
+        for (final doc in snap.data!.docs) {
+          final id = doc.id;
+          if (id == needle) {
+            exact.add(id);
+          } else if (id.startsWith(needle)) {
+            prefixed.add(id);
+          } else if (id.contains(needle)) {
+            contains.add(id);
           }
-          final t = _items[i];
-          return ListTile(
-            leading: const Icon(Icons.tag),
-            title: Text(
-              '#$t',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => HashtagFeedPage(tag: t)),
-              );
-            },
+        }
+        final results = [...exact, ...prefixed, ...contains];
+
+        if (results.isEmpty) {
+          return ListView(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+            children: [
+              ListTile(
+                leading: const Icon(Icons.tag),
+                title: Text('#$needle'),
+                subtitle: const Text('Search posts with this hashtag'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => HashtagFeedPage(tag: needle),
+                    ),
+                  );
+                },
+              ),
+              SizedBox(height: 16.h),
+              const Center(child: Text('No hashtags found')),
+            ],
           );
-        },
-      ),
+        }
+
+        return ListView.separated(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          itemCount: results.length,
+          separatorBuilder: (_, __) => SizedBox(height: 8.h),
+          itemBuilder: (context, i) {
+            final t = results[i];
+            return ListTile(
+              leading: const Icon(Icons.tag),
+              title: Text(
+                '#$t',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => HashtagFeedPage(tag: t)),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

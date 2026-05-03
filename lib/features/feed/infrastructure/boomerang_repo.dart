@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -261,17 +262,153 @@ class BoomerangRepo {
     return ref.id;
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchByHashtag(String tag) {
+  /// Streams boomerangs tagged with [tag].
+  ///
+  /// The public query is server-filtered to `ownerIsPrivate == false` so
+  /// private posts never leave Firestore for other users (security rules
+  /// would also reject them). When [currentUserId] is provided, a second
+  /// query for *that user's own* posts is merged in so private accounts
+  /// can still discover their own content via search.
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> watchByHashtag(
+    String tag, {
+    String? currentUserId,
+  }) {
     final normalized = tag.toLowerCase();
-    // Server-side filter so private posts never leave Firestore for the
-    // hashtag feed. Combined with `arrayContains` this needs a composite
-    // index (hashtags arrayContains, ownerIsPrivate, ...).
-    return _fs
+    final publicStream = _fs
         .collection('boomerangs')
         .where('hashtags', arrayContains: normalized)
         .where('ownerIsPrivate', isEqualTo: false)
         .limit(100)
         .snapshots();
+
+    if (currentUserId == null || currentUserId.isEmpty) {
+      return publicStream.map((s) => s.docs);
+    }
+
+    final ownStream = _fs
+        .collection('boomerangs')
+        .where('hashtags', arrayContains: normalized)
+        .where('userId', isEqualTo: currentUserId)
+        .limit(100)
+        .snapshots();
+
+    return _combineLatestSnapshots(publicStream, ownStream).map((tuple) {
+      final byId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (final d in tuple.$1.docs) {
+        byId[d.id] = d;
+      }
+      for (final d in tuple.$2.docs) {
+        byId[d.id] = d;
+      }
+      return byId.values.toList();
+    });
+  }
+
+  /// Like [watchByHashtag] but matches *any* of [tags] using
+  /// `arrayContainsAny` (Firestore caps this operator at 30 values, so the
+  /// caller is responsible for bounding the list). Used for substring
+  /// hashtag search where the query expands to a set of candidate tags.
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> watchByHashtagsAny(
+    List<String> tags, {
+    String? currentUserId,
+  }) {
+    final normalized = tags
+        .map((t) => t.toLowerCase())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .take(30)
+        .toList();
+    if (normalized.isEmpty) {
+      return Stream.value(const []);
+    }
+
+    final publicStream = _fs
+        .collection('boomerangs')
+        .where('hashtags', arrayContainsAny: normalized)
+        .where('ownerIsPrivate', isEqualTo: false)
+        .limit(100)
+        .snapshots();
+
+    if (currentUserId == null || currentUserId.isEmpty) {
+      return publicStream.map((s) => s.docs);
+    }
+
+    final ownStream = _fs
+        .collection('boomerangs')
+        .where('hashtags', arrayContainsAny: normalized)
+        .where('userId', isEqualTo: currentUserId)
+        .limit(100)
+        .snapshots();
+
+    return _combineLatestSnapshots(publicStream, ownStream).map((tuple) {
+      final byId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (final d in tuple.$1.docs) {
+        byId[d.id] = d;
+      }
+      for (final d in tuple.$2.docs) {
+        byId[d.id] = d;
+      }
+      return byId.values.toList();
+    });
+  }
+
+  /// Emits a tuple of the latest values seen on [a] and [b] once both have
+  /// produced at least one event, then on every subsequent event from either.
+  static Stream<(QuerySnapshot<Map<String, dynamic>>, QuerySnapshot<Map<String, dynamic>>)>
+      _combineLatestSnapshots(
+    Stream<QuerySnapshot<Map<String, dynamic>>> a,
+    Stream<QuerySnapshot<Map<String, dynamic>>> b,
+  ) {
+    late StreamController<(QuerySnapshot<Map<String, dynamic>>, QuerySnapshot<Map<String, dynamic>>)>
+        controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subA;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subB;
+    QuerySnapshot<Map<String, dynamic>>? latestA;
+    QuerySnapshot<Map<String, dynamic>>? latestB;
+    var doneA = false;
+    var doneB = false;
+
+    void emit() {
+      if (latestA != null && latestB != null) {
+        controller.add((latestA!, latestB!));
+      }
+    }
+
+    void maybeClose() {
+      if (doneA && doneB) controller.close();
+    }
+
+    controller = StreamController<(QuerySnapshot<Map<String, dynamic>>, QuerySnapshot<Map<String, dynamic>>)>(
+      onListen: () {
+        subA = a.listen(
+          (v) {
+            latestA = v;
+            emit();
+          },
+          onError: controller.addError,
+          onDone: () {
+            doneA = true;
+            maybeClose();
+          },
+        );
+        subB = b.listen(
+          (v) {
+            latestB = v;
+            emit();
+          },
+          onError: controller.addError,
+          onDone: () {
+            doneB = true;
+            maybeClose();
+          },
+        );
+      },
+      onCancel: () async {
+        await subA?.cancel();
+        await subB?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   /// Synchronise the denormalised `ownerIsPrivate` flag on every boomerang

@@ -12,10 +12,12 @@ class HashtagFeedPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stream = ref.watch(boomerangRepoProvider).watchByHashtag(tag);
+    final myUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final stream = ref
+        .watch(boomerangRepoProvider)
+        .watchByHashtag(tag, currentUserId: myUid);
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
-    final myUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -46,7 +48,7 @@ class HashtagFeedPage extends ConsumerWidget {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final allDocs = snapshot.data!.docs;
+          final allDocs = snapshot.data!;
           final docs = allDocs.where((d) {
             final data = d.data();
             final uid = (data['userId'] ?? '') as String;

@@ -29,6 +29,30 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "ownerIsPrivate", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "boomerangs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "boomerangs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerIsPrivate", "order": "ASCENDING" },
+        { "fieldPath": "hashtags", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "boomerangs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "hashtags", "arrayConfig": "CONTAINS" }
       ]
     }
