@@ -243,10 +243,7 @@ class ChatInputFieldState extends State<ChatInputField>
   void _showMicMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-      ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
     );
   }
 
@@ -360,14 +357,14 @@ class ChatInputFieldState extends State<ChatInputField>
           if (await f.exists()) await f.delete();
         } catch (_) {}
       }
-      if (!cancelled && tooShort && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Hold to record — release to send.'),
-            duration: Duration(milliseconds: 1500),
-          ),
-        );
-      }
+      // if (!cancelled && tooShort && mounted) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     const SnackBar(
+      //       content: Text('Hold to record — release to send.'),
+      //       duration: Duration(milliseconds: 1500),
+      //     ),
+      //   );
+      // }
     } else {
       widget.onSendAudio(path, capturedMs);
     }
@@ -392,16 +389,18 @@ class ChatInputFieldState extends State<ChatInputField>
   Future<void> _restoreAmbientAudioSession() async {
     try {
       final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration(
-        avAudioSessionCategory: AVAudioSessionCategory.ambient,
-        avAudioSessionMode: AVAudioSessionMode.defaultMode,
-        androidAudioAttributes: AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.movie,
-          usage: AndroidAudioUsage.media,
+      await session.configure(
+        const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.ambient,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.movie,
+            usage: AndroidAudioUsage.media,
+          ),
+          androidAudioFocusGainType:
+              AndroidAudioFocusGainType.gainTransientMayDuck,
         ),
-        androidAudioFocusGainType:
-            AndroidAudioFocusGainType.gainTransientMayDuck,
-      ));
+      );
     } catch (_) {}
   }
 
@@ -442,23 +441,25 @@ class ChatInputFieldState extends State<ChatInputField>
               duration: const Duration(milliseconds: 180),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SizeTransition(
-                  sizeFactor: anim,
-                  axisAlignment: -1,
-                  child: child,
-                ),
-              ),
-              child: _phase == _RecordPhase.locked
-                  ? KeyedSubtree(
-                      key: const ValueKey('locked'),
-                      child: _buildLockedRow(theme),
-                    )
-                  : KeyedSubtree(
-                      key: const ValueKey('input'),
-                      child: _buildActiveRow(theme),
+              transitionBuilder:
+                  (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SizeTransition(
+                      sizeFactor: anim,
+                      axisAlignment: -1,
+                      child: child,
                     ),
+                  ),
+              child:
+                  _phase == _RecordPhase.locked
+                      ? KeyedSubtree(
+                        key: const ValueKey('locked'),
+                        child: _buildLockedRow(theme),
+                      )
+                      : KeyedSubtree(
+                        key: const ValueKey('input'),
+                        child: _buildActiveRow(theme),
+                      ),
             ),
           ),
         ],
@@ -541,8 +542,7 @@ class ChatInputFieldState extends State<ChatInputField>
     final recording = _phase == _RecordPhase.recording;
     final cancelProgress =
         (_dragDx / _cancelThresholdX).clamp(0.0, 1.0).toDouble();
-    final lockProgress =
-        (_dragDy / _lockThresholdY).clamp(0.0, 1.0).toDouble();
+    final lockProgress = (_dragDy / _lockThresholdY).clamp(0.0, 1.0).toDouble();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -567,20 +567,22 @@ class ChatInputFieldState extends State<ChatInputField>
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                transitionBuilder: (child, anim) =>
-                    FadeTransition(opacity: anim, child: child),
-                child: recording
-                    ? _RecordingBar(
-                        key: const ValueKey('rec-bar'),
-                        duration: _recordingDuration,
-                        cancelProgress: cancelProgress,
-                        pulse: _pulseController,
-                        formatter: _formatTimer,
-                      )
-                    : KeyedSubtree(
-                        key: const ValueKey('text-bar'),
-                        child: _buildTextBar(theme),
-                      ),
+                transitionBuilder:
+                    (child, anim) =>
+                        FadeTransition(opacity: anim, child: child),
+                child:
+                    recording
+                        ? _RecordingBar(
+                          key: const ValueKey('rec-bar'),
+                          duration: _recordingDuration,
+                          cancelProgress: cancelProgress,
+                          pulse: _pulseController,
+                          formatter: _formatTimer,
+                        )
+                        : KeyedSubtree(
+                          key: const ValueKey('text-bar'),
+                          child: _buildTextBar(theme),
+                        ),
               ),
             ),
             SizedBox(width: 8.w),
@@ -600,9 +602,10 @@ class ChatInputFieldState extends State<ChatInputField>
       child: Row(
         children: [
           _IconBtn(
-            icon: widget.emojiOpen
-                ? Icons.keyboard_outlined
-                : Icons.emoji_emotions_outlined,
+            icon:
+                widget.emojiOpen
+                    ? Icons.keyboard_outlined
+                    : Icons.emoji_emotions_outlined,
             onTap: widget.onToggleEmoji,
           ),
           Expanded(
@@ -625,10 +628,7 @@ class ChatInputFieldState extends State<ChatInputField>
               },
             ),
           ),
-          _IconBtn(
-            icon: Icons.gif_box_outlined,
-            onTap: _openGifPicker,
-          ),
+          _IconBtn(icon: Icons.gif_box_outlined, onTap: _openGifPicker),
           _IconBtn(
             icon: Icons.photo_outlined,
             onTap: () => _pickImage(ImageSource.gallery),
@@ -651,21 +651,14 @@ class ChatInputFieldState extends State<ChatInputField>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: widget.isSending
-          ? null
-          : (showSend ? _send : null),
-      onLongPressStart: _hasText || widget.isSending
-          ? null
-          : (_) => _onLongPressStart(),
-      onLongPressMoveUpdate: _hasText || widget.isSending
-          ? null
-          : _onLongPressMoveUpdate,
-      onLongPressEnd: _hasText || widget.isSending
-          ? null
-          : _onLongPressEnd,
-      onLongPressCancel: _hasText || widget.isSending
-          ? null
-          : _onLongPressCancel,
+      onTap: widget.isSending ? null : (showSend ? _send : null),
+      onLongPressStart:
+          _hasText || widget.isSending ? null : (_) => _onLongPressStart(),
+      onLongPressMoveUpdate:
+          _hasText || widget.isSending ? null : _onLongPressMoveUpdate,
+      onLongPressEnd: _hasText || widget.isSending ? null : _onLongPressEnd,
+      onLongPressCancel:
+          _hasText || widget.isSending ? null : _onLongPressCancel,
       child: SizedBox(
         width: 48.w,
         height: 48.w,
@@ -680,29 +673,31 @@ class ChatInputFieldState extends State<ChatInputField>
               decoration: BoxDecoration(
                 color: recording ? Colors.red : theme.colorScheme.primary,
                 shape: BoxShape.circle,
-                boxShadow: recording
-                    ? [
-                        BoxShadow(
-                          color: Colors.red.withValues(alpha: 0.35),
-                          blurRadius: 18,
-                          spreadRadius: 2,
-                        ),
-                      ]
-                    : null,
+                boxShadow:
+                    recording
+                        ? [
+                          BoxShadow(
+                            color: Colors.red.withValues(alpha: 0.35),
+                            blurRadius: 18,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                        : null,
               ),
-              child: widget.isSending
-                  ? Padding(
-                      padding: EdgeInsets.all(12.w),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.w,
+              child:
+                  widget.isSending
+                      ? Padding(
+                        padding: EdgeInsets.all(12.w),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.w,
+                          color: Colors.white,
+                        ),
+                      )
+                      : Icon(
+                        showSend ? Icons.send_rounded : Icons.mic,
                         color: Colors.white,
+                        size: 22.sp,
                       ),
-                    )
-                  : Icon(
-                      showSend ? Icons.send_rounded : Icons.mic,
-                      color: Colors.white,
-                      size: 22.sp,
-                    ),
             ),
           ),
         ),
@@ -842,18 +837,13 @@ class _RecordingBar extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            Icon(
-              Icons.chevron_left,
-              size: 16.sp,
-              color: Colors.black45,
-            ),
+            Icon(Icons.chevron_left, size: 16.sp, color: Colors.black45),
             SizedBox(width: 4.w),
             Text(
               cancelProgress >= 1 ? 'Release to cancel' : 'Slide to cancel',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: cancelProgress >= 1
-                    ? Colors.red.shade600
-                    : Colors.black45,
+                color:
+                    cancelProgress >= 1 ? Colors.red.shade600 : Colors.black45,
                 fontWeight:
                     cancelProgress >= 1 ? FontWeight.w600 : FontWeight.normal,
               ),
