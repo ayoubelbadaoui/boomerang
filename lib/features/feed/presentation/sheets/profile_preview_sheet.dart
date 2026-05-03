@@ -172,9 +172,6 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    if (!canViewPrivateContent) {
-                      return const _Stat(value: '-', label: 'Followers');
-                    }
                     final followers = ref.watch(
                       followersCountProvider(widget.userId),
                     );
@@ -182,36 +179,37 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       data: (v) => '$v',
                       orElse: () => '0',
                     );
+                    // On private accounts we still show the real count,
+                    // but tapping is disabled until the current user is
+                    // accepted — they can't see *who* follows, just how
+                    // many.
                     return _Stat(
                       value: text,
                       label: 'Followers',
-                      onTap:
-                          () => showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.white,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(24),
-                              ),
-                            ),
-                            builder:
-                                (_) => SizedBox(
+                      onTap: canViewPrivateContent
+                          ? () => showModalBottomSheet<void>(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.white,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(24),
+                                  ),
+                                ),
+                                builder: (_) => SizedBox(
                                   height: 500,
                                   child: FollowListSheet(
                                     mode: FollowMode.followers,
                                     userId: widget.userId,
                                   ),
                                 ),
-                          ),
+                              )
+                          : null,
                     );
                   },
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    if (!canViewPrivateContent) {
-                      return const _Stat(value: '-', label: 'Following');
-                    }
                     final following = ref.watch(
                       followingCountProvider(widget.userId),
                     );
@@ -222,25 +220,25 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     return _Stat(
                       value: text,
                       label: 'Following',
-                      onTap:
-                          () => showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.white,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(24),
-                              ),
-                            ),
-                            builder:
-                                (_) => SizedBox(
+                      onTap: canViewPrivateContent
+                          ? () => showModalBottomSheet<void>(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.white,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(24),
+                                  ),
+                                ),
+                                builder: (_) => SizedBox(
                                   height: 500,
                                   child: FollowListSheet(
                                     mode: FollowMode.following,
                                     userId: widget.userId,
                                   ),
                                 ),
-                          ),
+                              )
+                          : null,
                     );
                   },
                 ),
