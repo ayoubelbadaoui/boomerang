@@ -7,6 +7,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+/// First Flutter-side route. Acts as a hand-off between the native launch
+/// screen and the actual app shell:
+///  - Background matches the native launch image so the transition is
+///    seamless (no "weird black screen" between the two splashes).
+///  - No hardcoded delay — we navigate as soon as the auth stream resolves
+///    its first value. A small circular indicator under the logo signals
+///    to the user that loading is still in progress.
+///  - Image prefetch for the first few posts runs in the background so the
+///    feed paints faster once the user arrives at it, but it never blocks
+///    navigation.
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
   static const String routeName = '/';
@@ -17,18 +27,13 @@ class SplashScreen extends ConsumerStatefulWidget {
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
   bool _navigated = false;
-  bool _minDelayPassed = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmPreviews();
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!mounted) return;
-        _minDelayPassed = true;
-        _tryNavigate();
-      });
+      _tryNavigate();
     });
   }
 
@@ -49,7 +54,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   void _tryNavigate() {
-    if (_navigated || !mounted || !_minDelayPassed) return;
+    if (_navigated || !mounted) return;
     final auth = ref.read(authStateProvider);
     if (auth.isLoading) return;
     _navigated = true;
@@ -66,9 +71,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Widget build(BuildContext context) {
     ref.listen(authStateProvider, (_, __) => _tryNavigate());
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: Center(
-        child: Image.asset(Assets.logoDark, cacheWidth: 240),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // `logoLight` is the black-on-transparent version of the logo,
+            // designed for light surfaces. Using `logoDark` (white logo)
+            // here would render invisible on the white background.
+            Image.asset(Assets.logoLight, cacheWidth: 240),
+            const SizedBox(height: 24),
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
