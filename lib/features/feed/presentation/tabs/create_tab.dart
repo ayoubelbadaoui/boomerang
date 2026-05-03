@@ -2,8 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
+import 'package:boomerang/features/feed/presentation/editor/video_trim_page.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 
 class CreateTab extends ConsumerStatefulWidget {
@@ -24,26 +26,42 @@ class _CreateTabState extends ConsumerState<CreateTab> {
     );
   }
 
-  static const _maxDuration = Duration(milliseconds: 1500);
+  // Max window the user can pick from a gallery clip — matches the existing
+  // boomerang segment budget (1.5 s → 3 s looped).
+  static const _maxWindow = Duration(milliseconds: 1500);
 
   Future<void> _importFromGallery() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
     try {
       final picker = ImagePicker();
-      final XFile? file = await picker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: _maxDuration,
-      );
+      // No maxDuration on the picker any more — the user trims it themselves.
+      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
       if (file == null) return;
 
-      final trimmed = await const BoomerangProcessor()
-          .trimToMaxDuration(file.path, maxSeconds: 1.5);
-
+      final sourceDuration = await _probeDuration(file.path);
       if (!mounted) return;
+
+      // Videos already within the allowed window skip the trim page.
+      if (sourceDuration <= _maxWindow) {
+        final trimmed = await const BoomerangProcessor()
+            .trimToMaxDuration(file.path, maxSeconds: 1.5);
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => BoomerangEditorPage(inputFile: File(trimmed)),
+          ),
+        );
+        return;
+      }
+
+      // Long clip → let the user pick which slice to use.
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BoomerangEditorPage(inputFile: File(trimmed)),
+          builder: (_) => VideoTrimPage(
+            inputFile: File(file.path),
+            maxWindow: _maxWindow,
+          ),
         ),
       );
     } catch (e) {
@@ -53,6 +71,21 @@ class _CreateTabState extends ConsumerState<CreateTab> {
       ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Returns the duration of [path], or [Duration.zero] if it can't be read.
+  /// We use the existing video_player dependency instead of pulling in
+  /// another plugin — it's slightly heavy but this only runs once per pick.
+  Future<Duration> _probeDuration(String path) async {
+    final c = VideoPlayerController.file(File(path));
+    try {
+      await c.initialize();
+      return c.value.duration;
+    } catch (_) {
+      return Duration.zero;
+    } finally {
+      await c.dispose();
     }
   }
 

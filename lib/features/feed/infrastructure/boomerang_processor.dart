@@ -98,6 +98,90 @@ class BoomerangProcessor {
   }
 
   // ---------------------------------------------------------------------------
+  // Trim to a user-chosen window [startSeconds .. startSeconds + durationSeconds].
+  // Used by the gallery trim screen so the user can pick which slice of a
+  // longer video becomes the boomerang. Returns the original path if every
+  // encoder candidate fails (caller is expected to handle that by treating
+  // the returned path as the original, but FFmpeg succeeds in virtually
+  // every real-world case).
+  // ---------------------------------------------------------------------------
+
+  Future<String> trimToWindow(
+    String inputPath, {
+    required double startSeconds,
+    required double durationSeconds,
+  }) async {
+    _assertExists(inputPath);
+    final outPath = await _tmpPath('trim_window', 'mp4');
+
+    final start = startSeconds < 0 ? 0.0 : startSeconds;
+    final duration = durationSeconds <= 0 ? 0.1 : durationSeconds;
+
+    for (final enc in _encoderCandidates) {
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        // -ss before -i enables input-seek (fast, keyframe-accurate enough
+        // for our short 0.3–1.5 s windows). -t caps the output duration.
+        '-ss', start.toStringAsFixed(3),
+        '-i', inputPath,
+        '-t', duration.toStringAsFixed(3),
+        '-an',
+        ...enc,
+        '-movflags', '+faststart',
+        outPath,
+      ]);
+      if (ReturnCode.isSuccess(await session.getReturnCode()) &&
+          await _hasVideoContent(outPath)) {
+        return outPath;
+      }
+    }
+    return inputPath;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timeline thumbnails — extracts N evenly-spaced thumbnail JPEGs used by
+  // the trim filmstrip. Single FFmpeg call via the fps filter so it stays
+  // fast even on long source videos.
+  // ---------------------------------------------------------------------------
+
+  Future<List<String>> extractTimelineThumbnails(
+    String inputPath, {
+    required double durationSeconds,
+    int count = 8,
+    int heightPx = 80,
+  }) async {
+    _assertExists(inputPath);
+    if (durationSeconds <= 0 || count <= 0) return const [];
+
+    final tempDir = await getTemporaryDirectory();
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final prefix = 'ttb${ts}_';
+    final pattern = '${tempDir.path}/$prefix' '%03d.jpg';
+
+    // One frame every (duration / count) seconds → `count` frames total.
+    final fps = count / durationSeconds;
+
+    final session = await FFmpegKit.executeWithArguments([
+      '-y',
+      '-i', inputPath,
+      '-vf', 'fps=${fps.toStringAsFixed(4)},scale=-2:$heightPx',
+      '-frames:v', '$count',
+      '-q:v', '5',
+      pattern,
+    ]);
+    if (!ReturnCode.isSuccess(await session.getReturnCode())) {
+      return const [];
+    }
+
+    final results = <String>[];
+    for (int i = 1; i <= count; i++) {
+      final path = '${tempDir.path}/$prefix${i.toString().padLeft(3, '0')}.jpg';
+      if (File(path).existsSync()) results.add(path);
+    }
+    return results;
+  }
+
+  // ---------------------------------------------------------------------------
   // Mirror — creates a horizontally flipped copy with all metadata resolved.
   // ---------------------------------------------------------------------------
 

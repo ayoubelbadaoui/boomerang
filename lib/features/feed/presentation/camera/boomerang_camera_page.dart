@@ -4,10 +4,12 @@ import 'dart:math' as math;
 
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
+import 'package:boomerang/features/feed/presentation/editor/video_trim_page.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
 // ---------------------------------------------------------------------------
 // Filter definitions
@@ -347,21 +349,29 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     if (_recording || _navigating) return;
     HapticFeedback.mediumImpact();
 
-    final picked = await showModalBottomSheet<File>(
+    final picked = await showModalBottomSheet<_GalleryPickResult>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => const _GalleryImportSheet(),
     );
 
-    if (picked != null && mounted) {
-      _navigating = true;
+    if (picked == null || !mounted) return;
+
+    _navigating = true;
+    if (picked.needsTrim) {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BoomerangEditorPage(inputFile: picked),
+          builder: (_) => VideoTrimPage(inputFile: picked.file),
         ),
       );
-      _navigating = false;
+    } else {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BoomerangEditorPage(inputFile: picked.file),
+        ),
+      );
     }
+    _navigating = false;
   }
 
   // -- Build ---------------------------------------------------------------
@@ -1032,27 +1042,42 @@ class _GalleryImportSheet extends StatefulWidget {
 class _GalleryImportSheetState extends State<_GalleryImportSheet> {
   bool _picking = false;
 
-  static const _maxDuration = Duration(milliseconds: 1500);
+  // The user-selectable window budget. Anything longer goes through the
+  // trim page; anything shorter is hard-trimmed from t=0 and sent straight
+  // to the editor.
+  static const _maxWindow = Duration(milliseconds: 1500);
 
   Future<void> _pickVideo() async {
     if (_picking) return;
     setState(() => _picking = true);
     try {
       final picker = ImagePicker();
-      final xfile = await picker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: _maxDuration,
-      );
+      // No maxDuration — we let the trim page handle long videos.
+      final xfile = await picker.pickVideo(source: ImageSource.gallery);
       if (xfile == null) {
         if (mounted) Navigator.pop(context);
         return;
       }
 
-      final trimmed = await const BoomerangProcessor()
-          .trimToMaxDuration(xfile.path, maxSeconds: 1.5);
-
+      final sourceDuration = await _probeDuration(xfile.path);
       if (!mounted) return;
-      Navigator.pop(context, File(trimmed));
+
+      if (sourceDuration <= _maxWindow) {
+        // Short clip → pre-trim to 1.5s from the start and hand straight to
+        // the editor so the user doesn't sit through a pointless trim step.
+        final trimmed = await const BoomerangProcessor()
+            .trimToMaxDuration(xfile.path, maxSeconds: 1.5);
+        if (!mounted) return;
+        Navigator.pop(
+          context,
+          _GalleryPickResult(File(trimmed), needsTrim: false),
+        );
+      } else {
+        Navigator.pop(
+          context,
+          _GalleryPickResult(File(xfile.path), needsTrim: true),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
@@ -1061,6 +1086,18 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
       );
     } finally {
       if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  Future<Duration> _probeDuration(String path) async {
+    final c = VideoPlayerController.file(File(path));
+    try {
+      await c.initialize();
+      return c.value.duration;
+    } catch (_) {
+      return Duration.zero;
+    } finally {
+      await c.dispose();
     }
   }
 
@@ -1095,7 +1132,7 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Select a video up to 1.5 seconds long.',
+            'Pick any video — you can trim the moment you want next.',
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
           const SizedBox(height: 24),
@@ -1149,4 +1186,12 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
       ),
     );
   }
+}
+
+/// Bottom-sheet return payload. [needsTrim] tells the caller whether to
+/// route the file through [VideoTrimPage] or straight to the editor.
+class _GalleryPickResult {
+  const _GalleryPickResult(this.file, {required this.needsTrim});
+  final File file;
+  final bool needsTrim;
 }
