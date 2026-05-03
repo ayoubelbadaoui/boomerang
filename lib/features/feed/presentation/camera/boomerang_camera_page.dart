@@ -325,6 +325,15 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       if (!mounted) return;
       final selectedFilter = _filters[_filterIdx];
       final isFront = _cameras[_camIdx].lensDirection == CameraLensDirection.front;
+      // Selfie mirroring is platform-dependent:
+      //  - iOS (camera_avfoundation) saves the front-camera file already
+      //    mirrored, matching the live preview. Applying our own hflip on
+      //    top would double-flip it into a non-mirrored clip — which is
+      //    exactly the "selfie looks flipped after recording" bug users hit.
+      //  - Android's camera2 writes the raw (un-mirrored) sensor orientation
+      //    to disk, so we *do* need to hflip ourselves to match the preview.
+      // We only request mirroring for the Android case.
+      final needsManualMirror = isFront && Platform.isAndroid;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => BoomerangEditorPage(
@@ -332,7 +341,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
             initialSpeed: _speed,
             videoFilter: selectedFilter.ffmpeg,
             previewFilter: selectedFilter.matrix,
-            mirrorVideo: isFront,
+            mirrorVideo: needsManualMirror,
           ),
         ),
       );
