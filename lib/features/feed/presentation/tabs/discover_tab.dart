@@ -224,6 +224,8 @@ class _BmgGrid extends ConsumerWidget {
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     final myUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+    final followingIds =
+        ref.watch(followingIdsProvider).value ?? const <String>{};
     final repo = ref.watch(boomerangRepoProvider);
 
     if (!hasQuery) {
@@ -231,6 +233,7 @@ class _BmgGrid extends ConsumerWidget {
         stream: repo.watchPublicBoomerangs().map((s) => s.docs),
         blockedSet: blockedSet,
         myUid: myUid,
+        followingIds: followingIds,
       );
     }
 
@@ -250,9 +253,14 @@ class _BmgGrid extends ConsumerWidget {
           return const Center(child: Text('No posts for this search'));
         }
         return _BmgGridContent(
-          stream: repo.watchByHashtagsAny(matches, currentUserId: myUid),
+          stream: repo.watchByHashtagsAny(
+            matches,
+            currentUserId: myUid,
+            followingIds: followingIds,
+          ),
           blockedSet: blockedSet,
           myUid: myUid,
+          followingIds: followingIds,
         );
       },
     );
@@ -265,10 +273,12 @@ class _BmgGridContent extends ConsumerWidget {
     required this.stream,
     required this.blockedSet,
     required this.myUid,
+    this.followingIds = const <String>{},
   });
   final Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> stream;
   final Set<String> blockedSet;
   final String? myUid;
+  final Set<String> followingIds;
   static int _lastWarmedHash = 0;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -283,16 +293,17 @@ class _BmgGridContent extends ConsumerWidget {
           final data = d.data();
           final uid = (data['userId'] ?? '') as String;
           if (blockedSet.contains(uid)) return false;
-          if (data['ownerIsPrivate'] == true && uid != myUid) return false;
+          if (uid == myUid) return true;
+          // Posts from accounts the current user follows are visible
+          // even when the owner is private (security rules already
+          // verify the follow edge server-side).
+          if (followingIds.contains(uid)) return true;
+          if (data['ownerIsPrivate'] == true) return false;
           // Defensive check against stale denormalised flags: even when a
           // boomerang doc says public, look up the owner's live profile and
-          // hide it if the account is private (and not ours).
+          // hide it if the account is private and we don't follow them.
           final liveProfile = ref.watch(userProfileByIdProvider(uid)).value;
-          if (liveProfile != null &&
-              liveProfile.isPrivate &&
-              uid != myUid) {
-            return false;
-          }
+          if (liveProfile != null && liveProfile.isPrivate) return false;
           return true;
         }).toList();
         // Warm-cache first page posters once per snapshot.

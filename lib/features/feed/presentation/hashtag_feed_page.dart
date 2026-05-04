@@ -13,9 +13,13 @@ class HashtagFeedPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final myUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
-    final stream = ref
-        .watch(boomerangRepoProvider)
-        .watchByHashtag(tag, currentUserId: myUid);
+    final followingIds =
+        ref.watch(followingIdsProvider).value ?? const <String>{};
+    final stream = ref.watch(boomerangRepoProvider).watchByHashtag(
+          tag,
+          currentUserId: myUid,
+          followingIds: followingIds,
+        );
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     return Scaffold(
@@ -53,15 +57,18 @@ class HashtagFeedPage extends ConsumerWidget {
             final data = d.data();
             final uid = (data['userId'] ?? '') as String;
             if (blockedSet.contains(uid)) return false;
-            if (data['ownerIsPrivate'] == true && uid != myUid) return false;
-            // Defensive: rely on the live user profile, not just the
-            // denormalised flag, in case it's stale.
+            // Owner is the current user → always visible.
+            if (uid == myUid) return true;
+            // Owner is someone the current user follows → visible even
+            // when their account is private (security rules already
+            // confirm the follow relationship server-side).
+            final iFollow = followingIds.contains(uid);
+            if (iFollow) return true;
+            // Otherwise honour the privacy flag on the post and on the
+            // live profile (in case the denormalised flag is stale).
+            if (data['ownerIsPrivate'] == true) return false;
             final liveProfile = ref.watch(userProfileByIdProvider(uid)).value;
-            if (liveProfile != null &&
-                liveProfile.isPrivate &&
-                uid != myUid) {
-              return false;
-            }
+            if (liveProfile != null && liveProfile.isPrivate) return false;
             return true;
           }).toList();
           if (docs.isEmpty) {

@@ -264,53 +264,75 @@ class BoomerangRepo {
 
   /// Streams boomerangs tagged with [tag].
   ///
-  /// The public query is server-filtered to `ownerIsPrivate == false` so
-  /// private posts never leave Firestore for other users (security rules
-  /// would also reject them). When [currentUserId] is provided, a second
-  /// query for *that user's own* posts is merged in so private accounts
-  /// can still discover their own content via search.
+  /// Merges three Firestore queries (deduped by doc id):
+  ///  * Public posts (`ownerIsPrivate == false`).
+  ///  * The current user's own posts (so private accounts still discover
+  ///    their own content).
+  ///  * Posts authored by accounts in [followingIds] — chunked into
+  ///    `whereIn` groups of 30. This is what lets a follower see a private
+  ///    account's tagged posts without exposing them to non-followers.
+  ///    Security rules independently enforce the same gate via
+  ///    `canReadBoomerang`, so non-followers can't read these even if the
+  ///    UID list is tampered with.
   Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> watchByHashtag(
     String tag, {
     String? currentUserId,
+    Set<String> followingIds = const <String>{},
   }) {
     final normalized = tag.toLowerCase();
-    final publicStream = _fs
-        .collection('boomerangs')
-        .where('hashtags', arrayContains: normalized)
-        .where('ownerIsPrivate', isEqualTo: false)
-        .limit(100)
-        .snapshots();
+    final col = _fs.collection('boomerangs');
 
-    if (currentUserId == null || currentUserId.isEmpty) {
-      return publicStream.map((s) => s.docs);
+    final substreams = <Stream<QuerySnapshot<Map<String, dynamic>>>>[
+      col
+          .where('hashtags', arrayContains: normalized)
+          .where('ownerIsPrivate', isEqualTo: false)
+          .limit(100)
+          .snapshots(),
+    ];
+
+    if (currentUserId != null && currentUserId.isNotEmpty) {
+      substreams.add(
+        col
+            .where('hashtags', arrayContains: normalized)
+            .where('userId', isEqualTo: currentUserId)
+            .limit(100)
+            .snapshots(),
+      );
     }
 
-    final ownStream = _fs
-        .collection('boomerangs')
-        .where('hashtags', arrayContains: normalized)
-        .where('userId', isEqualTo: currentUserId)
-        .limit(100)
-        .snapshots();
+    final followedList = followingIds
+        .where((u) => u.isNotEmpty && u != currentUserId)
+        .toList();
+    for (var i = 0; i < followedList.length; i += 30) {
+      final end =
+          i + 30 > followedList.length ? followedList.length : i + 30;
+      final chunk = followedList.sublist(i, end);
+      substreams.add(
+        col
+            .where('hashtags', arrayContains: normalized)
+            .where('userId', whereIn: chunk)
+            .limit(100)
+            .snapshots(),
+      );
+    }
 
-    return _combineLatestSnapshots(publicStream, ownStream).map((tuple) {
-      final byId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
-      for (final d in tuple.$1.docs) {
-        byId[d.id] = d;
-      }
-      for (final d in tuple.$2.docs) {
-        byId[d.id] = d;
-      }
-      return byId.values.toList();
-    });
+    return _combineSnapshotStreams(substreams);
   }
 
   /// Like [watchByHashtag] but matches *any* of [tags] using
   /// `arrayContainsAny` (Firestore caps this operator at 30 values, so the
   /// caller is responsible for bounding the list). Used for substring
   /// hashtag search where the query expands to a set of candidate tags.
+  ///
+  /// Followed accounts are queried one-by-one because Firestore disallows
+  /// combining `arrayContainsAny` with `whereIn` in the same query. To keep
+  /// the subscription count bounded we cap the followed-author scan at
+  /// [followedScanLimit] users.
   Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> watchByHashtagsAny(
     List<String> tags, {
     String? currentUserId,
+    Set<String> followingIds = const <String>{},
+    int followedScanLimit = 50,
   }) {
     final normalized = tags
         .map((t) => t.toLowerCase())
@@ -322,90 +344,97 @@ class BoomerangRepo {
       return Stream.value(const []);
     }
 
-    final publicStream = _fs
-        .collection('boomerangs')
-        .where('hashtags', arrayContainsAny: normalized)
-        .where('ownerIsPrivate', isEqualTo: false)
-        .limit(100)
-        .snapshots();
+    final col = _fs.collection('boomerangs');
+    final substreams = <Stream<QuerySnapshot<Map<String, dynamic>>>>[
+      col
+          .where('hashtags', arrayContainsAny: normalized)
+          .where('ownerIsPrivate', isEqualTo: false)
+          .limit(100)
+          .snapshots(),
+    ];
 
-    if (currentUserId == null || currentUserId.isEmpty) {
-      return publicStream.map((s) => s.docs);
+    if (currentUserId != null && currentUserId.isNotEmpty) {
+      substreams.add(
+        col
+            .where('hashtags', arrayContainsAny: normalized)
+            .where('userId', isEqualTo: currentUserId)
+            .limit(100)
+            .snapshots(),
+      );
     }
 
-    final ownStream = _fs
-        .collection('boomerangs')
-        .where('hashtags', arrayContainsAny: normalized)
-        .where('userId', isEqualTo: currentUserId)
-        .limit(100)
-        .snapshots();
+    final followedList = followingIds
+        .where((u) => u.isNotEmpty && u != currentUserId)
+        .take(followedScanLimit)
+        .toList();
+    for (final uid in followedList) {
+      substreams.add(
+        col
+            .where('hashtags', arrayContainsAny: normalized)
+            .where('userId', isEqualTo: uid)
+            .limit(50)
+            .snapshots(),
+      );
+    }
 
-    return _combineLatestSnapshots(publicStream, ownStream).map((tuple) {
-      final byId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
-      for (final d in tuple.$1.docs) {
-        byId[d.id] = d;
-      }
-      for (final d in tuple.$2.docs) {
-        byId[d.id] = d;
-      }
-      return byId.values.toList();
-    });
+    return _combineSnapshotStreams(substreams);
   }
 
-  /// Emits a tuple of the latest values seen on [a] and [b] once both have
-  /// produced at least one event, then on every subsequent event from either.
-  static Stream<(QuerySnapshot<Map<String, dynamic>>, QuerySnapshot<Map<String, dynamic>>)>
-      _combineLatestSnapshots(
-    Stream<QuerySnapshot<Map<String, dynamic>>> a,
-    Stream<QuerySnapshot<Map<String, dynamic>>> b,
+  /// Combines N Firestore snapshot streams into a single deduped doc list.
+  /// Emits once every input stream has produced its first snapshot, then on
+  /// every subsequent change. Order of returned docs is unspecified —
+  /// callers should sort by `createdAt` if ordering matters.
+  static Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      _combineSnapshotStreams(
+    List<Stream<QuerySnapshot<Map<String, dynamic>>>> streams,
   ) {
-    late StreamController<(QuerySnapshot<Map<String, dynamic>>, QuerySnapshot<Map<String, dynamic>>)>
+    if (streams.isEmpty) return Stream.value(const []);
+    if (streams.length == 1) return streams.first.map((s) => s.docs);
+
+    late StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
         controller;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subA;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subB;
-    QuerySnapshot<Map<String, dynamic>>? latestA;
-    QuerySnapshot<Map<String, dynamic>>? latestB;
-    var doneA = false;
-    var doneB = false;
+    final subs = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
+    final latest = List<QuerySnapshot<Map<String, dynamic>>?>.filled(
+      streams.length,
+      null,
+    );
+    var doneCount = 0;
 
     void emit() {
-      if (latestA != null && latestB != null) {
-        controller.add((latestA!, latestB!));
+      if (latest.any((v) => v == null)) return;
+      final byId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (final snap in latest) {
+        for (final d in snap!.docs) {
+          byId[d.id] = d;
+        }
       }
+      controller.add(byId.values.toList());
     }
 
-    void maybeClose() {
-      if (doneA && doneB) controller.close();
-    }
-
-    controller = StreamController<(QuerySnapshot<Map<String, dynamic>>, QuerySnapshot<Map<String, dynamic>>)>(
+    controller =
+        StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
       onListen: () {
-        subA = a.listen(
-          (v) {
-            latestA = v;
-            emit();
-          },
-          onError: controller.addError,
-          onDone: () {
-            doneA = true;
-            maybeClose();
-          },
-        );
-        subB = b.listen(
-          (v) {
-            latestB = v;
-            emit();
-          },
-          onError: controller.addError,
-          onDone: () {
-            doneB = true;
-            maybeClose();
-          },
-        );
+        for (var i = 0; i < streams.length; i++) {
+          final idx = i;
+          subs.add(
+            streams[idx].listen(
+              (v) {
+                latest[idx] = v;
+                emit();
+              },
+              onError: controller.addError,
+              onDone: () {
+                doneCount++;
+                if (doneCount == streams.length) controller.close();
+              },
+            ),
+          );
+        }
       },
       onCancel: () async {
-        await subA?.cancel();
-        await subB?.cancel();
+        for (final s in subs) {
+          await s.cancel();
+        }
       },
     );
     return controller.stream;

@@ -261,20 +261,6 @@ class _ActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
-        final isFollowing =
-            ref.watch(isFollowingStreamProvider(item.actorId)).value ?? false;
-        // Use the live follow-request doc as the source of truth, not the
-        // notification's cached `status` (which may lag behind) or `read`
-        // flag (which would otherwise hide the buttons after a tap).
-        final liveRequest = item.type == _ItemType.followRequest
-            ? ref.watch(incomingFollowRequestProvider(item.actorId)).value
-            : null;
-        final isPendingRequest = item.type == _ItemType.followRequest &&
-            !isFollowing &&
-            (liveRequest?.isPending ??
-                ((item.status?.isEmpty ?? true) ||
-                    item.status == 'pending'));
-
         return InkWell(
           onTap: () => _handleTap(context, ref, item),
           borderRadius: BorderRadius.circular(16.r),
@@ -336,7 +322,14 @@ class _ActivityTile extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 12.w),
-                if (isPendingRequest)
+                // For follow requests, always mount the actions widget — it
+                // decides whether to render itself based on the LIVE follow-
+                // request doc, so the row never disappears just because the
+                // current user did something tangential (e.g. sent a counter-
+                // request, marked the notification as read, or briefly went
+                // offline). The buttons only collapse once the underlying
+                // request is actually accepted, declined, or revoked.
+                if (item.type == _ItemType.followRequest)
                   _FollowRequestActions(item: item)
                 else if (item.type == _ItemType.follow)
                   _FollowBackButton(item: item)
@@ -459,7 +452,11 @@ class _FollowRequestActions extends ConsumerStatefulWidget {
 
 class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
   bool _busy = false;
-  bool _resolved = false;
+  // Optimistic flag flipped the moment the user taps Accept/Reject. The
+  // underlying Firestore stream catches up shortly after — at which point the
+  // live data is the real source of truth and `_localResolved` becomes
+  // redundant. We never set this from any other side-effect.
+  bool _localResolved = false;
 
   Future<void> _markRead() async {
     final me = ref.read(currentUserProfileProvider).value;
@@ -470,10 +467,10 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
   }
 
   Future<void> _accept() async {
-    if (_busy || _resolved) return;
+    if (_busy || _localResolved) return;
     setState(() {
       _busy = true;
-      _resolved = true; // optimistic hide
+      _localResolved = true;
     });
     try {
       await ref
@@ -489,10 +486,10 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
   }
 
   Future<void> _reject() async {
-    if (_busy || _resolved) return;
+    if (_busy || _localResolved) return;
     setState(() {
       _busy = true;
-      _resolved = true; // optimistic hide
+      _localResolved = true;
     });
     try {
       await ref
@@ -509,7 +506,29 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
 
   @override
   Widget build(BuildContext context) {
-    if (_resolved) return const SizedBox.shrink();
+    if (_localResolved) return const SizedBox.shrink();
+
+    // Source of truth: the live follow-request doc at
+    // users/{me}/followRequests/{senderId}. The buttons stay visible as long
+    // as that doc reports `pending`. Anything else the current user does
+    // (sending a counter-request, marking the notification read, etc.) leaves
+    // this doc untouched, so the row keeps its accept/decline affordances.
+    final liveAsync = ref.watch(
+      incomingFollowRequestProvider(widget.item.actorId),
+    );
+    final cachedStatus = (widget.item.status ?? '').trim();
+    final cachedSaysAccepted = cachedStatus == 'accepted';
+    final cachedSaysRejected = cachedStatus == 'rejected';
+    final cachedTreatedAsPending =
+        !cachedSaysAccepted && !cachedSaysRejected;
+
+    final stillPending = liveAsync.when(
+      data: (req) => req?.isPending ?? false,
+      loading: () => cachedTreatedAsPending,
+      error: (_, __) => cachedTreatedAsPending,
+    );
+    if (!stillPending) return const SizedBox.shrink();
+
     return Row(
       children: [
         TextButton(
