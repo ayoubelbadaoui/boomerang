@@ -53,15 +53,31 @@ class ConversationTile extends ConsumerWidget {
     final hasUnread = unread > 0;
     final otherId = otherUser?.uid ?? '';
 
-    final iFollow =
-        otherId.isNotEmpty
-            ? (ref.watch(isFollowingStreamProvider(otherId)).value ?? false)
-            : false;
-    final theyFollowMe =
-        otherId.isNotEmpty
-            ? (ref.watch(isFollowedByProvider(otherId)).value ?? false)
-            : false;
-    final showFollowBack = theyFollowMe && !iFollow;
+    final iFollow = otherId.isNotEmpty
+        ? (ref.watch(isFollowingStreamProvider(otherId)).value ?? false)
+        : false;
+    final theyFollowMe = otherId.isNotEmpty
+        ? (ref.watch(isFollowedByProvider(otherId)).value ?? false)
+        : false;
+    final hasPendingOutgoing = otherId.isNotEmpty
+        ? (ref.watch(outgoingFollowRequestProvider(otherId)).value?.isPending ??
+            false)
+        : false;
+    // Pick the most accurate badge for the current relationship:
+    //   - I sent a request → "Pending" (highest priority so the user knows
+    //     their tap was registered, even if they also follow me).
+    //   - They follow me, I don't follow back → "Follow back".
+    //   - Otherwise → no badge.
+    final String? relationshipBadge;
+    if (iFollow) {
+      relationshipBadge = null;
+    } else if (hasPendingOutgoing) {
+      relationshipBadge = 'Pending';
+    } else if (theyFollowMe) {
+      relationshipBadge = 'Follow back';
+    } else {
+      relationshipBadge = null;
+    }
 
     return InkWell(
       onTap: onTap,
@@ -114,7 +130,7 @@ class ConversationTile extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (showFollowBack) ...[
+                      if (relationshipBadge != null) ...[
                         SizedBox(width: 6.w),
                         Container(
                           padding: EdgeInsets.symmetric(
@@ -126,7 +142,7 @@ class ConversationTile extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(6.r),
                           ),
                           child: Text(
-                            'Follow back',
+                            relationshipBadge,
                             style: theme.textTheme.labelSmall?.copyWith(
                               fontSize: 9.sp,
                               fontWeight: FontWeight.w600,

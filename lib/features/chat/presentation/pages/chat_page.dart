@@ -13,6 +13,7 @@ import 'package:boomerang/features/chat/presentation/widgets/chat_input_field.da
 import 'package:boomerang/features/chat/presentation/widgets/date_separator.dart';
 import 'package:boomerang/features/chat/presentation/widgets/message_actions_sheet.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -448,7 +449,17 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-// ── Follow-back banner ──────────────────────────────────────────────────
+// ── Follow-state banner ─────────────────────────────────────────────────
+//
+// Shows a small bar above the message list whenever the current user is
+// NOT following the other user, with a context-aware action:
+//
+//   * They already follow me        → "Follow back"
+//   * I sent a follow request       → "Pending" (tap to cancel)
+//   * Other account is private      → "Request"
+//   * Otherwise                     → "Follow"
+//
+// Disappears as soon as we're following them (or have been accepted).
 
 class _FollowBackBanner extends ConsumerStatefulWidget {
   const _FollowBackBanner({required this.otherUid});
@@ -460,12 +471,25 @@ class _FollowBackBanner extends ConsumerStatefulWidget {
 
 class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
   bool _loading = false;
+  // Optimistic flag flipped the moment the user taps. The live
+  // `outgoingFollowRequestProvider` catches up shortly after; until then
+  // this prevents the button text from flickering back to "Follow"/"Request".
+  bool _optimisticRequested = false;
 
-  Future<void> _followBack() async {
+  Future<void> _onPressed({required bool requested}) async {
     if (_loading) return;
     setState(() => _loading = true);
     try {
-      await ref.read(followRepoProvider).followOrRequest(widget.otherUid);
+      final repo = ref.read(followRepoProvider);
+      if (requested) {
+        await repo.cancelRequest(widget.otherUid);
+        if (mounted) _optimisticRequested = false;
+      } else {
+        final outcome = await repo.followOrRequest(widget.otherUid);
+        if (mounted) {
+          _optimisticRequested = outcome == FollowOutcome.requested;
+        }
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -475,17 +499,35 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
   Widget build(BuildContext context) {
     final iFollow =
         ref.watch(isFollowingStreamProvider(widget.otherUid)).value ?? false;
+    if (iFollow) return const SizedBox.shrink();
+
     final theyFollowMe =
         ref.watch(isFollowedByProvider(widget.otherUid)).value ?? false;
+    final outgoing =
+        ref.watch(outgoingFollowRequestProvider(widget.otherUid)).value;
+    final requested =
+        _optimisticRequested || (outgoing?.isPending == true);
 
-    if (iFollow || !theyFollowMe) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
     final otherProfile =
         ref.watch(userProfileByIdProvider(widget.otherUid)).value;
+    final isPrivate = otherProfile?.isPrivate ?? false;
     final name =
         otherProfile?.fullName ?? otherProfile?.nickname ?? 'This user';
 
+    final String headline;
+    final String buttonLabel;
+    if (theyFollowMe) {
+      headline = '$name follows you';
+      buttonLabel = requested ? 'Pending' : 'Follow back';
+    } else if (requested) {
+      headline = 'Follow request sent';
+      buttonLabel = 'Pending';
+    } else {
+      headline = isPrivate ? '$name has a private account' : 'Say hi to $name';
+      buttonLabel = isPrivate ? 'Request' : 'Follow';
+    }
+
+    final theme = Theme.of(context);
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
       decoration: BoxDecoration(
@@ -502,7 +544,7 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
           SizedBox(width: 8.w),
           Expanded(
             child: Text(
-              '$name follows you',
+              headline,
               style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -512,27 +554,35 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
           SizedBox(
             height: 32.h,
             child: ElevatedButton(
-              onPressed: _loading ? null : _followBack,
+              onPressed: _loading
+                  ? null
+                  : () => _onPressed(requested: requested),
               style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: requested
+                    ? Colors.white
+                    : theme.colorScheme.primary,
+                foregroundColor: requested
+                    ? Colors.black87
+                    : Colors.white,
+                side: requested
+                    ? const BorderSide(color: Colors.black26)
+                    : BorderSide.none,
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
                 shape: const StadiumBorder(),
                 textStyle: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child:
-                  _loading
-                      ? SizedBox(
-                        width: 14.w,
-                        height: 14.w,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                      : const Text('Follow back'),
+              child: _loading
+                  ? SizedBox(
+                      width: 14.w,
+                      height: 14.w,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: requested ? Colors.black54 : Colors.white,
+                      ),
+                    )
+                  : Text(buttonLabel),
             ),
           ),
         ],
