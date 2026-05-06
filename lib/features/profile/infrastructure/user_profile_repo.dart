@@ -18,6 +18,8 @@ class UserProfileRepo {
     required String email,
     required String phone,
     String? avatarUrl,
+    /// Stored as Firestore `isPrivate`. Defaults to public (`false`) when omitted.
+    bool isPrivate = false,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
@@ -32,6 +34,7 @@ class UserProfileRepo {
       final Map<String, dynamic> data = Map<String, dynamic>.from(existing.data() ?? {});
       data['gender'] = gender;
       data['birthday'] = birthday.toIso8601String();
+      data['isPrivate'] = isPrivate;
       data['fullName'] = safeFullName;
       data['fullNameLower'] = fullNameLower;
       data['email'] = email;

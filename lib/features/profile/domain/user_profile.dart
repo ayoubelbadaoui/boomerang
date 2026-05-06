@@ -47,7 +47,8 @@ class UserProfile {
       email: (data['email'] ?? '') as String,
       phone: (data['phone'] ?? '') as String,
       birthday: _parseBirthday(data['birthday']),
-      isPrivate: (data['isPrivate'] ?? false) as bool,
+      // Public by default: only an explicit `true` means private (null/absent/false → public).
+      isPrivate: data['isPrivate'] == true,
       followersCount: (data['followersCount'] ?? 0) as int,
       followingCount: (data['followingCount'] ?? 0) as int,
       boomerangsCount: (data['boomerangsCount'] ?? 0) as int,

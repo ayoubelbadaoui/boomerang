@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:image_picker/image_picker.dart';
@@ -23,12 +24,14 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   final _profileFormKey = GlobalKey<FormState>();
   int _index = 0;
   String _gender = 'male';
+  /// Firestore `isPrivate`: default public; only explicit `true` in the doc means private.
+  bool _isPrivate = false;
   DateTime _birthday = DateTime(1995, 12, 27);
   final TextEditingController _fullName = TextEditingController();
   final TextEditingController _nickname = TextEditingController();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _phone = TextEditingController();
-  
+
   bool _saving = false;
   bool _lockNickname = false;
   File? _avatarFile;
@@ -58,6 +61,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
       final full = (data['fullName'] ?? '') as String;
       if (!mounted) return;
       setState(() {
+        _isPrivate = data['isPrivate'] == true;
         if (nick.trim().isNotEmpty) {
           _nickname.text = nick;
           _lockNickname = true;
@@ -90,25 +94,26 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text('Age Requirement'),
-        content: const Text(
-          'You must be at least 13 years old to use Boomerang. '
-          'This is required by the Children\'s Online Privacy '
-          'Protection Act (COPPA).\n\n'
-          'If you believe this is an error, please update your '
-          'date of birth.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Text('Age Requirement'),
+            content: const Text(
+              'You must be at least 13 years old to use Boomerang. '
+              'This is required by the Children\'s Online Privacy '
+              'Protection Act (COPPA).\n\n'
+              'If you believe this is an error, please update your '
+              'date of birth.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -168,8 +173,19 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
         email: _email.text.trim(),
         phone: '${_countryCode.dialCode} ${_phone.text.trim()}',
         avatarUrl: avatarUrl,
+        isPrivate: _isPrivate,
       );
       if (!mounted) return;
+
+      // Align `meta/settings.privateAccount` with Firestore `isPrivate` so the
+      // Privacy screen matches (same path as SettingsRepo).
+      final uid = container.read(firebaseAuthProvider).currentUser?.uid;
+      if (uid != null) {
+        await container.read(firestoreProvider).collection('users').doc(uid).collection('meta').doc('settings').set(
+              {'privateAccount': _isPrivate},
+              SetOptions(merge: true),
+            );
+      }
 
       // Invalidate ALL relevant providers and wait for them to confirm
       // the profile is fully visible. This prevents HomeShell / router
@@ -178,11 +194,12 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
       container.invalidate(userProfileExistsProvider);
       container.invalidate(userProfileCompleteProvider);
 
-      final (hasNickname, profileExists, profileComplete) = await (
-        container.read(userHasNicknameProvider.future),
-        container.read(userProfileExistsProvider.future),
-        container.read(userProfileCompleteProvider.future),
-      ).wait;
+      final (hasNickname, profileExists, profileComplete) =
+          await (
+            container.read(userHasNicknameProvider.future),
+            container.read(userProfileExistsProvider.future),
+            container.read(userProfileCompleteProvider.future),
+          ).wait;
       if (!mounted) return;
 
       if (!hasNickname || !profileExists || !profileComplete) {
@@ -273,6 +290,8 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                   lockNickname: _lockNickname,
                   countryCode: _countryCode,
                   onCountryCodeChanged: (c) => setState(() => _countryCode = c),
+                  isPrivate: _isPrivate,
+                  onPrivateChanged: (v) => setState(() => _isPrivate = v),
                 ),
                 const _FingerprintStep(),
               ],
@@ -280,35 +299,36 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 20.h),
-            child: _saving
-                ? const Center(child: CircularProgressIndicator())
-                : _index == 3
+            child:
+                _saving
+                    ? const Center(child: CircularProgressIndicator())
+                    : _index == 3
                     ? SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _saveProfile,
-                          style: ElevatedButton.styleFrom(
-                            shape: const StadiumBorder(),
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16.h),
-                          ),
-                          child: const Text('Retry'),
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _saveProfile,
+                        style: ElevatedButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16.h),
                         ),
-                      )
-                    : SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _next,
-                          style: ElevatedButton.styleFrom(
-                            shape: const StadiumBorder(),
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16.h),
-                          ),
-                          child: const Text('Continue'),
-                        ),
+                        child: const Text('Retry'),
                       ),
+                    )
+                    : SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _next,
+                        style: ElevatedButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16.h),
+                        ),
+                        child: const Text('Continue'),
+                      ),
+                    ),
           ),
         ],
       ),
@@ -325,6 +345,8 @@ class _FillProfileStep extends StatelessWidget {
     required this.phone,
     required this.countryCode,
     required this.onCountryCodeChanged,
+    required this.isPrivate,
+    required this.onPrivateChanged,
     this.onAvatarSelected,
     this.lockNickname = false,
   });
@@ -337,6 +359,8 @@ class _FillProfileStep extends StatelessWidget {
   final bool lockNickname;
   final _CountryCode countryCode;
   final ValueChanged<_CountryCode> onCountryCodeChanged;
+  final bool isPrivate;
+  final ValueChanged<bool> onPrivateChanged;
 
   static String? _required(String? v) =>
       (v == null || v.trim().isEmpty) ? 'This field is required' : null;
@@ -409,7 +433,24 @@ class _FillProfileStep extends StatelessWidget {
                       onCountryCodeChanged,
                     ),
               ),
-              
+              SizedBox(height: 8.h),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Private account',
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  'When private, only followers see your posts. Default is public.',
+                  style: TextStyle(fontSize: 13.sp, color: Colors.black54),
+                ),
+                value: isPrivate,
+                activeThumbColor: Colors.white,
+                onChanged: onPrivateChanged,
+              ),
             ],
           ),
         ),
@@ -463,7 +504,11 @@ class _BirthdayStep extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.red.shade400, size: 18.r),
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.red.shade400,
+                    size: 18.r,
+                  ),
                   SizedBox(width: 8.w),
                   Expanded(
                     child: Text(

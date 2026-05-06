@@ -46,7 +46,7 @@ class AppSettings {
     return AppSettings(
       languageCode: (m['languageCode'] ?? 'en_US') as String,
       darkMode: (m['darkMode'] ?? false) as bool,
-      privateAccount: (m['privateAccount'] ?? false) as bool,
+      privateAccount: m['privateAccount'] == true,
       suggestAccount: (m['suggestAccount'] ?? true) as bool,
       syncContacts: (m['syncContacts'] ?? false) as bool,
       locationServices: (m['locationServices'] ?? false) as bool,
