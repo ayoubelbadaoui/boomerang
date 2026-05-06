@@ -709,6 +709,7 @@ class _MessageList extends StatelessWidget {
         }
 
         return MessageBubble(
+          key: ValueKey(message.id),
           message: message,
           isMine: isMine,
           replyToSenderName: replySenderName,

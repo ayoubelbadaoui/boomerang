@@ -8,6 +8,7 @@ import 'package:boomerang/features/chat/domain/chat_repo.dart';
 import 'package:boomerang/features/chat/domain/conversation_entity.dart';
 import 'package:boomerang/features/chat/infrastructure/firestore_chat_repo.dart';
 import 'package:boomerang/features/chat/application/chat_controller.dart';
+import 'package:boomerang/features/chat/application/voice_message_playback_notifier.dart';
 
 // ── Active conversation (suppresses push while chat is open) ────────────
 
@@ -62,6 +63,13 @@ final chatControllerProvider =
       currentUserId: user?.uid ?? '',
     );
   },
+);
+
+// ── Voice messages (single shared player app-wide) ──────────────────────
+
+final voiceMessagePlaybackProvider = StateNotifierProvider<
+    VoiceMessagePlaybackNotifier, VoiceMessagePlaybackState>(
+  (ref) => VoiceMessagePlaybackNotifier(),
 );
 
 // ── DM permission gate ──────────────────────────────────────────────────

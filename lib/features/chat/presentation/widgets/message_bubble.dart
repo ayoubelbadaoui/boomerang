@@ -587,6 +587,7 @@ class _AudioContent extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           AudioMessagePlayer(
+            key: ValueKey('audio-${message.id}'),
             url: message.text,
             durationMs: message.audioDurationMs ?? 0,
             isMine: isMine,

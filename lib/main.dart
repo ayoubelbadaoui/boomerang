@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:audio_session/audio_session.dart';
+import 'package:boomerang/core/audio/app_audio_session.dart';
 import 'package:boomerang/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -25,17 +25,8 @@ void main() async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 200 * 1024 * 1024;
 
   // Let background music (Spotify, Apple Music, etc.) keep playing.
-  // Videos in this app are muted, so we use ambient/mixWithOthers.
-  final session = await AudioSession.instance;
-  await session.configure(const AudioSessionConfiguration(
-    avAudioSessionCategory: AVAudioSessionCategory.ambient,
-    avAudioSessionMode: AVAudioSessionMode.defaultMode,
-    androidAudioAttributes: AndroidAudioAttributes(
-      contentType: AndroidAudioContentType.movie,
-      usage: AndroidAudioUsage.media,
-    ),
-    androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
-  ));
+  // Videos in this app are muted; voice notes switch to a playback session on demand.
+  await configureAmbientAudioSession();
 
   // Register the background message handler before initializing the app
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);

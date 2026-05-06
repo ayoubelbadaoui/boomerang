@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:boomerang/core/audio/app_audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -387,21 +388,7 @@ class ChatInputFieldState extends State<ChatInputField>
   }
 
   Future<void> _restoreAmbientAudioSession() async {
-    try {
-      final session = await AudioSession.instance;
-      await session.configure(
-        const AudioSessionConfiguration(
-          avAudioSessionCategory: AVAudioSessionCategory.ambient,
-          avAudioSessionMode: AVAudioSessionMode.defaultMode,
-          androidAudioAttributes: AndroidAudioAttributes(
-            contentType: AndroidAudioContentType.movie,
-            usage: AndroidAudioUsage.media,
-          ),
-          androidAudioFocusGainType:
-              AndroidAudioFocusGainType.gainTransientMayDuck,
-        ),
-      );
-    } catch (_) {}
+    await configureAmbientAudioSession();
   }
 
   String _formatTimer(Duration d) {

@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'dart:math';
 
-import 'package:audioplayers/audioplayers.dart';
+import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-class AudioMessagePlayer extends StatefulWidget {
+class AudioMessagePlayer extends ConsumerStatefulWidget {
   const AudioMessagePlayer({
     super.key,
     required this.url,
@@ -21,31 +20,15 @@ class AudioMessagePlayer extends StatefulWidget {
   final String messageId;
 
   @override
-  State<AudioMessagePlayer> createState() => _AudioMessagePlayerState();
+  ConsumerState<AudioMessagePlayer> createState() => _AudioMessagePlayerState();
 }
 
-class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
-  // Player is created lazily on first tap. Eager construction as a field
-  // initializer previously triggered `GlobalAudioScope.ensureInitialized`
-  // on every bubble build, which throws MissingPluginException if the
-  // audioplayers native side isn't reachable (e.g. stale build, or while
-  // the Flutter engine is still attaching plugins). Deferring it makes
-  // listing the chat a read-only operation again.
-  AudioPlayer? _player;
-  final List<StreamSubscription<Object?>> _subs = [];
-
-  bool _playing = false;
-  bool _busy = false;
-  bool _unavailable = false;
-
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
+class _AudioMessagePlayerState extends ConsumerState<AudioMessagePlayer> {
   late final List<double> _bars;
 
   @override
   void initState() {
     super.initState();
-    _duration = Duration(milliseconds: widget.durationMs);
     _bars = _generateBars(widget.messageId);
   }
 
@@ -54,65 +37,17 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
     return List.generate(28, (_) => 0.2 + rng.nextDouble() * 0.8);
   }
 
-  @override
-  void dispose() {
-    for (final s in _subs) {
-      s.cancel();
-    }
-    _subs.clear();
-    _player?.dispose();
-    super.dispose();
-  }
-
-  /// Create the native player on first use so a missing or still-attaching
-  /// plugin can't crash widget construction. Returns null (and flips the
-  /// bubble to an "unavailable" state) if the plugin simply isn't there.
-  Future<AudioPlayer?> _ensurePlayer() async {
-    if (_player != null) return _player;
-    try {
-      final p = AudioPlayer();
-      _subs.add(p.onPositionChanged.listen((pos) {
-        if (mounted) setState(() => _position = pos);
-      }));
-      _subs.add(p.onPlayerStateChanged.listen((s) {
-        if (mounted) setState(() => _playing = s == PlayerState.playing);
-      }));
-      _subs.add(p.onPlayerComplete.listen((_) {
-        if (mounted) setState(() => _position = Duration.zero);
-      }));
-      _player = p;
-      return p;
-    } on MissingPluginException {
-      if (mounted) setState(() => _unavailable = true);
-      return null;
-    } catch (_) {
-      if (mounted) setState(() => _unavailable = true);
-      return null;
-    }
-  }
-
   Future<void> _toggle() async {
-    if (_busy || _unavailable) return;
-    setState(() => _busy = true);
-    try {
-      final p = await _ensurePlayer();
-      if (p == null) {
-        _showUnavailable();
-        return;
-      }
-      if (_playing) {
-        await p.pause();
-      } else {
-        await p.play(UrlSource(widget.url));
-      }
-    } on MissingPluginException {
-      if (mounted) setState(() => _unavailable = true);
+    final playback = ref.read(voiceMessagePlaybackProvider);
+    if (playback.unavailable) {
       _showUnavailable();
-    } catch (_) {
-      // Generic playback error — silent; UI stays in non-playing state.
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      return;
     }
+    await ref.read(voiceMessagePlaybackProvider.notifier).toggle(
+          messageId: widget.messageId,
+          url: widget.url,
+          durationMs: widget.durationMs,
+        );
   }
 
   void _showUnavailable() {
@@ -135,6 +70,17 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final playback = ref.watch(voiceMessagePlaybackProvider);
+    final isActive = playback.activeMessageId == widget.messageId;
+    final playing = isActive && playback.isPlaying;
+    final busy = playback.busyMessageId == widget.messageId;
+    final unavailable = playback.unavailable;
+
+    final duration = Duration(milliseconds: widget.durationMs);
+    final displayDuration =
+        isActive && playback.duration > Duration.zero ? playback.duration : duration;
+    final position = isActive ? playback.position : Duration.zero;
+
     final iconColor = widget.isMine ? Colors.white : Colors.black87;
     final barActiveColor =
         widget.isMine ? Colors.white : Theme.of(context).colorScheme.primary;
@@ -145,15 +91,15 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
         ? Colors.white.withValues(alpha: 0.7)
         : Colors.grey.shade600;
 
-    final progress = _duration.inMilliseconds > 0
-        ? _position.inMilliseconds / _duration.inMilliseconds
+    final progress = displayDuration.inMilliseconds > 0
+        ? position.inMilliseconds / displayDuration.inMilliseconds
         : 0.0;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: _unavailable ? _showUnavailable : _toggle,
+          onTap: unavailable ? _showUnavailable : _toggle,
           child: Container(
             width: 36.w,
             height: 36.w,
@@ -166,7 +112,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
                       .primary
                       .withValues(alpha: 0.1),
             ),
-            child: _busy
+            child: busy
                 ? Padding(
                     padding: EdgeInsets.all(8.w),
                     child: CircularProgressIndicator(
@@ -175,9 +121,9 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
                     ),
                   )
                 : Icon(
-                    _unavailable
+                    unavailable
                         ? Icons.error_outline_rounded
-                        : (_playing
+                        : (playing
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded),
                     color: iconColor,
@@ -197,7 +143,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
                   size: Size(double.infinity, 24.h),
                   painter: _WaveformPainter(
                     bars: _bars,
-                    progress: progress,
+                    progress: progress.clamp(0.0, 1.0),
                     activeColor: barActiveColor,
                     inactiveColor: barInactiveColor,
                   ),
@@ -205,9 +151,9 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
               ),
               SizedBox(height: 2.h),
               Text(
-                _playing
-                    ? _formatDuration(_position)
-                    : _formatDuration(_duration),
+                playing
+                    ? _formatDuration(position)
+                    : _formatDuration(displayDuration),
                 style: TextStyle(fontSize: 10.sp, color: textColor),
               ),
             ],
