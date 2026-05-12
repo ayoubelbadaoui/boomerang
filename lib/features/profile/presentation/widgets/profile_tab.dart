@@ -8,6 +8,7 @@ import 'package:boomerang/features/profile/presentation/widgets/stat.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/settings/settings_page.dart';
 import 'package:boomerang/features/profile/presentation/widgets/saved_boomerangs_grid.dart';
+import 'package:boomerang/core/widgets/profile_loading_skeleton.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
@@ -81,7 +82,10 @@ class ProfileTab extends ConsumerWidget {
         ],
       ),
       body: profile.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading:
+            () => const ProfileLoadingSkeleton(
+              variant: ProfileLoadingVariant.ownProfile,
+            ),
         error: (_, __) => const Center(child: Text('Failed to load profile')),
         data:
             (p) => RefreshIndicator(

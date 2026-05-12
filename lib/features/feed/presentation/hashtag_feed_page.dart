@@ -5,6 +5,9 @@ import 'package:boomerang/features/feed/presentation/boomerang_viewer_page.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_shimmers.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
+import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 
 class HashtagFeedPage extends ConsumerWidget {
   const HashtagFeedPage({super.key, required this.tag});
@@ -50,7 +53,7 @@ class HashtagFeedPage extends ConsumerWidget {
             );
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const HashtagMasonryShimmer();
           }
           final allDocs = snapshot.data!;
           final docs = allDocs.where((d) {
@@ -74,42 +77,37 @@ class HashtagFeedPage extends ConsumerWidget {
           if (docs.isEmpty) {
             return const Center(child: Text('No posts for this hashtag yet'));
           }
-          return MasonryGridView.count(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-            crossAxisCount: 2,
-            mainAxisSpacing: 16.h,
-            crossAxisSpacing: 16.w,
-            itemCount: docs.length,
-            itemBuilder: (context, i) {
-              final id = docs[i].id;
-              final d = docs[i].data();
-              final poster = (d['imageUrl'] ?? '') as String?;
-              final videoUrl = (d['videoUrl'] ?? '') as String?;
-              final aspectRatio = i.isEven ? 9 / 13 : 9 / 10;
-              return InkWell(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => BoomerangViewerPage(id: id, data: d),
-                    ),
-                  );
-                },
-                child: AspectRatio(
-                  aspectRatio: aspectRatio,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18.r),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (poster != null && poster.isNotEmpty)
-                          Image.network(
-                            poster,
-                            fit: BoxFit.cover,
-                            cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
-                          )
-                        else
-                          Container(color: const Color(0xFFEEEEEE)),
-                        if ((poster == null || poster.isEmpty) &&
+          return ShimmerScope(
+            child: MasonryGridView.count(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              crossAxisCount: 2,
+              mainAxisSpacing: 16.h,
+              crossAxisSpacing: 16.w,
+              itemCount: docs.length,
+              itemBuilder: (context, i) {
+                final id = docs[i].id;
+                final d = docs[i].data();
+                final poster = (d['imageUrl'] ?? '') as String?;
+                final videoUrl = (d['videoUrl'] ?? '') as String?;
+                final aspectRatio = i.isEven ? 9 / 13 : 9 / 10;
+                final hasPoster = poster != null && poster.isNotEmpty;
+                return InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BoomerangViewerPage(id: id, data: d),
+                      ),
+                    );
+                  },
+                  child: AspectRatio(
+                    aspectRatio: aspectRatio,
+                    child: BoomerangGridThumbnail(
+                      imageUrl: hasPoster ? poster : null,
+                      borderRadius: BorderRadius.circular(18.r),
+                      cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
+                      phaseShift: i * 0.025,
+                      overlays: [
+                        if (!hasPoster &&
                             (videoUrl != null && videoUrl.isNotEmpty))
                           Center(
                             child: Container(
@@ -140,9 +138,9 @@ class HashtagFeedPage extends ConsumerWidget {
                       ],
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           );
         },
       ),

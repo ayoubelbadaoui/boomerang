@@ -123,6 +123,16 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     if (mounted) _openChat(convId);
   }
 
+  /// Inbox "back to parent" control: [Navigator.canPop] becomes true whenever
+  /// *any* route is stacked above this page (including [ChatPage]), while this
+  /// widget can still rebuild under the shell. Only show the control when this
+  /// route is actually on top so it never appears over an open DM.
+  bool _showInboxOuterBack(BuildContext context) {
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return false;
+    return Navigator.of(context).canPop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -169,7 +179,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 ],
               )
               : AppBar(
-                leading: Navigator.canPop(context) ? const BackButton() : null,
+                leading:
+                    _showInboxOuterBack(context) ? const BackButton() : null,
                 automaticallyImplyLeading: false,
                 title: Text('Messages', style: theme.textTheme.titleLarge),
                 actions: [

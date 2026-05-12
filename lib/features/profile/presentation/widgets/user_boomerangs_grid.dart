@@ -6,6 +6,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:developer' show log;
 import 'package:boomerang/features/profile/presentation/profile_reels_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_shimmers.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
+import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 
 class UserBoomerangsGrid extends ConsumerStatefulWidget {
   const UserBoomerangsGrid({super.key});
@@ -119,7 +122,7 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
   Widget build(BuildContext context) {
     final asyncState = ref.watch(userBoomerangsControllerProvider);
     return asyncState.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ProfilePostsMasonryShimmer(),
       error: (e, st) {
         log(
           'User boomerangs grid error',
@@ -131,61 +134,64 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
       },
       data: (s) {
         if (s.docs.isEmpty && s.isLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return const ProfilePostsMasonryShimmer();
         }
         if (s.docs.isEmpty) {
           return const Center(child: Text('No posts yet'));
         }
         return Column(
           children: [
-            MasonryGridView.count(
-              physics: const NeverScrollableScrollPhysics(),
-              shrinkWrap: true,
-              itemCount: s.docs.length,
-              crossAxisCount: 2,
-              mainAxisSpacing: 12.h,
-              crossAxisSpacing: 12.w,
-              itemBuilder: (context, index) {
-                final doc = s.docs[index];
-                final data = doc.data();
-                final imageUrl = data['imageUrl'] as String?;
-                final videoUrl = data['videoUrl'] as String?;
-                final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
-                return InkWell(
-                  onTap: () {
-                    final items = s.docs
-                        .map((d) => (id: d.id, data: d.data()))
-                        .toList();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ProfileReelsPage(
-                          initialItems: items,
-                          initialIndex: index,
-                          hasMore: s.hasMore,
-                          onLoadMore: () => ref
-                              .read(userBoomerangsControllerProvider.notifier)
-                              .fetchNext(),
+            ShimmerScope(
+              child: MasonryGridView.count(
+                physics: const NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                itemCount: s.docs.length,
+                crossAxisCount: 2,
+                mainAxisSpacing: 12.h,
+                crossAxisSpacing: 12.w,
+                itemBuilder: (context, index) {
+                  final doc = s.docs[index];
+                  final data = doc.data();
+                  final imageUrl = data['imageUrl'] as String?;
+                  final videoUrl = data['videoUrl'] as String?;
+                  final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
+                  return InkWell(
+                    onTap: () {
+                      final items = s.docs
+                          .map((d) => (id: d.id, data: d.data()))
+                          .toList();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ProfileReelsPage(
+                            initialItems: items,
+                            initialIndex: index,
+                            hasMore: s.hasMore,
+                            onLoadMore: () => ref
+                                .read(userBoomerangsControllerProvider.notifier)
+                                .fetchNext(),
+                          ),
                         ),
+                      );
+                    },
+                    onLongPress: () => _confirmDelete(context, ref, doc.id),
+                    child: AspectRatio(
+                      aspectRatio: aspectRatio,
+                      child: _GridTile(
+                        imageUrl: imageUrl,
+                        videoUrl: videoUrl,
+                        phaseShift: index * 0.02,
+                        onMoreTap: () => _showTileOptions(context, ref, doc.id),
                       ),
-                    );
-                  },
-                  onLongPress: () => _confirmDelete(context, ref, doc.id),
-                  child: AspectRatio(
-                    aspectRatio: aspectRatio,
-                    child: _GridTile(
-                      imageUrl: imageUrl,
-                      videoUrl: videoUrl,
-                      onMoreTap: () => _showTileOptions(context, ref, doc.id),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
             SizedBox(height: 8.h),
             if (s.isLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator()),
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 12.h),
+                child: const ProfilePostsMasonryShimmer(itemCount: 2),
               )
             else if (s.hasMore)
               SizedBox(
@@ -224,79 +230,71 @@ class _GridTile extends StatelessWidget {
   const _GridTile({
     required this.imageUrl,
     required this.videoUrl,
+    required this.phaseShift,
     this.onMoreTap,
   });
   final String? imageUrl;
   final String? videoUrl;
+  final double phaseShift;
   final VoidCallback? onMoreTap;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
+    return BoomerangGridThumbnail(
+      imageUrl: imageUrl,
       borderRadius: BorderRadius.circular(12.r),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (imageUrl != null && imageUrl!.isNotEmpty)
-            Image.network(
-              imageUrl!,
-              fit: BoxFit.cover,
-              cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
-              errorBuilder:
-                  (_, __, ___) => Container(color: const Color(0xFFF2F2F2)),
-            )
-          else
-            Container(color: const Color(0xFFF2F2F2)),
-          if (videoUrl != null && videoUrl!.isNotEmpty)
-            Positioned(
-              left: 8.w,
-              bottom: 8.h,
+      cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
+      phaseShift: phaseShift,
+      overlays: [
+        if (videoUrl != null && videoUrl!.isNotEmpty)
+          Positioned(
+            left: 8.w,
+            bottom: 8.h,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.fade(0.55),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.play_circle_filled,
+                    size: 14,
+                    color: Colors.white70,
+                  ),
+                  SizedBox(width: 4.w),
+                  Text(
+                    'Preview',
+                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (onMoreTap != null)
+          Positioned(
+            top: 4.h,
+            right: 4.w,
+            child: GestureDetector(
+              onTap: onMoreTap,
+              behavior: HitTestBehavior.opaque,
               child: Container(
+                padding: EdgeInsets.all(4.r),
                 decoration: BoxDecoration(
-                  color: Colors.black.fade(0.55),
-                  borderRadius: BorderRadius.circular(12.r),
+                  color: Colors.black.fade(0.45),
+                  shape: BoxShape.circle,
                 ),
-                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.play_circle_filled,
-                      size: 14,
-                      color: Colors.white70,
-                    ),
-                    SizedBox(width: 4.w),
-                    Text(
-                      'Preview',
-                      style: TextStyle(color: Colors.white, fontSize: 12.sp),
-                    ),
-                  ],
+                child: Icon(
+                  Icons.more_vert,
+                  color: Colors.white,
+                  size: 18.r,
                 ),
               ),
             ),
-          if (onMoreTap != null)
-            Positioned(
-              top: 4.h,
-              right: 4.w,
-              child: GestureDetector(
-                onTap: onMoreTap,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: EdgeInsets.all(4.r),
-                  decoration: BoxDecoration(
-                    color: Colors.black.fade(0.45),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.more_vert,
-                    color: Colors.white,
-                    size: 18.r,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }

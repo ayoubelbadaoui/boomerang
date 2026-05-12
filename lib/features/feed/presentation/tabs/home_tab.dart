@@ -19,6 +19,8 @@ import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 import 'package:boomerang/features/chat/presentation/widgets/send_post_sheet.dart';
+import 'package:boomerang/core/widgets/boomerang_feed_post_shimmer.dart';
+import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -130,7 +132,20 @@ class _PaginatedBoomerangListState
 
     // Still waiting for following list
     if (!followingAsync.hasValue && _docs.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return ColoredBox(
+        color: InstagramShimmerColors.lightCanvas,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
+          children: [
+            for (var i = 0; i < 3; i++)
+              Padding(
+                padding: EdgeInsets.only(bottom: 24.h),
+                child: const BoomerangFeedPostShimmer(),
+              ),
+          ],
+        ),
+      );
     }
 
     final me = ref.watch(currentUserProfileProvider).value;
@@ -160,15 +175,15 @@ class _PaginatedBoomerangListState
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
         itemCount:
             isLoadingInitial
-                ? 1
+                ? 3
                 : (visibleDocs.length +
                     (_hasMore ? 1 : (visibleDocs.isEmpty ? 1 : 0))),
         separatorBuilder: (_, __) => const SizedBox(),
         itemBuilder: (context, i) {
           if (isLoadingInitial) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
+            return Padding(
+              padding: EdgeInsets.only(bottom: 24.h),
+              child: const BoomerangFeedPostShimmer(),
             );
           }
           if (visibleDocs.isEmpty) {
@@ -191,9 +206,9 @@ class _PaginatedBoomerangListState
             );
           }
           if (i >= visibleDocs.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
+            return Padding(
+              padding: EdgeInsets.symmetric(vertical: 16.h),
+              child: const BoomerangFeedPostShimmer(),
             );
           }
           final d = visibleDocs[i];
@@ -220,7 +235,7 @@ class _PaginatedBoomerangListState
   }
 }
 
-class _BoomerangCard extends ConsumerWidget {
+class _BoomerangCard extends ConsumerStatefulWidget {
   const _BoomerangCard({
     super.key,
     required this.id,
@@ -236,22 +251,33 @@ class _BoomerangCard extends ConsumerWidget {
   final void Function(bool liked, int likes)? onToggleLike;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BoomerangCard> createState() => _BoomerangCardState();
+}
+
+class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
+  bool _mediaReady = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = widget.data;
+    final id = widget.id;
     final handle =
         '@${(data['userName'] ?? 'user').toString().replaceAll(' ', '_').toLowerCase()}';
     final userId = (data['userId'] ?? '') as String;
     final avatarFallback = data['userAvatar'] as String?;
     final image = data['imageUrl'] as String?; // optional poster
     final video = data['videoUrl'] as String?;
-    final likes = (likesOverride ?? data['likes'] ?? 0) as int;
+    final likes = (widget.likesOverride ?? data['likes'] ?? 0) as int;
     final me = ref.read(currentUserProfileProvider).value;
     final likedBy =
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
-    final isLiked = likedOverride ?? (me != null && likedBy.contains(me.uid));
+    final isLiked =
+        widget.likedOverride ?? (me != null && likedBy.contains(me.uid));
     debugPrint(
-      'card build: $id isLiked=$isLiked source=${likedOverride != null ? 'override' : 'firestore'} likes=$likes',
+      'card build: $id isLiked=$isLiked source=${widget.likedOverride != null ? 'override' : 'firestore'} likes=$likes',
     );
-    return Column(
+
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ClipRRect(
@@ -259,7 +285,7 @@ class _BoomerangCard extends ConsumerWidget {
           child: Container(
             color:
                 (image != null && image.isNotEmpty)
-                    ? Colors.black
+                    ? const Color(0xFF1A1A1A)
                     : const Color(0xFFF2F2F2),
             child: Stack(
               children: [
@@ -271,9 +297,19 @@ class _BoomerangCard extends ConsumerWidget {
                     isLiked: isLiked,
                     onToggleLike: (liked) {
                       final nextLikes = liked ? likes + 1 : likes - 1;
-                      onToggleLike?.call(liked, nextLikes);
+                      widget.onToggleLike?.call(liked, nextLikes);
                     },
-                    child: _BoomerangMedia(videoUrl: video, posterUrl: image, postId: id),
+                    child: _BoomerangMedia(
+                      videoUrl: video,
+                      posterUrl: image,
+                      postId: id,
+                      onFullyReady: (ready) {
+                        if (!mounted) return;
+                        if (_mediaReady != ready) {
+                          setState(() => _mediaReady = ready);
+                        }
+                      },
+                    ),
                   ),
                 ),
                 Positioned(
@@ -344,7 +380,7 @@ class _BoomerangCard extends ConsumerWidget {
                       final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
                       if (uid == null) return;
                       final me = ref.read(currentUserProfileProvider).value;
-                      onToggleLike?.call(nextLiked, nextLikes);
+                      widget.onToggleLike?.call(nextLiked, nextLikes);
                       final authUser = ref.read(firebaseAuthProvider).currentUser;
                       await ref
                           .read(boomerangRepoProvider)
@@ -390,6 +426,30 @@ class _BoomerangCard extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ],
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        AnimatedOpacity(
+          opacity: _mediaReady ? 1 : 0,
+          duration: const Duration(milliseconds: 260),
+          child: IgnorePointer(
+            ignoring: !_mediaReady,
+            child: content,
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: _mediaReady,
+            child: AnimatedOpacity(
+              opacity: _mediaReady ? 0 : 1,
+              duration: const Duration(milliseconds: 260),
+              child: const BoomerangFeedPostShimmer(),
+            ),
           ),
         ),
       ],
@@ -860,10 +920,12 @@ class _BoomerangMedia extends StatefulWidget {
     required this.videoUrl,
     required this.posterUrl,
     required this.postId,
+    this.onFullyReady,
   });
   final String? videoUrl;
   final String? posterUrl;
   final String postId;
+  final ValueChanged<bool>? onFullyReady;
 
   @override
   State<_BoomerangMedia> createState() => _BoomerangMediaState();
@@ -872,16 +934,74 @@ class _BoomerangMedia extends StatefulWidget {
 class _BoomerangMediaState extends State<_BoomerangMedia> {
   VideoPlayerController? _controller;
   bool _videoReady = false;
+  bool _videoInitFailed = false;
   bool _visible = false;
   bool _initialized = false;
+  bool _posterResolved = false;
+  /// Once true, keep showing the card while video initializes (no shimmer flash).
+  bool _mediaUnlocked = false;
+  bool _lastEmittedReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _posterResolved =
+        widget.posterUrl == null || widget.posterUrl!.isEmpty;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _emitReadyIfChanged());
+  }
 
   @override
   void didUpdateWidget(covariant _BoomerangMedia oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.videoUrl != oldWidget.videoUrl ||
+        widget.posterUrl != oldWidget.posterUrl ||
+        widget.postId != oldWidget.postId) {
+      _mediaUnlocked = false;
+      _lastEmittedReady = false;
+    }
     if (widget.videoUrl != oldWidget.videoUrl) {
+      _videoInitFailed = false;
       _disposeController();
       if (_visible) _initController();
+      _emitReadyIfChanged();
     }
+    if (widget.posterUrl != oldWidget.posterUrl) {
+      _posterResolved =
+          widget.posterUrl == null || widget.posterUrl!.isEmpty;
+      _emitReadyIfChanged();
+    }
+  }
+
+  bool _computeReady() {
+    final hasVideo = widget.videoUrl != null && widget.videoUrl!.isNotEmpty;
+    final hasPoster = widget.posterUrl != null && widget.posterUrl!.isNotEmpty;
+
+    if (_videoInitFailed) {
+      return !hasPoster || _posterResolved;
+    }
+    if (!hasVideo) {
+      return !hasPoster || _posterResolved;
+    }
+
+    final posterOk = !hasPoster || _posterResolved;
+    if (!posterOk) return false;
+
+    if (!_visible) {
+      _mediaUnlocked = true;
+      return true;
+    }
+    if (_videoReady) {
+      _mediaUnlocked = true;
+      return true;
+    }
+    return _mediaUnlocked;
+  }
+
+  void _emitReadyIfChanged() {
+    final ready = _computeReady();
+    if (ready == _lastEmittedReady) return;
+    _lastEmittedReady = ready;
+    widget.onFullyReady?.call(ready);
   }
 
   void _onVisibilityChanged(VisibilityInfo info) {
@@ -898,6 +1018,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     } else {
       _controller?.pause();
     }
+    _emitReadyIfChanged();
   }
 
   Future<void> _initController() async {
@@ -914,7 +1035,13 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
       await controller.setVolume(0.0);
       if (_visible) await controller.play();
       if (mounted) setState(() => _videoReady = true);
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() => _videoInitFailed = true);
+      }
+    } finally {
+      _emitReadyIfChanged();
+    }
   }
 
   void _disposeController() {
@@ -936,12 +1063,35 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
     Widget posterLayer() {
       if (hasPoster) {
-        final cacheW = (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round();
+        final cacheW =
+            (MediaQuery.sizeOf(context).width *
+                    MediaQuery.devicePixelRatioOf(context))
+                .round();
         return Image.network(
           widget.posterUrl!,
           fit: BoxFit.cover,
           cacheWidth: cacheW,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          frameBuilder: (context, child, frame, wasSyncLoaded) {
+            final done = frame != null || wasSyncLoaded;
+            if (done && !_posterResolved) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() => _posterResolved = true);
+                _emitReadyIfChanged();
+              });
+            }
+            return child;
+          },
+          errorBuilder: (_, __, ___) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (!_posterResolved) {
+                setState(() => _posterResolved = true);
+                _emitReadyIfChanged();
+              }
+            });
+            return const SizedBox.shrink();
+          },
         );
       }
       return Container(

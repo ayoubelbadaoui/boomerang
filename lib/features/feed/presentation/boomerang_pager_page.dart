@@ -1,5 +1,6 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
+import 'package:boomerang/core/widgets/boomerang_pager_shimmer.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
@@ -129,7 +130,9 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         itemCount: _docs.length + (_hasMore ? 1 : 0),
         itemBuilder: (context, i) {
           if (i >= _docs.length) {
-            return const Center(child: CircularProgressIndicator());
+            return BoomerangPagerShimmer(
+              onBack: () => Navigator.of(context).pop(),
+            );
           }
           final it = _docs[i];
           return _PostPage(
@@ -176,6 +179,8 @@ class _PostPageState extends ConsumerState<_PostPage> {
           if (widget.isActive) _controller?.play();
           _controller?.addListener(_onVideoTickForPoster);
           _schedulePosterFallback();
+        }).catchError((Object _) {
+          if (mounted) setState(() {});
         });
     }
   }
@@ -263,10 +268,13 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
 
   bool? _likedOverride;
   int? _likesOverride;
+  bool _posterResolved = false;
 
   @override
   void initState() {
     super.initState();
+    _posterResolved =
+        widget.image == null || widget.image!.isEmpty;
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -274,9 +282,39 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   }
 
   @override
+  void didUpdateWidget(covariant _PostPageWithTicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.image != oldWidget.image) {
+      _posterResolved =
+          widget.image == null || widget.image!.isEmpty;
+    }
+  }
+
+  @override
   void dispose() {
     _anim.dispose();
     super.dispose();
+  }
+
+  bool _isPagerMediaReady() {
+    final videoUrl = widget.data['videoUrl'] as String?;
+    final hasVideo = videoUrl != null && videoUrl.isNotEmpty;
+    final hasPoster = widget.image != null && widget.image!.isNotEmpty;
+    final c = widget.controller;
+
+    if (!hasVideo) {
+      return !hasPoster || _posterResolved;
+    }
+
+    if (c != null && c.value.hasError) {
+      return !hasPoster || _posterResolved;
+    }
+
+    final videoOk = c?.value.isInitialized ?? false;
+    if (!hasPoster) {
+      return videoOk;
+    }
+    return videoOk && _posterResolved;
   }
 
   void _onTap() {
@@ -339,47 +377,82 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
 
   @override
   Widget build(BuildContext context) {
+    final mediaReady = _isPagerMediaReady();
+
     return Stack(
       children: [
         Positioned.fill(
-          child: GestureDetector(
-            onTap: _onTap,
-            onDoubleTap: _onDoubleTap,
-            behavior: HitTestBehavior.opaque,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (widget.controller != null &&
-                    widget.controller!.value.isInitialized)
-                  FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      width: widget.controller!.value.size.width,
-                      height: widget.controller!.value.size.height,
-                      child: VideoPlayer(widget.controller!),
-                    ),
-                  )
-                else
-                  Container(color: Colors.black),
-                if (widget.image != null &&
-                    widget.image!.isNotEmpty &&
-                    widget.showPosterOverlay)
-                  AnimatedOpacity(
-                    opacity: widget.showPosterOverlay ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    child: Image.network(
-                      widget.image!,
-                      fit: BoxFit.cover,
-                      cacheWidth: (MediaQuery.sizeOf(context).width *
-                              MediaQuery.devicePixelRatioOf(context))
-                          .round(),
-                    ),
+          child: AnimatedOpacity(
+            opacity: mediaReady ? 1 : 0,
+            duration: const Duration(milliseconds: 260),
+            child: GestureDetector(
+              onTap: _onTap,
+              onDoubleTap: _onDoubleTap,
+              behavior: HitTestBehavior.opaque,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(
+                    color:
+                        (widget.image != null && widget.image!.isNotEmpty)
+                            ? const Color(0xFF1A1A1A)
+                            : Colors.black,
                   ),
-              ],
+                  if (widget.controller != null &&
+                      widget.controller!.value.isInitialized)
+                    FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: SizedBox(
+                        width: widget.controller!.value.size.width,
+                        height: widget.controller!.value.size.height,
+                        child: VideoPlayer(widget.controller!),
+                      ),
+                    ),
+                  if (widget.image != null &&
+                      widget.image!.isNotEmpty &&
+                      widget.showPosterOverlay)
+                    AnimatedOpacity(
+                      opacity: widget.showPosterOverlay ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Image.network(
+                        widget.image!,
+                        fit: BoxFit.cover,
+                        cacheWidth: (MediaQuery.sizeOf(context).width *
+                                MediaQuery.devicePixelRatioOf(context))
+                            .round(),
+                        frameBuilder: (context, child, frame, wasSyncLoaded) {
+                          final done = frame != null || wasSyncLoaded;
+                          if (done && !_posterResolved) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              setState(() => _posterResolved = true);
+                            });
+                          }
+                          return child;
+                        },
+                        errorBuilder: (_, __, ___) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            if (!_posterResolved) {
+                              setState(() => _posterResolved = true);
+                            }
+                          });
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
+        if (!mediaReady)
+          Positioned.fill(
+            child: BoomerangPagerShimmer(
+              onBack: () => Navigator.of(context).pop(),
+            ),
+          ),
         if (_showHeart)
           Center(
             child: ScaleTransition(
@@ -412,13 +485,20 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
               ),
             ),
           ),
-        BoomerangOverlay(
-          boomerangId: widget.id,
-          data: widget.data,
-          showTopBar: true,
-          likedOverride: _likedOverride,
-          likesOverride: _likesOverride,
-          onToggleLike: _onOverlayToggleLike,
+        AnimatedOpacity(
+          opacity: mediaReady ? 1 : 0,
+          duration: const Duration(milliseconds: 260),
+          child: IgnorePointer(
+            ignoring: !mediaReady,
+            child: BoomerangOverlay(
+              boomerangId: widget.id,
+              data: widget.data,
+              showTopBar: true,
+              likedOverride: _likedOverride,
+              likesOverride: _likesOverride,
+              onToggleLike: _onOverlayToggleLike,
+            ),
+          ),
         ),
       ],
     );

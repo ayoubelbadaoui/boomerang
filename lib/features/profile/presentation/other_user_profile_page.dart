@@ -6,6 +6,7 @@ import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid_for_user.dart';
+import 'package:boomerang/core/widgets/profile_loading_skeleton.dart';
 import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -110,7 +111,10 @@ class OtherUserProfilePage extends ConsumerWidget {
               ],
       ),
       body: asyncProfile.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading:
+            () => const ProfileLoadingSkeleton(
+              variant: ProfileLoadingVariant.otherProfile,
+            ),
         error: (e, _) => Center(child: Text('Failed to load profile: $e')),
         data: (p) {
           if (isBlocked) {

@@ -12,6 +12,9 @@ import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_shimmers.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
+import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 import 'dart:async';
 
 class DiscoverTab extends ConsumerStatefulWidget {
@@ -160,7 +163,7 @@ class _UsersSearchList extends ConsumerWidget {
           .searchUsers(q.startsWith('@') ? q.substring(1) : q),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const DiscoverUsersListShimmer();
         }
         final allDocs = snapshot.data!;
         final docs = allDocs.where((d) {
@@ -242,7 +245,7 @@ class _BmgGrid extends ConsumerWidget {
       stream: hashtagStream,
       builder: (context, hashtagSnap) {
         if (!hashtagSnap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const DiscoverExploreGridShimmer();
         }
         final matches = hashtagSnap.data!.docs
             .map((d) => d.id)
@@ -286,7 +289,7 @@ class _BmgGridContent extends ConsumerWidget {
       stream: stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const DiscoverExploreGridShimmer();
         }
         final allDocs = snapshot.data!;
         final docs = allDocs.where((d) {
@@ -320,112 +323,88 @@ class _BmgGridContent extends ConsumerWidget {
             precacheImages(toWarm, context, concurrency: 4);
           }
         }
-          return MasonryGridView.count(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-          crossAxisCount: 2,
-          mainAxisSpacing: 16.h,
-          crossAxisSpacing: 16.w,
-          itemCount: docs.length,
-          itemBuilder: (context, i) {
-            final d = docs[i].data();
+        return ShimmerScope(
+          child: MasonryGridView.count(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+            crossAxisCount: 2,
+            mainAxisSpacing: 16.h,
+            crossAxisSpacing: 16.w,
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              final d = docs[i].data();
               final id = docs[i].id;
-            final name = (d['userName'] ?? '') as String;
-            final poster = (d['imageUrl'] ?? '') as String;
-            final avatar = (d['userAvatar'] as String?);
-            final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
-            final tileWidth =
-                (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
-            final cacheW =
-                (tileWidth * MediaQuery.of(context).devicePixelRatio).round();
+              final name = (d['userName'] ?? '') as String;
+              final poster = (d['imageUrl'] ?? '') as String;
+              final avatar = (d['userAvatar'] as String?);
+              final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
+              final tileWidth =
+                  (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
+              final cacheW =
+                  (tileWidth * MediaQuery.of(context).devicePixelRatio).round();
 
-            return GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => BoomerangPagerPage(
-                      initialId: id,
-                      initialData: d,
+              return GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => BoomerangPagerPage(
+                            initialId: id,
+                            initialData: d,
+                          ),
                     ),
-                  ),
-                );
-              },
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AspectRatio(
-                    aspectRatio: aspectRatio,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18.r),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (poster.isNotEmpty)
-                            Image(
-                              image: ResizeImage.resizeIfNeeded(
-                                cacheW,
-                                null,
-                                NetworkImage(poster),
-                              ),
-                              fit: BoxFit.cover,
-                              errorBuilder:
-                                  (_, __, ___) => Container(
-                                    color: const Color(0xFFF2F2F2),
-                                  ),
-                            )
-                          else
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Color(0xFFEDEDED), Color(0xFFF7F7F7)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.play_circle_fill,
-                                  color: Colors.black38,
-                                  size: 36,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 8.h),
-                Row(
+                  );
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    LiveAvatar(userId: (d['userId'] ?? '') as String, fallbackUrl: avatar, size: 24.r),
-                    SizedBox(width: 8.w),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => OtherUserProfilePage(
-                                userId: (d['userId'] ?? '') as String,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
+                    AspectRatio(
+                      aspectRatio: aspectRatio,
+                      child: BoomerangGridThumbnail(
+                        imageUrl: poster.isNotEmpty ? poster : null,
+                        borderRadius: BorderRadius.circular(18.r),
+                        cacheWidth: cacheW,
+                        phaseShift: i * 0.025,
+                        usePlainNetwork: false,
                       ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Row(
+                      children: [
+                        LiveAvatar(
+                          userId: (d['userId'] ?? '') as String,
+                          fallbackUrl: avatar,
+                          size: 24.r,
+                        ),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => OtherUserProfilePage(
+                                        userId: (d['userId'] ?? '') as String,
+                                      ),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -452,7 +431,7 @@ class _TagsSearchList extends ConsumerWidget {
       stream: stream,
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const DiscoverHashtagListShimmer();
         }
         // Client-side substring filter + simple relevance ranking:
         // exact match first, then prefix matches, then any-position
