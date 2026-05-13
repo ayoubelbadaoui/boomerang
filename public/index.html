@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <title>heeey bruv</title>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- iPhone / iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="heeey bruv">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#0a0a0a">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      background: #0a0a0a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .greeting {
+      text-align: center;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      animation: pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    .greeting h1 {
+      font-size: clamp(2.5rem, 12vw, 5rem);
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .greeting .wave {
+      font-size: clamp(3rem, 14vw, 6rem);
+      display: block;
+      margin-bottom: 0.3em;
+      animation: wave 2s ease-in-out 0.6s infinite;
+      transform-origin: 70% 80%;
+    }
+
+    @keyframes pop {
+      from {
+        opacity: 0;
+        transform: scale(0.7);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes wave {
+      0%, 100% { transform: rotate(0deg); }
+      20%       { transform: rotate(20deg); }
+      40%       { transform: rotate(-5deg); }
+      60%       { transform: rotate(15deg); }
+      80%       { transform: rotate(-3deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="greeting">
+    <span class="wave">👋</span>
+    <h1>heeey bruv</h1>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
