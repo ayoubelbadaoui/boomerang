@@ -10,6 +10,17 @@ service cloud.firestore {
       return authed() && request.auth.uid == uid;
     }
 
+    // Username -> email login lookup used before authentication.
+    // Single-document get is public so users can sign in with username.
+    // Listing is denied to reduce bulk enumeration.
+    match /login_usernames/{usernameLower} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if authed()
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if authed() && resource.data.uid == request.auth.uid;
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────
     match /users/{uid} {
 

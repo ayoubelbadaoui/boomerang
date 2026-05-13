@@ -15,7 +15,6 @@ class ManageAccountPage extends ConsumerWidget {
   const ManageAccountPage({super.key});
   String _formatDate(DateTime d) =>
       '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
-
   String _truncate(String s, int max) =>
       s.length > max ? '${s.substring(0, max)}...' : s;
 
@@ -26,7 +25,6 @@ class ManageAccountPage extends ConsumerWidget {
         ref.watch(firebaseAuthProvider).currentUser?.email ?? '';
     final displayEmail =
         profile != null && profile.email.isNotEmpty ? profile.email : authEmail;
-    final displayPhone = profile?.phone ?? '';
     final displayBirthday = profile?.birthday;
 
     return Scaffold(
@@ -46,24 +44,6 @@ class ManageAccountPage extends ConsumerWidget {
           Text(
             'Account Information',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18.sp),
-          ),
-          _Item(
-            icon: Icons.phone_outlined,
-            label: 'Phone Number',
-            value: displayPhone.isNotEmpty
-                ? _truncate(displayPhone, 14)
-                : null,
-            onTap: () => _editText(
-              context,
-              ref,
-              'Phone Number',
-              initial: displayPhone,
-              onSubmit: (v) async {
-                await ref
-                    .read(userProfileRepoProvider)
-                    .updateCurrentUserProfile(phone: v.trim());
-              },
-            ),
           ),
           _Item(
             icon: Icons.mail_outline_rounded,

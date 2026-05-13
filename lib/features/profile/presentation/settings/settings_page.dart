@@ -38,7 +38,7 @@ class SettingsPage extends ConsumerWidget {
               _SettingsTile(
                 icon: Icons.person_outline_rounded,
                 title: 'Account',
-                subtitle: 'Profile, email, phone, password',
+                subtitle: 'Profile, email, password',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const ManageAccountPage(),

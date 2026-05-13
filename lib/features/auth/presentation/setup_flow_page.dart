@@ -3,13 +3,17 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
+import 'package:boomerang/features/auth/domain/username_validation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:boomerang/core/utils/avatar_crop.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:developer' as developer;
+
+enum _NicknameAvailability { idle, checking, available, taken, invalid, error }
 
 class SetupFlowPage extends StatefulWidget {
   const SetupFlowPage({super.key});
@@ -30,12 +34,14 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   final TextEditingController _fullName = TextEditingController();
   final TextEditingController _nickname = TextEditingController();
   final TextEditingController _email = TextEditingController();
-  final TextEditingController _phone = TextEditingController();
 
   bool _saving = false;
   bool _lockNickname = false;
   File? _avatarFile;
-  _CountryCode _countryCode = _countryCodes.first;
+  _NicknameAvailability _nicknameAvailability = _NicknameAvailability.idle;
+  String? _nicknameHint;
+  Timer? _nicknameDebounce;
+  int _nicknameCheckVersion = 0;
 
   @override
   void initState() {
@@ -44,7 +50,97 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     final auth = container.read(firebaseAuthProvider);
     final prefill = auth.currentUser?.email ?? '';
     _email.text = prefill;
+    _nickname.addListener(_onNicknameChanged);
     _hydrateFromUserDoc();
+  }
+
+  @override
+  void dispose() {
+    _nicknameDebounce?.cancel();
+    _controller.dispose();
+    _fullName.dispose();
+    _nickname.dispose();
+    _email.dispose();
+    super.dispose();
+  }
+
+  void _onNicknameChanged() {
+    if (_lockNickname) return;
+    _nicknameDebounce?.cancel();
+    final raw = _nickname.text.trim().toLowerCase();
+    final validation = validateUsername(raw);
+    if (!validation.isValid) {
+      setState(() {
+        _nicknameAvailability = _NicknameAvailability.invalid;
+        _nicknameHint = validation.error;
+      });
+      return;
+    }
+    setState(() {
+      _nicknameAvailability = _NicknameAvailability.checking;
+      _nicknameHint = 'Checking availability...';
+    });
+
+    final version = ++_nicknameCheckVersion;
+    _nicknameDebounce = Timer(const Duration(milliseconds: 450), () {
+      _checkNicknameAvailability(raw, version);
+    });
+  }
+
+  Future<void> _checkNicknameAvailability(String nickname, int version) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final uid = container.read(firebaseAuthProvider).currentUser?.uid ?? '';
+    try {
+      final doc = await container
+          .read(firestoreProvider)
+          .collection('login_usernames')
+          .doc(nickname)
+          .get();
+      if (!mounted || version != _nicknameCheckVersion) return;
+      final owner = doc.data()?['uid']?.toString().trim() ?? '';
+      final taken = doc.exists && owner.isNotEmpty && owner != uid;
+      setState(() {
+        _nicknameAvailability =
+            taken
+                ? _NicknameAvailability.taken
+                : _NicknameAvailability.available;
+        _nicknameHint =
+            taken ? 'Username is already taken.' : 'Username is available.';
+      });
+    } catch (_) {
+      if (!mounted || version != _nicknameCheckVersion) return;
+      setState(() {
+        _nicknameAvailability = _NicknameAvailability.error;
+        _nicknameHint = 'Could not verify username right now.';
+      });
+    }
+  }
+
+  String? _nicknameValidator(String? value) {
+    if (_lockNickname) return null;
+    final validation = validateUsername((value ?? '').trim().toLowerCase());
+    if (!validation.isValid) return validation.error;
+    if (_nicknameAvailability == _NicknameAvailability.taken) {
+      return 'Username is already taken.';
+    }
+    if (_nicknameAvailability == _NicknameAvailability.error) {
+      return 'Could not verify username. Please try again.';
+    }
+    if (_nicknameAvailability == _NicknameAvailability.checking) {
+      return 'Checking username availability...';
+    }
+    if (_nicknameAvailability != _NicknameAvailability.available) {
+      return 'Choose an available username.';
+    }
+    return null;
+  }
+
+  bool get _canContinueFromProfileStep {
+    if (_saving) return false;
+    if (_lockNickname) return true;
+    final validation = validateUsername(_nickname.text.trim().toLowerCase());
+    if (!validation.isValid) return false;
+    return _nicknameAvailability == _NicknameAvailability.available;
   }
 
   Future<void> _hydrateFromUserDoc() async {
@@ -65,6 +161,8 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
         if (nick.trim().isNotEmpty) {
           _nickname.text = nick;
           _lockNickname = true;
+          _nicknameAvailability = _NicknameAvailability.available;
+          _nicknameHint = 'Current username';
         }
         if (full.trim().isNotEmpty) {
           _fullName.text = full;
@@ -129,6 +227,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     }
 
     if (_index == 2) {
+      if (!_canContinueFromProfileStep) return;
       if (!_profileFormKey.currentState!.validate()) return;
       // Animate to the congratulations step and save in parallel so the
       // user doesn't stare at a spinner on the profile page.
@@ -171,7 +270,6 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
         fullName: _fullName.text.trim(),
         nickname: _nickname.text.trim(),
         email: _email.text.trim(),
-        phone: '${_countryCode.dialCode} ${_phone.text.trim()}',
         avatarUrl: avatarUrl,
         isPrivate: _isPrivate,
       );
@@ -233,9 +331,10 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
         stackTrace: stackTrace,
       );
       if (!mounted) return;
+      final message = e is StateError ? e.message.toString() : '$e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not finish setup: $e'),
+          content: Text('Could not finish setup: $message'),
           backgroundColor: Colors.red,
         ),
       );
@@ -285,11 +384,11 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                   fullName: _fullName,
                   nickname: _nickname,
                   email: _email,
-                  phone: _phone,
+                  nicknameValidator: _nicknameValidator,
+                  nicknameAvailability: _nicknameAvailability,
+                  nicknameHint: _nicknameHint,
                   onAvatarSelected: (f) => _avatarFile = f,
                   lockNickname: _lockNickname,
-                  countryCode: _countryCode,
-                  onCountryCodeChanged: (c) => setState(() => _countryCode = c),
                   isPrivate: _isPrivate,
                   onPrivateChanged: (v) => setState(() => _isPrivate = v),
                 ),
@@ -319,7 +418,10 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                     : SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _next,
+                        onPressed:
+                            _index == 2 && !_canContinueFromProfileStep
+                                ? null
+                                : _next,
                         style: ElevatedButton.styleFrom(
                           shape: const StadiumBorder(),
                           backgroundColor: Colors.black,
@@ -342,9 +444,9 @@ class _FillProfileStep extends StatelessWidget {
     required this.fullName,
     required this.nickname,
     required this.email,
-    required this.phone,
-    required this.countryCode,
-    required this.onCountryCodeChanged,
+    required this.nicknameValidator,
+    required this.nicknameAvailability,
+    required this.nicknameHint,
     required this.isPrivate,
     required this.onPrivateChanged,
     this.onAvatarSelected,
@@ -354,11 +456,11 @@ class _FillProfileStep extends StatelessWidget {
   final TextEditingController fullName;
   final TextEditingController nickname;
   final TextEditingController email;
-  final TextEditingController phone;
+  final String? Function(String?) nicknameValidator;
+  final _NicknameAvailability nicknameAvailability;
+  final String? nicknameHint;
   final ValueChanged<File?>? onAvatarSelected;
   final bool lockNickname;
-  final _CountryCode countryCode;
-  final ValueChanged<_CountryCode> onCountryCodeChanged;
   final bool isPrivate;
   final ValueChanged<bool> onPrivateChanged;
 
@@ -411,8 +513,51 @@ class _FillProfileStep extends StatelessWidget {
                   : _FormInput(
                     label: 'Nickname',
                     controller: nickname,
-                    validator: _required,
+                    validator: nicknameValidator,
                   ),
+              if (!lockNickname && nicknameHint != null) ...[
+                SizedBox(height: 6.h),
+                Row(
+                  children: [
+                    Icon(
+                      switch (nicknameAvailability) {
+                        _NicknameAvailability.available => Icons.check_circle,
+                        _NicknameAvailability.taken => Icons.cancel,
+                        _NicknameAvailability.checking => Icons.hourglass_top,
+                        _NicknameAvailability.error => Icons.error_outline,
+                        _NicknameAvailability.invalid => Icons.info_outline,
+                        _NicknameAvailability.idle => Icons.info_outline,
+                      },
+                      size: 16,
+                      color: switch (nicknameAvailability) {
+                        _NicknameAvailability.available => Colors.green,
+                        _NicknameAvailability.taken => Colors.red,
+                        _NicknameAvailability.error => Colors.red,
+                        _NicknameAvailability.checking => Colors.black54,
+                        _NicknameAvailability.invalid => Colors.black54,
+                        _NicknameAvailability.idle => Colors.black54,
+                      },
+                    ),
+                    SizedBox(width: 6.w),
+                    Expanded(
+                      child: Text(
+                        nicknameHint!,
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: switch (nicknameAvailability) {
+                            _NicknameAvailability.available => Colors.green,
+                            _NicknameAvailability.taken => Colors.red,
+                            _NicknameAvailability.error => Colors.red,
+                            _NicknameAvailability.checking => Colors.black54,
+                            _NicknameAvailability.invalid => Colors.black54,
+                            _NicknameAvailability.idle => Colors.black54,
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               SizedBox(height: 12.h),
               _FormInput(
                 label: 'Email',
@@ -420,18 +565,6 @@ class _FillProfileStep extends StatelessWidget {
                 validator: _required,
                 suffix: const Icon(Icons.mail_outline_rounded),
                 enabled: false,
-              ),
-              SizedBox(height: 12.h),
-              _PhoneInput(
-                controller: phone,
-                validator: _required,
-                countryCode: countryCode,
-                onCountryCodeTap:
-                    () => _showCountryCodePicker(
-                      context,
-                      countryCode,
-                      onCountryCodeChanged,
-                    ),
               ),
               SizedBox(height: 8.h),
               SwitchListTile(
@@ -923,224 +1056,6 @@ class _FormInput extends StatelessWidget {
         fillColor: const Color(0xFFF6F6F6),
         contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
         suffixIcon: suffix,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16.r),
-          borderSide: BorderSide.none,
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16.r),
-          borderSide: const BorderSide(color: Colors.red),
-        ),
-      ),
-    );
-  }
-}
-
-class _CountryCode {
-  const _CountryCode(this.flag, this.dialCode, this.name);
-  final String flag;
-  final String dialCode;
-  final String name;
-}
-
-const _countryCodes = [
-  _CountryCode('🇺🇸', '+1', 'United States'),
-  _CountryCode('🇬🇧', '+44', 'United Kingdom'),
-  _CountryCode('🇨🇦', '+1', 'Canada'),
-  _CountryCode('🇦🇺', '+61', 'Australia'),
-  _CountryCode('🇮🇳', '+91', 'India'),
-  _CountryCode('🇩🇪', '+49', 'Germany'),
-  _CountryCode('🇫🇷', '+33', 'France'),
-  _CountryCode('🇪🇸', '+34', 'Spain'),
-  _CountryCode('🇮🇹', '+39', 'Italy'),
-  _CountryCode('🇧🇷', '+55', 'Brazil'),
-  _CountryCode('🇲🇽', '+52', 'Mexico'),
-  _CountryCode('🇯🇵', '+81', 'Japan'),
-  _CountryCode('🇰🇷', '+82', 'South Korea'),
-  _CountryCode('🇨🇳', '+86', 'China'),
-  _CountryCode('🇷🇺', '+7', 'Russia'),
-  _CountryCode('🇸🇦', '+966', 'Saudi Arabia'),
-  _CountryCode('🇦🇪', '+971', 'UAE'),
-  _CountryCode('🇪🇬', '+20', 'Egypt'),
-  _CountryCode('🇳🇬', '+234', 'Nigeria'),
-  _CountryCode('🇿🇦', '+27', 'South Africa'),
-  _CountryCode('🇹🇷', '+90', 'Turkey'),
-  _CountryCode('🇵🇰', '+92', 'Pakistan'),
-  _CountryCode('🇧🇩', '+880', 'Bangladesh'),
-  _CountryCode('🇮🇩', '+62', 'Indonesia'),
-  _CountryCode('🇵🇭', '+63', 'Philippines'),
-  _CountryCode('🇹🇭', '+66', 'Thailand'),
-  _CountryCode('🇻🇳', '+84', 'Vietnam'),
-  _CountryCode('🇲🇾', '+60', 'Malaysia'),
-  _CountryCode('🇸🇬', '+65', 'Singapore'),
-  _CountryCode('🇳🇿', '+64', 'New Zealand'),
-  _CountryCode('🇲🇦', '+212', 'Morocco'),
-  _CountryCode('🇩🇿', '+213', 'Algeria'),
-  _CountryCode('🇹🇳', '+216', 'Tunisia'),
-];
-
-void _showCountryCodePicker(
-  BuildContext context,
-  _CountryCode current,
-  ValueChanged<_CountryCode> onChanged,
-) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder:
-        (ctx) => _CountryCodeSheet(
-          current: current,
-          onSelected: (c) {
-            onChanged(c);
-            Navigator.of(ctx).pop();
-          },
-        ),
-  );
-}
-
-class _CountryCodeSheet extends StatefulWidget {
-  const _CountryCodeSheet({required this.current, required this.onSelected});
-  final _CountryCode current;
-  final ValueChanged<_CountryCode> onSelected;
-
-  @override
-  State<_CountryCodeSheet> createState() => _CountryCodeSheetState();
-}
-
-class _CountryCodeSheetState extends State<_CountryCodeSheet> {
-  String _query = '';
-
-  List<_CountryCode> get _filtered =>
-      _query.isEmpty
-          ? _countryCodes
-          : _countryCodes.where((c) {
-            final q = _query.toLowerCase();
-            return c.name.toLowerCase().contains(q) || c.dialCode.contains(q);
-          }).toList();
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      maxChildSize: 0.9,
-      minChildSize: 0.4,
-      expand: false,
-      builder:
-          (context, scrollController) => Column(
-            children: [
-              SizedBox(height: 12.h),
-              Container(
-                width: 40.w,
-                height: 4.h,
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(2.r),
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
-                child: TextField(
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Search country...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: const Color(0xFFF6F6F6),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _filtered.length,
-                  itemBuilder: (context, i) {
-                    final c = _filtered[i];
-                    final selected =
-                        c.dialCode == widget.current.dialCode &&
-                        c.name == widget.current.name;
-                    return ListTile(
-                      leading: Text(c.flag, style: TextStyle(fontSize: 24.sp)),
-                      title: Text(c.name),
-                      trailing: Text(
-                        c.dialCode,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color:
-                              selected
-                                  ? Theme.of(context).primaryColor
-                                  : Colors.black54,
-                        ),
-                      ),
-                      selected: selected,
-                      onTap: () => widget.onSelected(c),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-    );
-  }
-}
-
-class _PhoneInput extends StatelessWidget {
-  const _PhoneInput({
-    required this.controller,
-    required this.validator,
-    required this.countryCode,
-    required this.onCountryCodeTap,
-  });
-  final TextEditingController controller;
-  final String? Function(String?)? validator;
-  final _CountryCode countryCode;
-  final VoidCallback onCountryCodeTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      validator: validator,
-      keyboardType: TextInputType.phone,
-      style: TextStyle(fontSize: 15.sp, color: Colors.black87),
-      decoration: InputDecoration(
-        hintText: 'Phone Number',
-        filled: true,
-        fillColor: const Color(0xFFF6F6F6),
-        contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 18.h),
-        prefixIcon: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onCountryCodeTap,
-          child: Padding(
-            padding: EdgeInsets.only(left: 16.w, right: 12.w),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(countryCode.flag, style: TextStyle(fontSize: 20.sp)),
-                SizedBox(width: 6.w),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 20.r,
-                  color: Colors.black54,
-                ),
-              ],
-            ),
-          ),
-        ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-        prefixText: '${countryCode.dialCode} ',
-        prefixStyle: TextStyle(
-          fontSize: 15.sp,
-          fontWeight: FontWeight.w500,
-          color: Colors.black87,
-        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16.r),
           borderSide: BorderSide.none,

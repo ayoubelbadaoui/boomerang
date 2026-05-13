@@ -7,6 +7,7 @@ class UserProfile {
     this.bio = '',
     this.email = '',
     this.phone = '',
+    this.phoneVerified = false,
     this.birthday,
     this.isPrivate = false,
     this.followersCount = 0,
@@ -20,7 +21,10 @@ class UserProfile {
   final String? avatarUrl;
   final String bio;
   final String email;
+  /// Deprecated auth-era field kept for backward-compatible reads only.
   final String phone;
+  /// Deprecated auth-era field kept for backward-compatible reads only.
+  final bool phoneVerified;
   final DateTime? birthday;
   final bool isPrivate;
   final int followersCount;
@@ -46,6 +50,7 @@ class UserProfile {
       bio: (data['bio'] ?? '') as String,
       email: (data['email'] ?? '') as String,
       phone: (data['phone'] ?? '') as String,
+      phoneVerified: data['phoneVerified'] == true,
       birthday: _parseBirthday(data['birthday']),
       // Public by default: only an explicit `true` means private (null/absent/false → public).
       isPrivate: data['isPrivate'] == true,

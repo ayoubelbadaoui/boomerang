@@ -16,7 +16,6 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
   final _fullName = TextEditingController();
   final _nickname = TextEditingController();
   final _email = TextEditingController();
-  final _phone = TextEditingController();
   final _address = TextEditingController();
 
   @override
@@ -24,7 +23,6 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
     _fullName.dispose();
     _nickname.dispose();
     _email.dispose();
-    _phone.dispose();
     _address.dispose();
     super.dispose();
   }
@@ -75,12 +73,6 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                 keyboardType: TextInputType.emailAddress,
               ),
               SizedBox(height: 12.h),
-              InputFilled(
-                controller: _phone,
-                hint: 'Phone Number',
-                icon: Icons.phone,
-                keyboardType: TextInputType.phone,
-              ),
               // SizedBox(height: 12.h),
               // InputFilled(
               //   controller: _address,

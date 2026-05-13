@@ -124,10 +124,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 SizedBox(height: 32.h),
                 InputFilled(
                   controller: _email,
-                  hint: 'Email',
+                  hint: 'Email or username',
                   icon: Icons.email_rounded,
                   keyboardType: TextInputType.emailAddress,
-                  validator: Validators.email,
+                  validator: Validators.emailOrUsername,
                 ),
                 SizedBox(height: 16.h),
                 InputFilled(
@@ -189,7 +189,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     await ref
                         .read(authControllerProvider.notifier)
                         .login(
-                          _email.text,
+                          _email.text.trim(),
                           _password.text,
                           previousAccount: prevSession,
                         );

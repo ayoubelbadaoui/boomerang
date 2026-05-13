@@ -26,6 +26,8 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   final _confirmPassword = TextEditingController();
   bool _acceptedTerms = false;
   bool _acceptedPrivacy = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
@@ -89,7 +91,17 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   controller: _password,
                   hint: 'Password',
                   icon: Icons.lock_rounded,
-                  obscure: true,
+                  obscure: _obscurePassword,
+                  suffix: IconButton(
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                  ),
                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: 16.h),
@@ -97,7 +109,19 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   controller: _confirmPassword,
                   hint: 'Confirm Password',
                   icon: Icons.lock_rounded,
-                  obscure: true,
+                  obscure: _obscureConfirmPassword,
+                  suffix: IconButton(
+                    onPressed: () {
+                      setState(
+                        () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                      );
+                    },
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                  ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
                     if (v != _password.text) return 'Passwords do not match';

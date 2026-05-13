@@ -21,6 +21,8 @@ class AuthErrorMapper {
           return 'Too many attempts. Please try again later.';
         case 'operation-not-allowed':
           return 'This sign-in method is not enabled.';
+        case 'requires-recent-login':
+          return 'For security, sign in again with your password, then retry.';
         default:
           return 'Authentication failed. Please try again.';
       }
@@ -28,4 +30,3 @@ class AuthErrorMapper {
     return 'Something went wrong. Please try again.';
   }
 }
-

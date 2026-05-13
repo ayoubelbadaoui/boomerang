@@ -19,14 +19,14 @@ class AuthController extends StateNotifier<AuthState> {
   /// persisted to storage first so it isn't lost when signIn replaces
   /// the Firebase session.
   Future<void> login(
-    String email,
+    String emailOrUsername,
     String password, {
     UserSession? previousAccount,
   }) async {
     try {
       state = const AuthState(loading: true);
 
-      dev.log('[multi-account] login START for $email');
+      dev.log('[multi-account] login START for $emailOrUsername');
 
       if (previousAccount != null) {
         dev.log(
@@ -36,13 +36,18 @@ class AuthController extends StateNotifier<AuthState> {
         await _accountManager.addAccount(previousAccount);
       }
 
-      final user = await _repo.signIn(email, password);
+      final user = await _repo.signIn(emailOrUsername, password);
       dev.log('[multi-account] login: signIn OK uid=${user.uid}');
+
+      final resolvedEmail = user.email?.trim() ?? '';
+      if (resolvedEmail.isEmpty) {
+        throw StateError('Authenticated account is missing an email.');
+      }
 
       await _accountManager.addAccount(
         UserSession(
           uid: user.uid,
-          email: user.email ?? email,
+          email: resolvedEmail,
           displayName: user.name ?? '',
           lastLogin: DateTime.now(),
         ),

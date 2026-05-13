@@ -9,6 +9,94 @@ class UserProfileRepo {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final FirebaseStorage _storage;
+  CollectionReference<Map<String, dynamic>> get _loginAliases =>
+      _firestore.collection('login_usernames');
+
+  Set<String> _aliasesFromData(Map<String, dynamic>? data) {
+    if (data == null) return const <String>{};
+    final values = <String>{
+      (data['nicknameLower'] ?? '').toString().trim().toLowerCase(),
+      (data['usernameLower'] ?? '').toString().trim().toLowerCase(),
+    };
+    values.removeWhere((alias) => alias.isEmpty);
+    return values;
+  }
+
+  Future<void> _syncLoginAliases({
+    required String uid,
+    required String email,
+    required Set<String> aliases,
+    Set<String> previousAliases = const <String>{},
+  }) async {
+    final safeEmail = email.trim();
+    if (safeEmail.isEmpty || aliases.isEmpty) return;
+    final safeAliases = aliases
+        .map((a) => a.trim().toLowerCase())
+        .where((a) => a.isNotEmpty)
+        .toSet();
+    if (safeAliases.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final alias in safeAliases) {
+      batch.set(_loginAliases.doc(alias), {
+        'uid': uid,
+        'email': safeEmail,
+        'alias': alias,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    for (final oldAlias in previousAliases) {
+      if (!safeAliases.contains(oldAlias)) {
+        batch.delete(_loginAliases.doc(oldAlias));
+      }
+    }
+    await batch.commit();
+  }
+
+  Future<bool> _isAliasAvailable({
+    required String uid,
+    required String alias,
+  }) async {
+    final doc = await _loginAliases.doc(alias).get();
+    if (!doc.exists) return true;
+    final owner = doc.data()?['uid']?.toString().trim() ?? '';
+    return owner.isEmpty || owner == uid;
+  }
+
+  Future<void> _ensureAliasesAvailable({
+    required String uid,
+    required Set<String> aliases,
+  }) async {
+    for (final alias in aliases) {
+      final available = await _isAliasAvailable(uid: uid, alias: alias);
+      if (!available) {
+        throw StateError('Username "$alias" is already taken. Please choose another one.');
+      }
+    }
+  }
+
+  Future<String> _pickAvailableAlias({
+    required String uid,
+    required String preferred,
+  }) async {
+    var candidate = _sanitizeNicknameForRules(preferred, uid);
+    if (await _isAliasAvailable(uid: uid, alias: candidate)) {
+      return candidate;
+    }
+
+    final uidTail = uid.substring(0, uid.length >= 4 ? 4 : uid.length);
+    for (var i = 1; i <= 100; i++) {
+      final suffix = i == 1 ? uidTail : '$uidTail$i';
+      final maxBaseLen = 20 - (suffix.length + 1);
+      final end = maxBaseLen.clamp(3, candidate.length).toInt();
+      final base = candidate.substring(0, end);
+      final retry = _sanitizeNicknameForRules('${base}_$suffix', uid);
+      if (await _isAliasAvailable(uid: uid, alias: retry)) {
+        return retry;
+      }
+    }
+    throw StateError('Could not allocate an available username. Please try another nickname.');
+  }
 
   Future<void> upsertCurrentUserProfile({
     required String gender,
@@ -16,7 +104,6 @@ class UserProfileRepo {
     required String fullName,
     required String nickname,
     required String email,
-    required String phone,
     String? avatarUrl,
     /// Stored as Firestore `isPrivate`. Defaults to public (`false`) when omitted.
     bool isPrivate = false,
@@ -31,14 +118,15 @@ class UserProfileRepo {
     final ref = _firestore.collection('users').doc(uid);
     try {
       final existing = await ref.get();
-      final Map<String, dynamic> data = Map<String, dynamic>.from(existing.data() ?? {});
+      final existingData = Map<String, dynamic>.from(existing.data() ?? {});
+      final previousAliases = _aliasesFromData(existingData);
+      final Map<String, dynamic> data = Map<String, dynamic>.from(existingData);
       data['gender'] = gender;
       data['birthday'] = birthday.toIso8601String();
       data['isPrivate'] = isPrivate;
       data['fullName'] = safeFullName;
       data['fullNameLower'] = fullNameLower;
       data['email'] = email;
-      data['phone'] = phone;
       if (avatarUrl != null) data['avatarUrl'] = avatarUrl;
       data['updatedAt'] = FieldValue.serverTimestamp();
       data['createdAt'] = data['createdAt'] ?? FieldValue.serverTimestamp();
@@ -59,7 +147,17 @@ class UserProfileRepo {
         }
       }
 
+      await _ensureAliasesAvailable(
+        uid: uid,
+        aliases: _aliasesFromData(data),
+      );
       await ref.set(data, SetOptions(merge: true));
+      await _syncLoginAliases(
+        uid: uid,
+        email: email,
+        aliases: _aliasesFromData(data),
+        previousAliases: previousAliases,
+      );
     } catch (e, stackTrace) {
       developer.log(
         'UserProfileRepo.upsertCurrentUserProfile failed (users/$uid)',
@@ -119,6 +217,7 @@ class UserProfileRepo {
     nickname = nickname.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._]'), '_');
     if (nickname.length < 3) nickname = 'user_${user.uid.substring(0, 6)}';
     if (nickname.length > 20) nickname = nickname.substring(0, 20);
+    nickname = await _pickAvailableAlias(uid: user.uid, preferred: nickname);
 
     try {
       await _firestore.collection('users').doc(user.uid).set({
@@ -127,12 +226,15 @@ class UserProfileRepo {
         'fullNameLower': displayName.toLowerCase(),
         'nicknameLower': nickname,
         'email': email,
-        if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-          'phone': user.phoneNumber,
         if (user.photoURL != null) 'avatarUrl': user.photoURL,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+      await _syncLoginAliases(
+        uid: user.uid,
+        email: email,
+        aliases: <String>{nickname},
+      );
     } catch (e, stackTrace) {
       developer.log(
         'UserProfileRepo.ensureBasicProfileIfMissing failed (users/${user.uid})',
@@ -151,28 +253,59 @@ class UserProfileRepo {
     String? avatarUrl,
     String? email,
     String? phone,
+    bool? phoneVerified,
     String? bio,
     DateTime? birthday,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
+    Map<String, dynamic>? existingData;
+    String? sanitizedNickname;
+    if (nickname != null || email != null) {
+      final existing = await _firestore.collection('users').doc(uid).get();
+      existingData = existing.data();
+    }
     final Map<String, dynamic> data = {
       if (fullName != null) 'fullName': fullName,
       if (fullName != null) 'fullNameLower': fullName.toLowerCase(),
-      if (nickname != null) 'nickname': nickname,
-      if (nickname != null) 'nicknameLower': nickname.toLowerCase(),
       if (avatarUrl != null) 'avatarUrl': avatarUrl,
-      if (email != null) 'email': email,
+      if (email != null) 'email': email.trim(),
       if (phone != null) 'phone': phone,
+      if (phoneVerified != null) 'phoneVerified': phoneVerified,
       if (bio != null) 'bio': bio,
       if (birthday != null) 'birthday': birthday.toIso8601String(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
+    if (nickname != null) {
+      sanitizedNickname = _sanitizeNicknameForRules(nickname, uid);
+      await _ensureAliasesAvailable(
+        uid: uid,
+        aliases: {sanitizedNickname},
+      );
+      data['nickname'] = sanitizedNickname;
+      data['nicknameLower'] = sanitizedNickname;
+    }
     if (data.length == 1) return; // only updatedAt, nothing to do
     await _firestore
         .collection('users')
         .doc(uid)
         .set(data, SetOptions(merge: true));
+
+    if (existingData != null) {
+      final previousAliases = _aliasesFromData(existingData);
+      final nextAliases = _aliasesFromData({
+        ...existingData,
+        if (sanitizedNickname != null) 'nicknameLower': sanitizedNickname,
+      });
+      final effectiveEmail =
+          (data['email'] ?? existingData['email'] ?? '').toString().trim();
+      await _syncLoginAliases(
+        uid: uid,
+        email: effectiveEmail,
+        aliases: nextAliases,
+        previousAliases: previousAliases,
+      );
+    }
   }
 
   Future<void> deleteAccount() async {
@@ -199,6 +332,15 @@ class UserProfileRepo {
             .doc('settings')
             .delete();
       } catch (_) {}
+      // Delete user profile document
+      final profile = await _firestore.collection('users').doc(uid).get();
+      final aliases = _aliasesFromData(profile.data());
+      final batch = _firestore.batch();
+      for (final alias in aliases) {
+        batch.delete(_loginAliases.doc(alias));
+      }
+      await batch.commit();
+
       // Delete user profile document
       await _firestore.collection('users').doc(uid).delete();
     } catch (_) {

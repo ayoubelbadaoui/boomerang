@@ -38,7 +38,6 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     String? fullName,
     String? nickname,
     String? avatarUrl,
-    String? phone,
     String? bio,
   }) async {
     final repo = ref.read(userProfileRepoProvider);
@@ -46,7 +45,6 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
       fullName: fullName,
       nickname: nickname,
       avatarUrl: avatarUrl,
-      phone: phone,
       bio: bio,
     );
 

@@ -43,7 +43,8 @@ final authStateProvider = StreamProvider<User?>((ref) {
 
 final authRepoProvider = Provider<AuthRepo>((ref) {
   final auth = ref.watch(firebaseAuthProvider);
-  return FirebaseAuthRepo(auth);
+  final firestore = ref.watch(firestoreProvider);
+  return FirebaseAuthRepo(auth, firestore);
 });
 
 final sessionStorageProvider = Provider<SessionStorage>(
@@ -87,7 +88,7 @@ final userProfileExistsProvider = FutureProvider<bool>((ref) async {
 });
 
 /// Checks whether the user profile is fully completed with required fields
-/// gender, birthday, and phone under `users/{uid}`.
+/// under `users/{uid}`.
 final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
   // Track auth state changes so this provider refreshes on sign-in/out
   final authState = ref.watch(authStateProvider);
@@ -98,9 +99,7 @@ final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
   if (!doc.exists) return false;
   final data = doc.data();
   if (data == null) return false;
-  return (data['gender'] != null &&
-      data['birthday'] != null &&
-      data['phone'] != null);
+  return data['gender'] != null && data['birthday'] != null;
 });
 
 /// Does the current user have a valid nickname persisted?
