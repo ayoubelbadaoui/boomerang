@@ -18,20 +18,33 @@ void main() {
     expect(decision, FollowDecision.createRequest);
   });
 
-  test('accept from inbox transitions pending -> accepted', () {
-    final next = nextRequestStatus(
-      FollowRequestStatus.pending,
-      FollowRequestAction.accept,
+  test('approve transitions requested -> approved', () {
+    final next = nextFollowState(
+      current: FollowState.requested,
+      transition: FollowTransition.approve,
     );
-    expect(next, FollowRequestStatus.accepted);
+    expect(next, FollowState.approved);
   });
 
-  test('reject flow transitions pending -> rejected', () {
-    final next = nextRequestStatus(
-      FollowRequestStatus.pending,
-      FollowRequestAction.reject,
+  test('reject transitions requested -> removed', () {
+    final next = nextFollowState(
+      current: FollowState.requested,
+      transition: FollowTransition.reject,
     );
-    expect(next, FollowRequestStatus.rejected);
+    expect(next, FollowState.removed);
+  });
+
+  test('block always wins and unblock returns to none', () {
+    final blocked = nextFollowState(
+      current: FollowState.approved,
+      transition: FollowTransition.block,
+    );
+    final unblocked = nextFollowState(
+      current: blocked,
+      transition: FollowTransition.unblock,
+    );
+    expect(blocked, FollowState.blocked);
+    expect(unblocked, FollowState.none);
   });
 
   test('privacy toggle to public auto-accepts pending', () {

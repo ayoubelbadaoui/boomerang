@@ -12,8 +12,8 @@ import 'package:boomerang/features/chat/presentation/widgets/message_bubble.dart
 import 'package:boomerang/features/chat/presentation/widgets/chat_input_field.dart';
 import 'package:boomerang/features/chat/presentation/widgets/date_separator.dart';
 import 'package:boomerang/features/chat/presentation/widgets/message_actions_sheet.dart';
+import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
-import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -470,43 +470,26 @@ class _FollowBackBanner extends ConsumerStatefulWidget {
 }
 
 class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
-  bool _loading = false;
-  // Optimistic flag flipped the moment the user taps. The live
-  // `outgoingFollowRequestProvider` catches up shortly after; until then
-  // this prevents the button text from flickering back to "Follow"/"Request".
-  bool _optimisticRequested = false;
-
-  Future<void> _onPressed({required bool requested}) async {
-    if (_loading) return;
-    setState(() => _loading = true);
-    try {
-      final repo = ref.read(followRepoProvider);
-      if (requested) {
-        await repo.cancelRequest(widget.otherUid);
-        if (mounted) _optimisticRequested = false;
-      } else {
-        final outcome = await repo.followOrRequest(widget.otherUid);
-        if (mounted) {
-          _optimisticRequested = outcome == FollowOutcome.requested;
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  Future<void> _onPressed({
+    required FollowState currentState,
+    required bool targetIsPrivate,
+  }) async {
+    await ref.read(followFlowControllerProvider.notifier).toggleRelationship(
+          targetUserId: widget.otherUid,
+          targetIsPrivate: targetIsPrivate,
+          currentState: currentState,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final iFollow =
-        ref.watch(isFollowingStreamProvider(widget.otherUid)).value ?? false;
-    if (iFollow) return const SizedBox.shrink();
+    final state = ref.watch(followStateProvider(widget.otherUid));
+    if (state == FollowState.approved) return const SizedBox.shrink();
+    final loading = ref.watch(isFollowActionInFlightProvider(widget.otherUid));
 
     final theyFollowMe =
         ref.watch(isFollowedByProvider(widget.otherUid)).value ?? false;
-    final outgoing =
-        ref.watch(outgoingFollowRequestProvider(widget.otherUid)).value;
-    final requested =
-        _optimisticRequested || (outgoing?.isPending == true);
+    final requested = state == FollowState.requested;
 
     final otherProfile =
         ref.watch(userProfileByIdProvider(widget.otherUid)).value;
@@ -518,13 +501,13 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
     final String buttonLabel;
     if (theyFollowMe) {
       headline = '$name follows you';
-      buttonLabel = requested ? 'Pending' : 'Follow back';
+      buttonLabel = requested ? 'Requested' : 'Follow';
     } else if (requested) {
       headline = 'Follow request sent';
-      buttonLabel = 'Pending';
+      buttonLabel = 'Requested';
     } else {
       headline = isPrivate ? '$name has a private account' : 'Say hi to $name';
-      buttonLabel = isPrivate ? 'Request' : 'Follow';
+      buttonLabel = 'Follow';
     }
 
     final theme = Theme.of(context);
@@ -554,9 +537,12 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
           SizedBox(
             height: 32.h,
             child: ElevatedButton(
-              onPressed: _loading
+              onPressed: loading
                   ? null
-                  : () => _onPressed(requested: requested),
+                  : () => _onPressed(
+                        currentState: state,
+                        targetIsPrivate: isPrivate,
+                      ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: requested
                     ? Colors.white
@@ -573,7 +559,7 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child: _loading
+              child: loading
                   ? SizedBox(
                       width: 14.w,
                       height: 14.w,

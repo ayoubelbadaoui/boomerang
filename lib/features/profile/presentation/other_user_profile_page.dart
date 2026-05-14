@@ -4,6 +4,7 @@ import 'package:boomerang/features/moderation/application/moderation_providers.d
 import 'package:boomerang/features/moderation/presentation/widgets/block_confirmation_dialog.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid_for_user.dart';
 import 'package:boomerang/core/widgets/profile_loading_skeleton.dart';
@@ -12,7 +13,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
-import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 
 class OtherUserProfilePage extends ConsumerWidget {
   const OtherUserProfilePage({super.key, required this.userId});
@@ -458,34 +458,6 @@ class _FollowButton extends ConsumerStatefulWidget {
 }
 
 class _FollowButtonState extends ConsumerState<_FollowButton> {
-  bool _loading = false;
-  bool _optimisticRequested = false;
-
-  Future<void> _toggleFollow({
-    required bool isFollowing,
-    required bool requested,
-  }) async {
-    if (_loading) return;
-    setState(() => _loading = true);
-    final repo = ref.read(followRepoProvider);
-    try {
-      if (isFollowing) {
-        await repo.unfollow(widget.userId);
-        if (mounted) _optimisticRequested = false;
-      } else if (requested) {
-        await repo.cancelRequest(widget.userId);
-        if (mounted) _optimisticRequested = false;
-      } else {
-        final outcome = await repo.followOrRequest(widget.userId);
-        if (mounted) {
-          _optimisticRequested = outcome == FollowOutcome.requested;
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final blockedSet =
@@ -493,43 +465,38 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     final iBlockedThem = blockedSet.contains(widget.userId);
     if (iBlockedThem) return const SizedBox.shrink();
 
-    final isFollowing =
-        ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false;
-    final outgoing =
-        ref.watch(outgoingFollowRequestProvider(widget.userId)).value;
-    final requested = _optimisticRequested || (outgoing?.isPending == true);
-    final theyFollowMe =
-        ref.watch(isFollowedByProvider(widget.userId)).value ?? false;
-
-    final label = isFollowing
-        ? 'Following'
-        : requested
-            ? 'Pending'
-            : theyFollowMe
-                ? 'Follow back'
-                : (widget.isPrivate ? 'Request' : 'Follow');
-    final onPressed = _loading
+    final state = ref.watch(followStateProvider(widget.userId));
+    final loading = ref.watch(isFollowActionInFlightProvider(widget.userId));
+    final onPressed = loading
         ? null
-        : () => _toggleFollow(isFollowing: isFollowing, requested: requested);
+        : () => ref.read(followFlowControllerProvider.notifier).toggleRelationship(
+              targetUserId: widget.userId,
+              targetIsPrivate: widget.isPrivate,
+              currentState: state,
+            );
 
     return OutlinedButton.icon(
       onPressed: onPressed,
-      icon: _loading
+      icon: loading
           ? SizedBox(
               width: 16.r,
               height: 16.r,
               child: const CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(isFollowing ? Icons.check : Icons.person_add_alt_1),
-      label: Text(label),
+          : Icon(state == FollowState.approved
+              ? Icons.check
+              : Icons.person_add_alt_1),
+      label: Text(followButtonLabelForState(state)),
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: Colors.black, width: 1),
         padding: EdgeInsets.symmetric(vertical: 14.h),
         shape: StadiumBorder(
           side: BorderSide(color: Colors.black, width: 1.w),
         ),
-        backgroundColor: isFollowing ? Colors.white : Colors.black,
-        foregroundColor: isFollowing ? Colors.black : Colors.white,
+        backgroundColor:
+            state == FollowState.approved ? Colors.white : Colors.black,
+        foregroundColor:
+            state == FollowState.approved ? Colors.black : Colors.white,
         disabledForegroundColor: Colors.black45,
         disabledBackgroundColor: Colors.grey.shade200,
       ),
@@ -628,34 +595,21 @@ class _IncomingRequestBanner extends ConsumerStatefulWidget {
 
 class _IncomingRequestBannerState
     extends ConsumerState<_IncomingRequestBanner> {
-  bool _busy = false;
-
   Future<void> _accept() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(followRepoProvider)
-          .acceptRequest(senderId: widget.userId);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await ref.read(followFlowControllerProvider.notifier).approveIncomingRequest(
+          senderId: widget.userId,
+        );
   }
 
   Future<void> _reject() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(followRepoProvider)
-          .rejectRequest(senderId: widget.userId);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await ref.read(followFlowControllerProvider.notifier).rejectIncomingRequest(
+          senderId: widget.userId,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
+    final busy = ref.watch(isFollowActionInFlightProvider(widget.userId));
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(12.w),
@@ -678,7 +632,7 @@ class _IncomingRequestBannerState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _busy ? null : _reject,
+                  onPressed: busy ? null : _reject,
                   style: OutlinedButton.styleFrom(
                     padding: EdgeInsets.symmetric(vertical: 12.h),
                     shape: RoundedRectangleBorder(
@@ -692,7 +646,7 @@ class _IncomingRequestBannerState
               SizedBox(width: 8.w),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _busy ? null : _accept,
+                  onPressed: busy ? null : _accept,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
@@ -701,7 +655,7 @@ class _IncomingRequestBannerState
                       borderRadius: BorderRadius.circular(24.r),
                     ),
                   ),
-                  child: _busy
+                  child: busy
                       ? SizedBox(
                           width: 16.r,
                           height: 16.r,

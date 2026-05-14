@@ -1,5 +1,6 @@
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -396,21 +397,21 @@ class _FollowBackButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (item.actorId.isEmpty) return const SizedBox.shrink();
 
-    final isFollowingAsync = ref.watch(isFollowingStreamProvider(item.actorId));
-    final isFollowing = isFollowingAsync.value ?? false;
-    final label =
-        isFollowing ? 'Unfollow' : (item.actionLabel ?? 'Follow Back');
+    final state = ref.watch(followStateProvider(item.actorId));
+    final loading = ref.watch(isFollowActionInFlightProvider(item.actorId));
+    final targetIsPrivate =
+        ref.watch(userProfileByIdProvider(item.actorId)).value?.isPrivate ?? false;
+    final label = followButtonLabelForState(state);
 
     return _FollowButton(
       label: label,
-      onPressed: () async {
-        final repo = ref.read(followRepoProvider);
-        if (isFollowing) {
-          await repo.unfollow(item.actorId);
-        } else {
-          await repo.follow(item.actorId);
-        }
-      },
+      onPressed: loading
+          ? null
+          : () => ref.read(followFlowControllerProvider.notifier).toggleRelationship(
+                targetUserId: item.actorId,
+                targetIsPrivate: targetIsPrivate,
+                currentState: state,
+              ),
     );
   }
 }
@@ -418,7 +419,7 @@ class _FollowBackButton extends ConsumerWidget {
 class _FollowButton extends StatelessWidget {
   const _FollowButton({required this.label, required this.onPressed});
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) {
     return TextButton(
@@ -451,13 +452,6 @@ class _FollowRequestActions extends ConsumerStatefulWidget {
 }
 
 class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
-  bool _busy = false;
-  // Optimistic flag flipped the moment the user taps Accept/Reject. The
-  // underlying Firestore stream catches up shortly after — at which point the
-  // live data is the real source of truth and `_localResolved` becomes
-  // redundant. We never set this from any other side-effect.
-  bool _localResolved = false;
-
   Future<void> _markRead() async {
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) return;
@@ -467,47 +461,27 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
   }
 
   Future<void> _accept() async {
-    if (_busy || _localResolved) return;
-    setState(() {
-      _busy = true;
-      _localResolved = true;
-    });
-    try {
-      await ref
-          .read(followRepoProvider)
-          .acceptRequest(
-            senderId: widget.item.actorId,
-            notificationId: widget.item.id,
-          );
-      await _markRead();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    final busy = ref.read(isFollowActionInFlightProvider(widget.item.actorId));
+    if (busy) return;
+    await ref.read(followFlowControllerProvider.notifier).approveIncomingRequest(
+          senderId: widget.item.actorId,
+          notificationId: widget.item.id,
+        );
+    await _markRead();
   }
 
   Future<void> _reject() async {
-    if (_busy || _localResolved) return;
-    setState(() {
-      _busy = true;
-      _localResolved = true;
-    });
-    try {
-      await ref
-          .read(followRepoProvider)
-          .rejectRequest(
-            senderId: widget.item.actorId,
-            notificationId: widget.item.id,
-          );
-      await _markRead();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    final busy = ref.read(isFollowActionInFlightProvider(widget.item.actorId));
+    if (busy) return;
+    await ref.read(followFlowControllerProvider.notifier).rejectIncomingRequest(
+          senderId: widget.item.actorId,
+          notificationId: widget.item.id,
+        );
+    await _markRead();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_localResolved) return const SizedBox.shrink();
-
     // Source of truth: the live follow-request doc at
     // users/{me}/followRequests/{senderId}. The buttons stay visible as long
     // as that doc reports `pending`. Anything else the current user does
@@ -528,11 +502,12 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
       error: (_, __) => cachedTreatedAsPending,
     );
     if (!stillPending) return const SizedBox.shrink();
+    final busy = ref.watch(isFollowActionInFlightProvider(widget.item.actorId));
 
     return Row(
       children: [
         TextButton(
-          onPressed: _busy ? null : _reject,
+          onPressed: busy ? null : _reject,
           style: TextButton.styleFrom(
             padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
             backgroundColor: const Color(0xFFE3E3E3),
@@ -551,7 +526,7 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
         ),
         SizedBox(width: 8.w),
         TextButton(
-          onPressed: _busy ? null : _accept,
+          onPressed: busy ? null : _accept,
           style: TextButton.styleFrom(
             padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
             backgroundColor: Colors.black,
@@ -560,7 +535,7 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
             ),
           ),
           child:
-              _busy
+              busy
                   ? SizedBox(
                     width: 14.r,
                     height: 14.r,

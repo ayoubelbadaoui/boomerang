@@ -1,5 +1,5 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
-import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
+import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:flutter/material.dart';
@@ -118,36 +118,16 @@ class _FollowListTile extends ConsumerStatefulWidget {
 }
 
 class _FollowListTileState extends ConsumerState<_FollowListTile> {
-  bool _loading = false;
-
-  /// Short-lived optimistic flag bridging write latency. Cleared the moment
-  /// the authoritative Firestore stream contradicts it (rejected / accepted /
-  /// canceled), so the tile can never get stuck on "Pending".
-  bool _optimisticRequested = false;
-
   Future<void> _toggle({
-    required bool iFollow,
-    required bool requested,
+    required FollowState state,
+    required bool targetIsPrivate,
   }) async {
-    if (_loading || widget.userId.isEmpty) return;
-    setState(() => _loading = true);
-    final repo = ref.read(followRepoProvider);
-    try {
-      if (iFollow) {
-        await repo.unfollow(widget.userId);
-        if (mounted) _optimisticRequested = false;
-      } else if (requested) {
-        await repo.cancelRequest(widget.userId);
-        if (mounted) _optimisticRequested = false;
-      } else {
-        final outcome = await repo.followOrRequest(widget.userId);
-        if (mounted) {
-          _optimisticRequested = outcome == FollowOutcome.requested;
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    if (widget.userId.isEmpty) return;
+    await ref.read(followFlowControllerProvider.notifier).toggleRelationship(
+          targetUserId: widget.userId,
+          targetIsPrivate: targetIsPrivate,
+          currentState: state,
+        );
   }
 
   @override
@@ -156,56 +136,26 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
     final isSelf = widget.userId.isNotEmpty && widget.userId == myUid;
     final hasValidTarget = widget.userId.isNotEmpty && !isSelf;
 
-    // Keep the optimistic flag honest with respect to the real request doc
-    // and the real edge doc. These listens run outside build so calling
-    // setState inside them is safe.
-    if (hasValidTarget) {
-      ref.listen<AsyncValue<FollowRequest?>>(
-        outgoingFollowRequestProvider(widget.userId),
-        (prev, next) {
-          final req = next.valueOrNull;
-          // Request was rejected, canceled, or cleaned up: drop optimistic.
-          if (_optimisticRequested && (req == null || !req.isPending)) {
-            if (mounted) setState(() => _optimisticRequested = false);
-          }
-        },
-      );
-      ref.listen<AsyncValue<bool>>(
-        isFollowingStreamProvider(widget.userId),
-        (prev, next) {
-          if ((next.valueOrNull ?? false) && _optimisticRequested) {
-            if (mounted) setState(() => _optimisticRequested = false);
-          }
-        },
-      );
-    }
-
-    final iFollow = hasValidTarget
-        ? (ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false)
+    final state =
+        hasValidTarget ? ref.watch(followStateProvider(widget.userId)) : FollowState.none;
+    final iFollow = state == FollowState.approved;
+    final requested = state == FollowState.requested;
+    final loading =
+        hasValidTarget ? ref.watch(isFollowActionInFlightProvider(widget.userId)) : false;
+    final targetIsPrivate = hasValidTarget
+        ? (ref.watch(userProfileByIdProvider(widget.userId)).value?.isPrivate ?? false)
         : false;
-    final theyFollowMe = hasValidTarget
-        ? (ref.watch(isFollowedByProvider(widget.userId)).value ?? false)
-        : false;
-    final outgoing = hasValidTarget
-        ? ref.watch(outgoingFollowRequestProvider(widget.userId)).value
-        : null;
-    final requested =
-        _optimisticRequested || (outgoing?.isPending == true);
 
-    // The action button is only meaningful when we actually have something
-    // useful to render: a live relationship (following/pending) OR the
-    // user genuinely follows me (so "Follow back" is truthful).
-    final renderAction = widget.showAction &&
-        hasValidTarget &&
-        (iFollow || requested || theyFollowMe);
+    // The action button is only meaningful when there is an active relation.
+    final renderAction = widget.showAction && hasValidTarget && (iFollow || requested);
 
     String label;
     if (iFollow) {
       label = 'Following';
     } else if (requested) {
-      label = 'Pending';
+      label = 'Requested';
     } else {
-      label = 'Follow back';
+      label = 'Follow';
     }
 
     final filled = !iFollow && !requested; // filled for primary CTA
@@ -236,9 +186,12 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
           ? SizedBox(
               height: 32.h,
               child: ElevatedButton(
-                onPressed: _loading
+                onPressed: loading
                     ? null
-                    : () => _toggle(iFollow: iFollow, requested: requested),
+                    : () => _toggle(
+                          state: state,
+                          targetIsPrivate: targetIsPrivate,
+                        ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: bgColor,
                   foregroundColor: fgColor,
@@ -252,7 +205,7 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                child: _loading
+                child: loading
                     ? SizedBox(
                         width: 14.w,
                         height: 14.w,

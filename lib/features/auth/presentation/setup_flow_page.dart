@@ -469,6 +469,18 @@ class _FillProfileStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final activeTrackColor =
+        isDarkMode ? const Color(0xFF2B2B2B) : const Color(0xFF111111);
+    final inactiveTrackColor =
+        isDarkMode ? const Color(0xFF3A3A3A) : const Color(0xFFE5E5E5);
+    final inactiveThumbColor =
+        isDarkMode ? const Color(0xFFC8C8C8) : const Color(0xFFFAFAFA);
+    final disabledTrackColor =
+        isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFD0D0D0);
+    final disabledThumbColor =
+        isDarkMode ? const Color(0xFF7A7A7A) : const Color(0xFFB7B7B7);
+
     return Form(
       key: formKey,
       child: Padding(
@@ -567,22 +579,51 @@ class _FillProfileStep extends StatelessWidget {
                 enabled: false,
               ),
               SizedBox(height: 8.h),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Private account',
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
+              Theme(
+                data: Theme.of(context).copyWith(
+                  switchTheme: SwitchThemeData(
+                    thumbColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.disabled)) {
+                        return disabledThumbColor;
+                      }
+                      if (states.contains(WidgetState.selected)) {
+                        return Colors.white;
+                      }
+                      return inactiveThumbColor;
+                    }),
+                    trackColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.disabled)) {
+                        return disabledTrackColor;
+                      }
+                      if (states.contains(WidgetState.selected)) {
+                        return activeTrackColor;
+                      }
+                      return inactiveTrackColor;
+                    }),
+                    trackOutlineColor: WidgetStateProperty.all(
+                      Colors.transparent,
+                    ),
+                    overlayColor: WidgetStateProperty.resolveWith((states) {
+                      return Colors.transparent;
+                    }),
                   ),
                 ),
-                subtitle: Text(
-                  'When private, only followers see your posts. Default is public.',
-                  style: TextStyle(fontSize: 13.sp, color: Colors.black54),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Private account',
+                    style: TextStyle(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'When private, only followers see your posts. Default is public.',
+                    style: TextStyle(fontSize: 13.sp, color: Colors.black54),
+                  ),
+                  value: isPrivate,
+                  onChanged: onPrivateChanged,
                 ),
-                value: isPrivate,
-                activeThumbColor: Colors.white,
-                onChanged: onPrivateChanged,
               ),
             ],
           ),

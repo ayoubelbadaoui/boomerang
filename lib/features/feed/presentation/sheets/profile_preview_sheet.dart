@@ -1,4 +1,5 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
+import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +11,6 @@ import 'package:boomerang/features/moderation/presentation/widgets/block_confirm
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
-import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
 
 class ProfilePreviewSheet extends ConsumerStatefulWidget {
   const ProfilePreviewSheet({
@@ -29,34 +29,6 @@ class ProfilePreviewSheet extends ConsumerStatefulWidget {
 }
 
 class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
-  bool _loading = false;
-  bool _optimisticRequested = false;
-
-  Future<void> _toggleFollow({
-    required bool isFollowing,
-    required bool requested,
-  }) async {
-    if (_loading) return;
-    setState(() => _loading = true);
-    final repo = ref.read(followRepoProvider);
-    try {
-      if (isFollowing) {
-        await repo.unfollow(widget.userId);
-        if (mounted) _optimisticRequested = false;
-      } else if (requested) {
-        await repo.cancelRequest(widget.userId);
-        if (mounted) _optimisticRequested = false;
-      } else {
-        final outcome = await repo.followOrRequest(widget.userId);
-        if (mounted) {
-          _optimisticRequested = outcome == FollowOutcome.requested;
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(currentUserProfileProvider).value;
@@ -72,31 +44,18 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
       );
     }
 
-    final isFollowing =
-        ref.watch(isFollowingStreamProvider(widget.userId)).value ?? false;
-    final outgoing =
-        ref.watch(outgoingFollowRequestProvider(widget.userId)).value;
-    final requested = _optimisticRequested || (outgoing?.isPending == true);
-    final theyFollowMe =
-        ref.watch(isFollowedByProvider(widget.userId)).value ?? false;
+    final state = ref.watch(followStateProvider(widget.userId));
+    final loading = ref.watch(isFollowActionInFlightProvider(widget.userId));
     final targetProfile =
         ref.watch(userProfileByIdProvider(widget.userId)).value;
     final targetIsPrivate = targetProfile?.isPrivate ?? false;
-    final canViewPrivateContent = !targetIsPrivate || isFollowing || isSelf;
-    final followLabel =
-        isFollowing
-            ? 'Following'
-            : requested
-                ? 'Pending'
-                : theyFollowMe
-                    ? 'Follow back'
-                    : targetIsPrivate
-                        ? 'Request'
-                        : 'Follow';
+    final canViewPrivateContent =
+        !targetIsPrivate || state == FollowState.approved || isSelf;
+    final followLabel = followButtonLabelForState(state);
     final followIcon =
-        isFollowing
+        state == FollowState.approved
             ? Icons.check
-            : requested
+            : state == FollowState.requested
                 ? Icons.schedule
                 : Icons.person_add_alt_1;
     return SafeArea(
@@ -263,14 +222,17 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed:
-                          _loading
+                          loading
                               ? null
-                              : () => _toggleFollow(
-                                    isFollowing: isFollowing,
-                                    requested: requested,
+                              : () => ref
+                                  .read(followFlowControllerProvider.notifier)
+                                  .toggleRelationship(
+                                    targetUserId: widget.userId,
+                                    targetIsPrivate: targetIsPrivate,
+                                    currentState: state,
                                   ),
                       icon:
-                          _loading
+                          loading
                               ? SizedBox(
                                   width: 16.r,
                                   height: 16.r,
@@ -286,11 +248,15 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
-                            isFollowing ? Colors.white : Colors.black,
+                            state == FollowState.approved
+                                ? Colors.white
+                                : Colors.black,
                         foregroundColor:
-                            isFollowing ? Colors.black : Colors.white,
+                            state == FollowState.approved
+                                ? Colors.black
+                                : Colors.white,
                         side:
-                            isFollowing
+                            state == FollowState.approved
                                 ? const BorderSide(
                                   color: Colors.black,
                                   width: 1,
@@ -334,7 +300,8 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           );
                           return;
                         }
-                        if (targetIsPrivate && !isFollowing) {
+                        if (targetIsPrivate &&
+                            state != FollowState.approved) {
                           if (navigator.canPop()) navigator.pop();
                           rootMessenger.showSnackBar(
                             const SnackBar(

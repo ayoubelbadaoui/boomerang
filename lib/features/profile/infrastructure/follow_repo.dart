@@ -71,46 +71,34 @@ class FollowRepo {
     final isPrivate = (targetData['isPrivate'] ?? false) as bool;
 
     if (isPrivate) {
+      final followingRef = _fs
+          .collection('following')
+          .doc(me)
+          .collection('users')
+          .doc(targetUserId);
       final reqRef = _fs
           .collection('users')
           .doc(targetUserId)
           .collection('followRequests')
           .doc(me);
 
-      // Determine whether we should issue a new request. We do this in two
-      // phases (read, optional delete, set) instead of one transaction so
-      // that re-requests after the 24-hour cooldown go through Firestore as
-      // a fresh `onCreate` (and therefore retrigger the Cloud Function that
-      // produces the in-app notification).
+      final followingSnap = await followingRef.get();
+      if (followingSnap.exists) return FollowOutcome.followed;
+
       final existing = await reqRef.get();
-      var shouldCreate = !existing.exists;
       if (existing.exists) {
-        final data = existing.data() ?? <String, dynamic>{};
-        if (data['status'] == 'rejected') {
-          final rejTs = data['rejectedAt'];
-          final elapsed = rejTs is Timestamp
-              ? DateTime.now().difference(rejTs.toDate()).inHours
-              : 24;
-          if (elapsed >= 24) {
-            // Cooldown expired: nuke the old doc so the next set is a true
-            // create (which is what the Cloud Function listens on).
-            await reqRef.delete();
-            shouldCreate = true;
-          }
-          // else: still cooling down — silently noop.
+        final status = (existing.data()?['status'] ?? 'pending') as String;
+        if (status == 'pending') {
+          return FollowOutcome.requested;
         }
-        // status == 'pending' or anything else: another request is already
-        // outstanding, don't create a duplicate.
       }
 
-      if (shouldCreate) {
-        await reqRef.set({
-          'senderId': me,
-          'receiverId': targetUserId,
-          'status': 'pending',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
+      await reqRef.set({
+        'senderId': me,
+        'receiverId': targetUserId,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       return FollowOutcome.requested;
     }
 
@@ -216,27 +204,32 @@ class FollowRepo {
           .doc(receiver)
           .collection('users')
           .doc(senderId);
+      final followingEdge = await tx.get(followingRef);
+      final followerEdge = await tx.get(followerRef);
 
-      tx.set(followingRef, {
-        'userId': receiver,
-        'userName': pickName(receiverData),
-        'userAvatar': receiverData['avatarUrl'],
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      if (!followingEdge.exists) {
+        tx.set(followingRef, {
+          'userId': receiver,
+          'userName': pickName(receiverData),
+          'userAvatar': receiverData['avatarUrl'],
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        tx.update(_fs.collection('users').doc(senderId), {
+          'followingCount': FieldValue.increment(1),
+        });
+      }
 
-      tx.set(followerRef, {
-        'userId': senderId,
-        'userName': pickName(senderData),
-        'userAvatar': senderData['avatarUrl'],
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      tx.update(_fs.collection('users').doc(senderId), {
-        'followingCount': FieldValue.increment(1),
-      });
-      tx.update(_fs.collection('users').doc(receiver), {
-        'followersCount': FieldValue.increment(1),
-      });
+      if (!followerEdge.exists) {
+        tx.set(followerRef, {
+          'userId': senderId,
+          'userName': pickName(senderData),
+          'userAvatar': senderData['avatarUrl'],
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        tx.update(_fs.collection('users').doc(receiver), {
+          'followersCount': FieldValue.increment(1),
+        });
+      }
 
       tx.delete(requestRef);
     });
@@ -277,8 +270,7 @@ class FollowRepo {
   }
 
   /// Reject a pending follow request (current user is receiver).
-  /// Writes a rejected status with a timestamp so the sender is subject to a
-  /// 24-hour cooldown before they can re-request.
+  /// Hard-removes the request doc so request/follower edges never diverge.
   Future<void> rejectRequest({
     required String senderId,
     String? notificationId,
@@ -290,10 +282,40 @@ class FollowRepo {
         .doc(receiver)
         .collection('followRequests')
         .doc(senderId);
-    await requestRef.set({
-      'status': 'rejected',
-      'rejectedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final followingRef = _fs
+        .collection('following')
+        .doc(senderId)
+        .collection('users')
+        .doc(receiver);
+    final followerRef = _fs
+        .collection('followers')
+        .doc(receiver)
+        .collection('users')
+        .doc(senderId);
+
+    await _fs.runTransaction((tx) async {
+      final reqSnap = await tx.get(requestRef);
+      if (reqSnap.exists) {
+        tx.delete(requestRef);
+      }
+
+      final followingEdge = await tx.get(followingRef);
+      if (followingEdge.exists) {
+        tx.delete(followingRef);
+        tx.update(_fs.collection('users').doc(senderId), {
+          'followingCount': FieldValue.increment(-1),
+        });
+      }
+
+      final followerEdge = await tx.get(followerRef);
+      if (followerEdge.exists) {
+        tx.delete(followerRef);
+        tx.update(_fs.collection('users').doc(receiver), {
+          'followersCount': FieldValue.increment(-1),
+        });
+      }
+    });
+
     if (notificationId != null) {
       try {
         await _fs
@@ -332,26 +354,33 @@ class FollowRepo {
   Future<void> unfollow(String targetUserId) async {
     final me = _uid;
     if (me == null || me == targetUserId) return;
-    final batch = _fs.batch();
     final followingRef = _fs
         .collection('following')
         .doc(me)
         .collection('users')
         .doc(targetUserId);
-    batch.delete(followingRef);
     final followersRef = _fs
         .collection('followers')
         .doc(targetUserId)
         .collection('users')
         .doc(me);
-    batch.delete(followersRef);
-    batch.update(_fs.collection('users').doc(me), {
-      'followingCount': FieldValue.increment(-1),
+    await _fs.runTransaction((tx) async {
+      final followingSnap = await tx.get(followingRef);
+      if (followingSnap.exists) {
+        tx.delete(followingRef);
+        tx.update(_fs.collection('users').doc(me), {
+          'followingCount': FieldValue.increment(-1),
+        });
+      }
+
+      final followerSnap = await tx.get(followersRef);
+      if (followerSnap.exists) {
+        tx.delete(followersRef);
+        tx.update(_fs.collection('users').doc(targetUserId), {
+          'followersCount': FieldValue.increment(-1),
+        });
+      }
     });
-    batch.update(_fs.collection('users').doc(targetUserId), {
-      'followersCount': FieldValue.increment(-1),
-    });
-    await batch.commit();
   }
 
   /// Whether current user follows target.
@@ -425,13 +454,23 @@ class FollowRequest {
   bool get isPending => status == 'pending';
 
   factory FollowRequest.fromMap(Map<String, dynamic> data, String id) {
+    final status = (data['status'] ?? 'pending') as String;
+    if (status == 'rejected') {
+      return FollowRequest(
+        id: id,
+        senderId: (data['senderId'] ?? '') as String,
+        receiverId: (data['receiverId'] ?? '') as String,
+        status: 'removed',
+        createdAt: DateTime.now(),
+      );
+    }
     final ts = data['createdAt'];
     final createdAt = ts is Timestamp ? ts.toDate() : DateTime.now();
     return FollowRequest(
       id: id,
       senderId: (data['senderId'] ?? '') as String,
       receiverId: (data['receiverId'] ?? '') as String,
-      status: (data['status'] ?? 'pending') as String,
+      status: status,
       createdAt: createdAt,
     );
   }
