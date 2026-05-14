@@ -295,11 +295,13 @@ class FollowRepo {
 
     await _fs.runTransaction((tx) async {
       final reqSnap = await tx.get(requestRef);
+      final followingEdge = await tx.get(followingRef);
+      final followerEdge = await tx.get(followerRef);
+
       if (reqSnap.exists) {
         tx.delete(requestRef);
       }
 
-      final followingEdge = await tx.get(followingRef);
       if (followingEdge.exists) {
         tx.delete(followingRef);
         tx.update(_fs.collection('users').doc(senderId), {
@@ -307,7 +309,6 @@ class FollowRepo {
         });
       }
 
-      final followerEdge = await tx.get(followerRef);
       if (followerEdge.exists) {
         tx.delete(followerRef);
         tx.update(_fs.collection('users').doc(receiver), {
@@ -366,6 +367,8 @@ class FollowRepo {
         .doc(me);
     await _fs.runTransaction((tx) async {
       final followingSnap = await tx.get(followingRef);
+      final followerSnap = await tx.get(followersRef);
+
       if (followingSnap.exists) {
         tx.delete(followingRef);
         tx.update(_fs.collection('users').doc(me), {
@@ -373,7 +376,6 @@ class FollowRepo {
         });
       }
 
-      final followerSnap = await tx.get(followersRef);
       if (followerSnap.exists) {
         tx.delete(followersRef);
         tx.update(_fs.collection('users').doc(targetUserId), {

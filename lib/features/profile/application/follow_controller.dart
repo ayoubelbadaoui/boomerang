@@ -141,7 +141,7 @@ class FollowFlowController extends StateNotifier<FollowFlowState> {
   }
 
   void _invalidateAfterRelationshipMutation({required String targetUserId}) {
-    final me = ref.read(currentUserProfileProvider).value?.uid;
+    final me = ref.read(firebaseAuthProvider).currentUser?.uid;
 
     ref.invalidate(isFollowingStreamProvider(targetUserId));
     ref.invalidate(outgoingFollowRequestProvider(targetUserId));
