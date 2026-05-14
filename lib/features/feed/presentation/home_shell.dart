@@ -8,13 +8,10 @@ import 'tabs/notifications_page.dart';
 import '../../profile/presentation/profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
-import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
-import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
 import 'package:boomerang/features/chat/presentation/pages/conversations_page.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/feed/presentation/widgets/upload_progress_bar.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
-import 'package:go_router/go_router.dart';
 
 final homeTabIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -55,15 +52,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isSwitching = ref.watch(isSwitchingAccountProvider);
     final authState = ref.watch(authStateProvider);
     final user = authState.value;
-    if (authState.hasValue && user == null && !isSwitching) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go(OnboardingPage.routeName);
-      });
-      return const Scaffold();
-    }
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -73,10 +63,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     }
     final hasNickname = nicknameState.valueOrNull ?? false;
     if (!hasNickname) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go(SetupFlowPage.routeName);
-      });
-      return const Scaffold();
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
       appBar:

@@ -68,6 +68,7 @@ final router = GoRouter(
     final profileExists = container.read(userProfileExistsProvider);
     final profileComplete = container.read(userProfileCompleteProvider);
     final hasNickname = container.read(userHasNicknameProvider);
+    final isSplash = state.fullPath == SplashScreen.routeName;
     final isAuthChoice = state.fullPath == AuthChoicePage.routeName;
     final isLogin = state.fullPath == LoginPage.routeName;
     final isSignup = state.fullPath == SignupPage.routeName;
@@ -83,9 +84,9 @@ final router = GoRouter(
     final user = auth.asData!.value;
 
     if (user == null) {
-      // Allow auth/setup flow routes; otherwise push to onboarding
+      // Unauthenticated users can stay on splash/auth entry points only.
       final isAuthFlow =
-          isOnboarding || isAuthChoice || isLogin || isSignup || isSetupFlow;
+          isSplash || isOnboarding || isAuthChoice || isLogin || isSignup;
       return isAuthFlow ? null : OnboardingPage.routeName;
     }
 
@@ -101,14 +102,16 @@ final router = GoRouter(
       return null;
     }
     final hasName = hasNickname.asData!.value;
-    if (!hasName && !isSetupFlow) return SetupFlowPage.routeName;
     final hasProfile = profileExists.asData!.value;
     final isComplete = profileComplete.asData!.value;
-    if (hasProfile && isComplete && isOnboarding) return HomeShell.routeName;
-    if (hasProfile &&
-        !isComplete &&
-        state.fullPath != SetupFlowPage.routeName) {
-      return SetupFlowPage.routeName;
+
+    final shouldRunSetup = !hasName || !hasProfile || !isComplete;
+    if (shouldRunSetup) {
+      return isSetupFlow ? null : SetupFlowPage.routeName;
+    }
+
+    if (isSplash || isOnboarding || isAuthChoice || isLogin || isSignup || isSetupFlow) {
+      return HomeShell.routeName;
     }
     return null;
   },

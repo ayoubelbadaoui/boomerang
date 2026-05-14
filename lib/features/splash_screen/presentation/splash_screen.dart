@@ -1,19 +1,16 @@
 import 'package:boomerang/core/assets/shared_assets.dart';
 import 'package:boomerang/core/utils/image_precache.dart';
-import 'package:boomerang/features/auth/presentation/onboarding_page.dart';
-import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 /// First Flutter-side route. Acts as a hand-off between the native launch
 /// screen and the actual app shell:
 ///  - Background matches the native launch image so the transition is
 ///    seamless (no "weird black screen" between the two splashes).
-///  - No hardcoded delay — we navigate as soon as the auth stream resolves
-///    its first value. A small circular indicator under the logo signals
-///    to the user that loading is still in progress.
+///  - No hardcoded delay — router redirects decide the next route once auth
+///    and profile guards resolve. A small circular indicator under the logo
+///    signals to the user that loading is still in progress.
 ///  - Image prefetch for the first few posts runs in the background so the
 ///    feed paints faster once the user arrives at it, but it never blocks
 ///    navigation.
@@ -26,14 +23,11 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
-  bool _navigated = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmPreviews();
-      _tryNavigate();
     });
   }
 
@@ -53,23 +47,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     } catch (_) {}
   }
 
-  void _tryNavigate() {
-    if (_navigated || !mounted) return;
-    final auth = ref.read(authStateProvider);
-    if (auth.isLoading) return;
-    _navigated = true;
-    auth.when(
-      data: (user) => context.go(
-        user != null ? HomeShell.routeName : OnboardingPage.routeName,
-      ),
-      error: (_, __) => context.go(OnboardingPage.routeName),
-      loading: () {},
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    ref.listen(authStateProvider, (_, __) => _tryNavigate());
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(

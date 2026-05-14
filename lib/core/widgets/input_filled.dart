@@ -31,11 +31,12 @@ class _InputFilledState extends State<InputFilled> {
   @override
   Widget build(BuildContext context) {
     final showToggle = widget.obscure && widget.suffix == null;
+    final effectiveObscure = showToggle ? _hidden : widget.obscure;
 
     return TextFormField(
       controller: widget.controller,
       keyboardType: widget.keyboardType,
-      obscureText: _hidden,
+      obscureText: effectiveObscure,
       validator: widget.validator,
       decoration: InputDecoration(
         hintText: widget.hint,

@@ -168,9 +168,10 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
           yield UserProfile.fromMap(snap.id, snap.data()!);
         }
       }
-    } catch (e) {
-      // Firestore listener may throw permission-denied after sign-out
-      yield null;
+    } catch (e, st) {
+      // Do not emit null on transient listener failures (network/blips), as
+      // that can look like an auth loss to downstream guards.
+      debugPrint('currentUserProfileProvider stream error: $e\n$st');
     }
   }
 });
@@ -341,7 +342,8 @@ final profileGuardProvider = Provider<void>((ref) {
   ref.listen(currentUserProfileProvider, (prev, next) async {
     final auth = ref.read(firebaseAuthProvider);
     final user = auth.currentUser;
-    if (user != null && next.asData != null && next.asData!.value == null) {
+    final hasResolvedData = next.asData != null;
+    if (user != null && hasResolvedData && next.asData!.value == null) {
       // No profile document; force sign out
       await ref.read(authControllerProvider.notifier).logout();
     }
