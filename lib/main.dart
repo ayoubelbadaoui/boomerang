@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:boomerang/core/audio/app_audio_session.dart';
 import 'package:boomerang/firebase_options.dart';
+import 'package:boomerang/infrastructure/auth/install_session_guard.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -65,6 +66,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      await InstallSessionGuard().enforce();
       return _BootstrapState.ready;
     } catch (e, st) {
       debugPrint('Firebase initialization failed: $e\n$st');

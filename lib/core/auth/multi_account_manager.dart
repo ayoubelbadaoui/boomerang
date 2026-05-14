@@ -7,27 +7,23 @@ import 'user_session.dart';
 
 /// Orchestrates multi-account storage, switching, and removal.
 class MultiAccountManager {
-  MultiAccountManager({
-    required this.storage,
-    required this.firebaseAuth,
-  });
+  MultiAccountManager({required this.storage, required this.firebaseAuth});
 
   final SessionStorage storage;
   final FirebaseAuth firebaseAuth;
 
   // ── Add / update ──────────────────────────────────────────────────────
 
-  Future<void> addAccount(
-    UserSession session, {
-    String? password,
-  }) async {
+  Future<void> addAccount(UserSession session, {String? password}) async {
     dev.log(
       '[multi-account] addAccount START uid=${session.uid} '
       'email=${session.email} hasPassword=${password != null}',
     );
 
     final sessions = await storage.getSessions();
-    dev.log('[multi-account] addAccount: existing sessions count=${sessions.length}');
+    dev.log(
+      '[multi-account] addAccount: existing sessions count=${sessions.length}',
+    );
 
     final hadBefore = sessions.length;
     sessions.removeWhere((s) => s.uid == session.uid);
@@ -133,5 +129,9 @@ class MultiAccountManager {
     final sessions = await storage.getSessions();
     final remaining = sessions.where((s) => s.uid != uid).toList();
     return remaining.isNotEmpty ? remaining.first : null;
+  }
+
+  Future<void> clearLocalAuthArtifacts() async {
+    await storage.clearAll();
   }
 }

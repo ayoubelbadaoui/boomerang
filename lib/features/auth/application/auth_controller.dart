@@ -94,12 +94,26 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    state = const AuthState(loading: true);
+    Object? signOutError;
     try {
-      state = const AuthState(loading: true);
       await _repo.signOut();
-      state = const AuthState(success: 'Logged out');
     } catch (e) {
-      state = AuthState(error: AuthErrorMapper.map(e));
+      signOutError = e;
+      dev.log('[multi-account] logout signOut FAILED: $e');
+    }
+
+    try {
+      await _accountManager.clearLocalAuthArtifacts();
+    } catch (e) {
+      dev.log('[multi-account] logout local clear FAILED: $e');
+      signOutError ??= e;
+    }
+
+    if (signOutError != null) {
+      state = AuthState(error: AuthErrorMapper.map(signOutError));
+    } else {
+      state = const AuthState(success: 'Logged out');
     }
   }
 

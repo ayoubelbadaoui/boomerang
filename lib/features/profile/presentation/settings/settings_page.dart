@@ -4,7 +4,6 @@ import 'package:boomerang/features/profile/presentation/settings/manage_account_
 import 'package:boomerang/features/profile/presentation/settings/notifications_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/privacy_page.dart';
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
-import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
@@ -39,29 +38,32 @@ class SettingsPage extends ConsumerWidget {
                 icon: Icons.person_outline_rounded,
                 title: 'Account',
                 subtitle: 'Profile, email, password',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ManageAccountPage(),
-                  ),
-                ),
+                onTap:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ManageAccountPage(),
+                      ),
+                    ),
               ),
               _SettingsTile(
                 icon: Icons.lock_outline_rounded,
                 title: 'Privacy',
                 subtitle: 'Visibility, data, personalization',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PrivacyPage()),
-                ),
+                onTap:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PrivacyPage()),
+                    ),
               ),
               _SettingsTile(
                 icon: Icons.notifications_none_rounded,
                 title: 'Notifications',
                 subtitle: 'Push alerts, sounds, preferences',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const NotificationsPage(),
-                  ),
-                ),
+                onTap:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsPage(),
+                      ),
+                    ),
               ),
             ],
           ),
@@ -86,10 +88,7 @@ class SettingsPage extends ConsumerWidget {
           Center(
             child: Text(
               'Boomerang v1.0',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 12.sp,
-              ),
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 12.sp),
             ),
           ),
         ],
@@ -104,49 +103,50 @@ void _showLegalSheet(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40.w,
-              height: 4.h,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2.r),
-              ),
+    builder:
+        (ctx) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                ListTile(
+                  leading: const Icon(Icons.gavel_rounded),
+                  title: const Text('Terms of Service'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showTermsOfService(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.shield_outlined),
+                  title: const Text('Privacy Policy'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showPrivacyPolicy(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people_outline_rounded),
+                  title: const Text('Community Guidelines'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showCommunityGuidelines(context);
+                  },
+                ),
+              ],
             ),
-            SizedBox(height: 16.h),
-            ListTile(
-              leading: const Icon(Icons.gavel_rounded),
-              title: const Text('Terms of Service'),
-              onTap: () {
-                Navigator.pop(ctx);
-                showTermsOfService(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.shield_outlined),
-              title: const Text('Privacy Policy'),
-              onTap: () {
-                Navigator.pop(ctx);
-                showPrivacyPolicy(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.people_outline_rounded),
-              title: const Text('Community Guidelines'),
-              onTap: () {
-                Navigator.pop(ctx);
-                showCommunityGuidelines(context);
-              },
-            ),
-          ],
+          ),
         ),
-      ),
-    ),
   );
 }
 
@@ -166,11 +166,7 @@ class _SettingsGroup extends StatelessWidget {
           for (int i = 0; i < children.length; i++) ...[
             children[i],
             if (i < children.length - 1)
-              Divider(
-                height: 1,
-                indent: 56.w,
-                color: Colors.grey.shade200,
-              ),
+              Divider(height: 1, indent: 56.w, color: Colors.grey.shade200),
           ],
         ],
       ),
@@ -206,24 +202,16 @@ class _SettingsTile extends StatelessWidget {
       ),
       title: Text(
         title,
-        style: TextStyle(
-          fontSize: 15.sp,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w600),
       ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              style: TextStyle(
-                fontSize: 12.sp,
-                color: Colors.grey.shade500,
-              ),
-            )
-          : null,
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: Colors.grey.shade400,
-      ),
+      subtitle:
+          subtitle != null
+              ? Text(
+                subtitle!,
+                style: TextStyle(fontSize: 12.sp, color: Colors.grey.shade500),
+              )
+              : null,
+      trailing: Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
       onTap: onTap,
     );
   }
@@ -262,10 +250,7 @@ Future<void> _performLogout(WidgetRef ref, ProviderContainer container) async {
   try {
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
-      await removeCurrentDeviceTokenForUser(
-        ref.read(firestoreProvider),
-        uid,
-      );
+      await removeCurrentDeviceTokenForUser(ref.read(firestoreProvider), uid);
     }
   } catch (_) {}
   try {
@@ -328,32 +313,6 @@ void _confirmLogout(BuildContext navigatorContext, WidgetRef ref) {
                       ),
                       onPressed: () async {
                         Navigator.of(sheetContext).pop();
-                        final manager = ref.read(multiAccountManagerProvider);
-                        final uid =
-                            ref.read(firebaseAuthProvider).currentUser?.uid;
-
-                        if (uid != null) {
-                          final next =
-                              await manager.nextAccountAfterRemoval(uid);
-                          await manager.removeAccount(uid);
-
-                          if (next != null) {
-                            await _performLogout(ref, container);
-                            final ok =
-                                await manager.switchAccount(next.uid);
-                            container.invalidate(storedAccountsProvider);
-                            if (ok) {
-                              invalidateUserScopedProviders(container);
-                              container.invalidate(profileControllerProvider);
-                              container.invalidate(
-                                userBoomerangsControllerProvider,
-                              );
-                              goRouter.go(HomeShell.routeName);
-                              return;
-                            }
-                          }
-                        }
-
                         await _performLogout(ref, container);
                         goRouter.go(OnboardingPage.routeName);
                       },
