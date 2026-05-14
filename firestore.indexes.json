@@ -55,6 +55,22 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "hashtags", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "boomerangs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerIsPrivate", "order": "ASCENDING" },
+        { "fieldPath": "rankScore", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "boomerangs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerIsPrivate", "order": "ASCENDING" },
+        { "fieldPath": "rankUpdatedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -60,6 +60,11 @@ class ChatController extends StateNotifier<ChatState> {
 
   static const _pageSize = 20;
 
+  /// Concurrent callers (e.g. the scroll listener and a deep-link
+  /// navigator) share a single in-flight pagination Future so they never
+  /// double-fetch or race against the [isLoadingMore] flag.
+  Future<void>? _inFlightLoadMore;
+
   bool _isViewing = false;
 
   void setViewing(bool viewing) {
@@ -98,9 +103,17 @@ class ChatController extends StateNotifier<ChatState> {
     );
   }
 
-  Future<void> loadMore() async {
-    if (state.isLoadingMore || !state.hasMore || state.messages.isEmpty) return;
+  Future<void> loadMore() {
+    final existing = _inFlightLoadMore;
+    if (existing != null) return existing;
+    if (!state.hasMore || state.messages.isEmpty) return Future.value();
 
+    final future = _loadMoreOnce();
+    _inFlightLoadMore = future;
+    return future.whenComplete(() => _inFlightLoadMore = null);
+  }
+
+  Future<void> _loadMoreOnce() async {
     state = state.copyWith(isLoadingMore: true);
     try {
       final oldest = state.messages.last;
@@ -124,6 +137,27 @@ class ChatController extends StateNotifier<ChatState> {
       if (_disposed) return;
       state = state.copyWith(isLoadingMore: false, error: e.toString());
     }
+  }
+
+  /// Walks the pagination cursor backwards until [messageId] is present in
+  /// [state.messages] or no more pages are available.
+  ///
+  /// This is the only legitimate way for navigation (reply/mention taps,
+  /// deep links, search) to reach a message that lives outside the
+  /// currently-loaded window. Returns `true` iff the message ended up in
+  /// state. Bounded by [maxPages] so a missing/deleted target can never
+  /// turn into an infinite fetch loop.
+  Future<bool> loadUntilContains(
+    String messageId, {
+    int maxPages = 30,
+  }) async {
+    for (int i = 0; i < maxPages; i++) {
+      if (_disposed) return false;
+      if (state.messages.any((m) => m.id == messageId)) return true;
+      if (!state.hasMore) return false;
+      await loadMore();
+    }
+    return state.messages.any((m) => m.id == messageId);
   }
 
   // ── Reply ──────────────────────────────────────────────────────────────

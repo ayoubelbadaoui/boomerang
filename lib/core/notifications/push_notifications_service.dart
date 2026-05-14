@@ -149,12 +149,12 @@ class _PushNotificationsBootstrap {
     final type = message.data['type'] as String?;
     final conversationId = message.data['conversationId'] as String?;
     if (type == 'chat_message' && conversationId != null) {
-      router.push('/chat/$conversationId');
+      ref.read(routerProvider).push('/chat/$conversationId');
       return;
     }
     const socialTypes = {'like', 'comment', 'reply', 'follow', 'follow_back', 'follow_request'};
     if (type != null && socialTypes.contains(type)) {
-      router.go('/home');
+      ref.read(routerProvider).go('/home');
     }
   }
 
@@ -281,11 +281,11 @@ class _PushNotificationsBootstrap {
     if (payload == null || payload.isEmpty) return;
     if (payload.startsWith('chat:')) {
       final conversationId = payload.substring(5);
-      router.push('/chat/$conversationId');
+      ref.read(routerProvider).push('/chat/$conversationId');
       return;
     }
     if (payload.startsWith('social:')) {
-      router.go('/home');
+      ref.read(routerProvider).go('/home');
     }
   }
 

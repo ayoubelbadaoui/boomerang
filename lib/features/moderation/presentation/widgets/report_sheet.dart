@@ -104,20 +104,26 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
               style: TextStyle(fontSize: 14.sp, color: Colors.grey.shade600),
             ),
             SizedBox(height: 12.h),
-            ...ReportReason.values.map((reason) {
-              return RadioListTile<ReportReason>(
-                title: Text(
-                  ReportEntity.reasonLabel(reason),
-                  style: TextStyle(fontSize: 15.sp),
-                ),
-                value: reason,
-                groupValue: _selectedReason,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                activeColor: Colors.redAccent,
-                onChanged: (v) => setState(() => _selectedReason = v),
-              );
-            }),
+            RadioGroup<ReportReason>(
+              groupValue: _selectedReason,
+              onChanged: (v) => setState(() => _selectedReason = v),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final reason in ReportReason.values)
+                    RadioListTile<ReportReason>(
+                      title: Text(
+                        ReportEntity.reasonLabel(reason),
+                        style: TextStyle(fontSize: 15.sp),
+                      ),
+                      value: reason,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: Colors.redAccent,
+                    ),
+                ],
+              ),
+            ),
             SizedBox(height: 8.h),
             TextField(
               controller: _detailsController,

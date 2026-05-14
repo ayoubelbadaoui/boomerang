@@ -82,7 +82,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   double _maxZoom = 1.0;
   double _baseZoom = 1.0;
   final Map<int, Offset> _pointers = {};
-  double _speed = 1.0;
+  final double _speed = 1.0;
   double _duration = 1.0;
   int _filterIdx = 0;
   Offset? _focusPoint;

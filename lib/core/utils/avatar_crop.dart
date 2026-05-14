@@ -30,7 +30,7 @@ Future<File?> cropAvatar(String sourcePath) async {
         toolbarTitle: 'Move and Scale',
         toolbarColor: Colors.black,
         toolbarWidgetColor: Colors.white,
-        statusBarColor: Colors.black,
+        statusBarLight: false,
         backgroundColor: Colors.black,
         activeControlsWidgetColor: Colors.white,
         cropStyle: CropStyle.circle,

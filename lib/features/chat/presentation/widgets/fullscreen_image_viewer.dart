@@ -93,9 +93,13 @@ class _FullscreenImageViewerState extends State<FullscreenImageViewer>
       _transformationController.value = Matrix4.identity();
     } else {
       _transformationController.value = Matrix4.identity()
-        ..translate(-position.dx * (scaleFactor - 1),
-            -position.dy * (scaleFactor - 1))
-        ..scale(scaleFactor);
+        ..translateByDouble(
+          -position.dx * (scaleFactor - 1),
+          -position.dy * (scaleFactor - 1),
+          0,
+          0,
+        )
+        ..scaleByDouble(scaleFactor, scaleFactor, scaleFactor, 1);
     }
   }
 
@@ -170,8 +174,8 @@ class _FullscreenImageViewerState extends State<FullscreenImageViewer>
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.identity()
-                    ..translate(_dragOffset.dx, _dragOffset.dy)
-                    ..scale(scale),
+                    ..translateByDouble(_dragOffset.dx, _dragOffset.dy, 0, 0)
+                    ..scaleByDouble(scale, scale, scale, 1),
                   child: ClipRRect(
                     borderRadius:
                         BorderRadius.circular(math.min(cornerRadius, 20)),

@@ -11,6 +11,7 @@ import {
 } from './infrastructure/listeners/socialTriggers';
 import { onUserPrivacyChanged, backfillOwnerIsPrivate } from './infrastructure/listeners/privacySync';
 import { reconcileAllUsers } from './infrastructure/reconciliation';
+import { recomputeRankScores } from './infrastructure/listeners/rankingScheduler';
 
 export { onNotificationCreated };
 export {
@@ -22,4 +23,5 @@ export {
 };
 export { onUserPrivacyChanged, backfillOwnerIsPrivate };
 export { reconcileAllUsers };
+export { recomputeRankScores };
 export const api = functions.region(FUNCTIONS_REGION).https.onRequest(app);

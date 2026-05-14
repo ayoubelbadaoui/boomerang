@@ -1,4 +1,5 @@
 import 'package:boomerang/features/splash_screen/presentation/splash_screen.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/auth/presentation/login_page.dart';
@@ -14,7 +15,44 @@ import 'features/chat/presentation/pages/chat_page.dart';
 import 'features/feed/presentation/single_boomerang_page.dart';
 import 'infrastructure/providers.dart';
 
-final router = GoRouter(
+/// Bridges Riverpod auth/profile state to GoRouter so the redirect
+/// re-evaluates whenever any of its inputs change. Without this, the
+/// router only runs `redirect` once at boot — if auth is still loading
+/// at that moment, the splash never advances.
+class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier(this._ref) {
+    _subs = [
+      _ref.listen<Object?>(authStateProvider, (_, __) => notifyListeners()),
+      _ref.listen<Object?>(userHasNicknameProvider, (_, __) => notifyListeners()),
+      _ref.listen<Object?>(userProfileExistsProvider, (_, __) => notifyListeners()),
+      _ref.listen<Object?>(userProfileCompleteProvider, (_, __) => notifyListeners()),
+      _ref.listen<Object?>(isSwitchingAccountProvider, (_, __) => notifyListeners()),
+    ];
+  }
+
+  final Ref _ref;
+  late final List<ProviderSubscription<Object?>> _subs;
+
+  @override
+  void dispose() {
+    for (final s in _subs) {
+      s.close();
+    }
+    super.dispose();
+  }
+}
+
+/// The single GoRouter instance lives behind a provider so it can carry a
+/// `refreshListenable` driven by Riverpod. Consumed once in `app.dart` via
+/// `ref.watch(routerProvider)`.
+final routerProvider = Provider<GoRouter>((ref) {
+  final refresh = _RouterRefreshNotifier(ref);
+  ref.onDispose(refresh.dispose);
+  return _buildRouter(refresh);
+});
+
+GoRouter _buildRouter(Listenable refresh) => GoRouter(
+  refreshListenable: refresh,
   initialLocation: SplashScreen.routeName,
 
   routes: [
@@ -84,10 +122,12 @@ final router = GoRouter(
     final user = auth.asData!.value;
 
     if (user == null) {
-      // Unauthenticated users can stay on splash/auth entry points only.
-      final isAuthFlow =
-          isSplash || isOnboarding || isAuthChoice || isLogin || isSignup;
-      return isAuthFlow ? null : OnboardingPage.routeName;
+      // Splash is a hand-off-only screen; once we know there is no
+      // authenticated user, push to onboarding. Other auth-entry pages
+      // (login/signup/onboarding/auth-choice) are valid terminals.
+      final isAuthEntry =
+          isOnboarding || isAuthChoice || isLogin || isSignup;
+      return isAuthEntry ? null : OnboardingPage.routeName;
     }
 
     // User signed in: wait for nickname/profile checks.

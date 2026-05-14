@@ -31,6 +31,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _emojiOpen = false;
   ProviderContainer? _container;
 
+  /// Stable GlobalKey per message ID. Re-used across rebuilds so we can
+  /// (a) read each bubble's real RenderBox.size and (b) call
+  /// [Scrollable.ensureVisible] on its BuildContext.
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  /// Message currently being highlighted after a navigation tap.
+  String? _highlightedMessageId;
+
+  /// Identifies the in-flight navigation. New taps overwrite this token so
+  /// stale work bails out instead of fighting the new animation.
+  Object? _navToken;
+
+  GlobalKey _keyFor(String messageId) =>
+      _messageKeys.putIfAbsent(messageId, () => GlobalKey());
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +93,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       } catch (_) {}
     });
 
+    _navToken = null;
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
@@ -160,29 +176,121 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  void _scrollToMessage(String messageId) {
-    final chatState = ref.read(chatControllerProvider(widget.conversationId));
-    final index = chatState.messages.indexWhere((m) => m.id == messageId);
-    if (index == -1) return;
+  /// Navigate to the message referenced by [messageId].
+  ///
+  /// ID is the source of truth: we never trust a stale index or a fixed
+  /// pixel offset. The algorithm is:
+  ///   1. If the target isn't in the loaded window, page older messages
+  ///      until it appears (bounded).
+  ///   2. Coarse jump using the *measured* average bubble height of
+  ///      currently rendered messages, so the target enters the
+  ///      ListView's lazy build window.
+  ///   3. Once the target's RenderBox is mounted, finalize with
+  ///      [Scrollable.ensureVisible] (alignment 0.5 → centered).
+  ///   4. Briefly highlight the target for orientation.
+  ///   5. If pagination exhausts without finding it (e.g. deleted),
+  ///      surface a non-blocking snackbar instead of silently failing.
+  Future<void> _scrollToMessage(String messageId) async {
+    final token = Object();
+    _navToken = token;
+    bool cancelled() => !mounted || _navToken != token;
 
-    final items = _buildItemsWithSeparators(chatState.messages);
-    int targetIndex = 0;
-    int msgCount = 0;
-    for (int i = 0; i < items.length; i++) {
-      if (items[i] is MessageEntity) {
-        if (msgCount == index) {
-          targetIndex = i;
-          break;
-        }
-        msgCount++;
+    final notifier =
+        ref.read(chatControllerProvider(widget.conversationId).notifier);
+
+    final inWindow = ref
+        .read(chatControllerProvider(widget.conversationId))
+        .messages
+        .any((m) => m.id == messageId);
+
+    if (!inWindow) {
+      final found = await notifier.loadUntilContains(messageId);
+      if (cancelled()) return;
+      if (!found) {
+        _showNavigationFallback();
+        return;
       }
     }
 
-    final estimatedOffset = targetIndex * 80.0;
-    _scrollController.animateTo(
-      estimatedOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
+    await _coarseAndEnsureVisible(messageId, token);
+    if (cancelled()) return;
+
+    setState(() => _highlightedMessageId = messageId);
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (!mounted) return;
+      if (_highlightedMessageId == messageId && _navToken == token) {
+        setState(() => _highlightedMessageId = null);
+      }
+    });
+  }
+
+  Future<void> _coarseAndEnsureVisible(String messageId, Object token) async {
+    bool cancelled() => !mounted || _navToken != token;
+
+    const maxIterations = 4;
+    for (int iter = 0; iter < maxIterations; iter++) {
+      if (cancelled()) return;
+
+      final renderObject =
+          _messageKeys[messageId]?.currentContext?.findRenderObject();
+      if (renderObject is RenderBox && renderObject.hasSize) {
+        final ctx = _messageKeys[messageId]!.currentContext!;
+        await Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+        );
+        return;
+      }
+
+      final state = ref.read(chatControllerProvider(widget.conversationId));
+      final items = _buildItemsWithSeparators(state.messages);
+      final targetItemIndex = items.indexWhere(
+        (it) => it is MessageEntity && it.id == messageId,
+      );
+      if (targetItemIndex == -1) return;
+
+      if (!_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      final avg = _estimateAverageItemHeight();
+      final estimated = (targetItemIndex * avg)
+          .clamp(0.0, position.maxScrollExtent);
+      await _scrollController.animateTo(
+        estimated,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+      if (cancelled()) return;
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  /// Mean height of currently-mounted message bubbles. We deliberately
+  /// sample real RenderBoxes instead of guessing per type, so mixed text /
+  /// media / audio / unsent cells all contribute. Falls back to a
+  /// conservative constant before anything has measured.
+  double _estimateAverageItemHeight() {
+    double total = 0;
+    int count = 0;
+    for (final key in _messageKeys.values) {
+      final ro = key.currentContext?.findRenderObject();
+      if (ro is RenderBox && ro.hasSize) {
+        total += ro.size.height;
+        count++;
+      }
+    }
+    if (count == 0) return 80.0;
+    return total / count;
+  }
+
+  void _showNavigationFallback() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Original message is no longer available.'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -259,6 +367,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onSharedPostTap: _openSharedPost,
                 otherProfile: otherProfile,
                 currentProfile: currentUser,
+                keyFor: _keyFor,
+                highlightedMessageId: _highlightedMessageId,
               ),
             ),
           ),
@@ -634,6 +744,8 @@ class _MessageList extends StatelessWidget {
     required this.onMessageLongPress,
     required this.onReplyTap,
     required this.onSharedPostTap,
+    required this.keyFor,
+    required this.highlightedMessageId,
     this.otherProfile,
     this.currentProfile,
   });
@@ -647,6 +759,12 @@ class _MessageList extends StatelessWidget {
   final void Function(String boomerangId) onSharedPostTap;
   final UserProfile? otherProfile;
   final UserProfile? currentProfile;
+
+  /// Stable per-message-ID GlobalKey provider, owned by the parent. We
+  /// attach the key to each bubble so the navigation pass can locate the
+  /// real RenderBox.
+  final GlobalKey Function(String messageId) keyFor;
+  final String? highlightedMessageId;
 
   @override
   Widget build(BuildContext context) {
@@ -695,10 +813,11 @@ class _MessageList extends StatelessWidget {
         }
 
         return MessageBubble(
-          key: ValueKey(message.id),
+          key: keyFor(message.id),
           message: message,
           isMine: isMine,
           replyToSenderName: replySenderName,
+          highlighted: highlightedMessageId == message.id,
           onLongPress: () => onMessageLongPress(message, isMine),
           onReplyTap:
               message.hasReply

@@ -124,6 +124,102 @@ class BoomerangRepo {
     return q.get();
   }
 
+  /// Page of public boomerangs ordered by the server-computed `rankScore`
+  /// field (preferred for Discovery / Home exploration). Cursor is the
+  /// last score seen so the call stays stateless from the caller's
+  /// perspective.
+  ///
+  /// Posts whose `rankScore` is missing are excluded from this query (the
+  /// Firestore index requires the field to be set). Callers must fall
+  /// back to [fetchPublicByCreatedAtPage] when this returns empty AND the
+  /// dataset is fresh.
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchPublicByRankScorePage({
+    double? startAfterScore,
+    int limit = 20,
+  }) {
+    Query<Map<String, dynamic>> q = _fs
+        .collection('boomerangs')
+        .where('ownerIsPrivate', isEqualTo: false)
+        .orderBy('rankScore', descending: true)
+        .limit(limit);
+    if (startAfterScore != null) {
+      q = q.where('rankScore', isLessThan: startAfterScore);
+    }
+    return q.get();
+  }
+
+  /// Page of public boomerangs ordered by `createdAt`, with a millisecond
+  /// cursor instead of a document snapshot so the cursor can live in pure
+  /// domain types.
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchPublicByCreatedAtPage({
+    int? startAfterMillis,
+    int limit = 20,
+  }) {
+    Query<Map<String, dynamic>> q = _fs
+        .collection('boomerangs')
+        .where('ownerIsPrivate', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    if (startAfterMillis != null) {
+      q = q.where(
+        'createdAt',
+        isLessThan: Timestamp.fromMillisecondsSinceEpoch(startAfterMillis),
+      );
+    }
+    return q.get();
+  }
+
+  /// Following-feed page using a millisecond cursor instead of a document
+  /// snapshot. Functionally identical to [fetchFollowingFeedPage] except
+  /// the cursor is portable (no Firestore snapshot leak).
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      fetchFollowingByCreatedAtPage({
+    required Set<String> followingIds,
+    required String myUid,
+    int? startAfterMillis,
+    int limit = 20,
+  }) async {
+    final allIds = {...followingIds, myUid};
+    if (allIds.isEmpty) return const [];
+
+    final idList = allIds.toList();
+    final chunks = <List<String>>[];
+    for (var i = 0; i < idList.length; i += 30) {
+      chunks.add(idList.sublist(
+          i, i + 30 > idList.length ? idList.length : i + 30));
+    }
+
+    final allDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    for (final chunk in chunks) {
+      Query<Map<String, dynamic>> q = _fs
+          .collection('boomerangs')
+          .where('userId', whereIn: chunk)
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+      if (startAfterMillis != null) {
+        q = q.where(
+          'createdAt',
+          isLessThan: Timestamp.fromMillisecondsSinceEpoch(startAfterMillis),
+        );
+      }
+      final snap = await q.get();
+      allDocs.addAll(snap.docs);
+    }
+
+    // Merge chunks by createdAt desc and cap at limit*2 candidates so the
+    // application layer has room to rerank.
+    allDocs.sort((a, b) {
+      final aT = a.data()['createdAt'] as Timestamp?;
+      final bT = b.data()['createdAt'] as Timestamp?;
+      if (aT == null && bT == null) return 0;
+      if (aT == null) return 1;
+      if (bT == null) return -1;
+      return bT.compareTo(aT);
+    });
+
+    return allDocs.take(limit).toList();
+  }
+
   /// Stream for discover: only public boomerangs.
   Stream<QuerySnapshot<Map<String, dynamic>>> watchPublicBoomerangs() {
     return _fs

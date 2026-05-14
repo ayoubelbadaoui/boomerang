@@ -1,5 +1,7 @@
 import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
+import 'package:boomerang/features/feed/application/feed_controller.dart';
+import 'package:boomerang/features/feed/domain/ranking/feed_surface.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -232,12 +234,7 @@ class _BmgGrid extends ConsumerWidget {
     final repo = ref.watch(boomerangRepoProvider);
 
     if (!hasQuery) {
-      return _BmgGridContent(
-        stream: repo.watchPublicBoomerangs().map((s) => s.docs),
-        blockedSet: blockedSet,
-        myUid: myUid,
-        followingIds: followingIds,
-      );
+      return _RankedBmgGrid(blockedSet: blockedSet, myUid: myUid);
     }
 
     final hashtagStream = ref.watch(hashtagRepoProvider).watchTop();
@@ -266,6 +263,177 @@ class _BmgGrid extends ConsumerWidget {
           followingIds: followingIds,
         );
       },
+    );
+  }
+}
+
+/// Ranked Discovery grid backed by [FeedController]. Same masonry visual
+/// as [_BmgGridContent] but the data source is the ranked pipeline and
+/// pagination is driven by the controller, not a Firestore stream.
+class _RankedBmgGrid extends ConsumerStatefulWidget {
+  const _RankedBmgGrid({required this.blockedSet, required this.myUid});
+  final Set<String> blockedSet;
+  final String? myUid;
+
+  @override
+  ConsumerState<_RankedBmgGrid> createState() => _RankedBmgGridState();
+}
+
+class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
+  final _controller = ScrollController();
+  static int _lastWarmedHash = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onScroll);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_controller.hasClients) return;
+    const threshold = 600.0;
+    if (_controller.position.maxScrollExtent - _controller.position.pixels <=
+        threshold) {
+      ref
+          .read(feedControllerProvider(FeedSurface.discovery).notifier)
+          .fetchNext();
+    }
+  }
+
+  Future<void> _refresh() async {
+    await ref
+        .read(feedControllerProvider(FeedSurface.discovery).notifier)
+        .refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feedAsync =
+        ref.watch(feedControllerProvider(FeedSurface.discovery));
+    if (!feedAsync.hasValue) {
+      return const DiscoverExploreGridShimmer();
+    }
+    final state = feedAsync.value!;
+    final visible = state.items
+        .where((p) => !widget.blockedSet.contains(p.authorId))
+        .toList(growable: false);
+
+    if (visible.isEmpty && !state.isLoading) {
+      return const Center(child: Text('No posts to discover yet'));
+    }
+
+    final snapHash =
+        visible.length.hashCode ^ (visible.isNotEmpty ? visible.first.id.hashCode : 0);
+    if (snapHash != _lastWarmedHash) {
+      _lastWarmedHash = snapHash;
+      final toWarm = visible
+          .take(12)
+          .map((p) => p.raw['imageUrl'])
+          .whereType<String>()
+          .toList();
+      if (toWarm.isNotEmpty) {
+        // ignore: discarded_futures
+        precacheImages(toWarm, context, concurrency: 4);
+      }
+    }
+
+    return RefreshIndicator(
+      color: Colors.black,
+      onRefresh: _refresh,
+      child: ShimmerScope(
+        child: MasonryGridView.count(
+          controller: _controller,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          crossAxisCount: 2,
+          mainAxisSpacing: 16.h,
+          crossAxisSpacing: 16.w,
+          itemCount: visible.length + (state.hasMore ? 1 : 0),
+          itemBuilder: (context, i) {
+            if (i >= visible.length) {
+              return const DiscoverExploreGridShimmer();
+            }
+            final post = visible[i];
+            final d = post.raw;
+            final name = (d['userName'] ?? '') as String;
+            final poster = (d['imageUrl'] ?? '') as String;
+            final avatar = d['userAvatar'] as String?;
+            final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
+            final tileWidth =
+                (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
+            final cacheW =
+                (tileWidth * MediaQuery.of(context).devicePixelRatio).round();
+            return GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => BoomerangPagerPage(
+                      initialId: post.id,
+                      initialData: d,
+                    ),
+                  ),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AspectRatio(
+                    aspectRatio: aspectRatio,
+                    child: BoomerangGridThumbnail(
+                      imageUrl: poster.isNotEmpty ? poster : null,
+                      borderRadius: BorderRadius.circular(18.r),
+                      cacheWidth: cacheW,
+                      phaseShift: i * 0.025,
+                      usePlainNetwork: false,
+                    ),
+                  ),
+                  SizedBox(height: 8.h),
+                  Row(
+                    children: [
+                      LiveAvatar(
+                        userId: post.authorId,
+                        fallbackUrl: avatar,
+                        size: 24.r,
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => OtherUserProfilePage(
+                                  userId: post.authorId,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

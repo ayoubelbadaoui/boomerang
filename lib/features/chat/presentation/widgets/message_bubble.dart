@@ -15,6 +15,7 @@ class MessageBubble extends StatelessWidget {
     this.onReplyTap,
     this.replyToSenderName,
     this.onSharedPostTap,
+    this.highlighted = false,
   });
 
   final MessageEntity message;
@@ -24,58 +25,75 @@ class MessageBubble extends StatelessWidget {
   final String? replyToSenderName;
   final VoidCallback? onSharedPostTap;
 
+  /// Briefly tinted when the user has just navigated to this message
+  /// (mention/reply tap, deep link). Controlled by the parent page.
+  final bool highlighted;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final timeText = DateFormat.Hm().format(message.createdAt);
 
+    final Widget child;
     if (message.isUnsent) {
-      return _UnsentBubble(isMine: isMine, theme: theme);
-    }
-
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: onLongPress,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 280.w),
-          child: Column(
-            crossAxisAlignment:
-                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: EdgeInsets.only(
-                  left: isMine ? 60.w : 16.w,
-                  right: isMine ? 16.w : 60.w,
-                  bottom: 8.h,
-                ),
-                padding: _isMediaType
-                    ? EdgeInsets.all(4.w)
-                    : EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
-                decoration: BoxDecoration(
-                  color: isMine
-                      ? theme.colorScheme.primary
-                      : const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(16.r),
-                    topRight: Radius.circular(16.r),
-                    bottomLeft: Radius.circular(isMine ? 16.r : 4.r),
-                    bottomRight: Radius.circular(isMine ? 4.r : 16.r),
+      child = _UnsentBubble(isMine: isMine, theme: theme);
+    } else {
+      child = Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: GestureDetector(
+          onLongPress: onLongPress,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 280.w),
+            child: Column(
+              crossAxisAlignment:
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: EdgeInsets.only(
+                    left: isMine ? 60.w : 16.w,
+                    right: isMine ? 16.w : 60.w,
+                    bottom: 8.h,
+                  ),
+                  padding: _isMediaType
+                      ? EdgeInsets.all(4.w)
+                      : EdgeInsets.symmetric(
+                          horizontal: 16.w,
+                          vertical: 10.h,
+                        ),
+                  decoration: BoxDecoration(
+                    color: isMine
+                        ? theme.colorScheme.primary
+                        : const Color(0xFFF5F5F5),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16.r),
+                      topRight: Radius.circular(16.r),
+                      bottomLeft: Radius.circular(isMine ? 16.r : 4.r),
+                      bottomRight: Radius.circular(isMine ? 4.r : 16.r),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (message.hasReply) _buildReplyPreview(theme),
+                      _buildContent(theme, timeText),
+                    ],
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (message.hasReply) _buildReplyPreview(theme),
-                    _buildContent(theme, timeText),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
+      );
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+      color: highlighted
+          ? theme.colorScheme.primary.withValues(alpha: 0.10)
+          : Colors.transparent,
+      child: child,
     );
   }
 

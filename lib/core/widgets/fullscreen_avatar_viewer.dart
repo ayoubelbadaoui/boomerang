@@ -149,8 +149,8 @@ class _FullscreenAvatarViewerState extends State<FullscreenAvatarViewer>
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.identity()
-                    ..translate(_dragOffset.dx, _dragOffset.dy)
-                    ..scale(scale),
+                    ..translateByDouble(_dragOffset.dx, _dragOffset.dy, 0, 0)
+                    ..scaleByDouble(scale, scale, scale, 1),
                   child: ClipRRect(
                     borderRadius:
                         BorderRadius.circular(math.min(cornerRadius, 20)),

@@ -68,7 +68,7 @@ class _InAppNotificationOverlayState
     final convId = _current?.conversationId;
     _dismiss();
     if (convId != null && convId.isNotEmpty) {
-      router.push('/chat/$convId');
+      ref.read(routerProvider).push('/chat/$convId');
     }
   }
 

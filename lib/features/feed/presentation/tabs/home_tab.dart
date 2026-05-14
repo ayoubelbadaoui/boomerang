@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/core/utils/color_opacity.dart';
+import 'package:boomerang/features/feed/application/feed_controller.dart';
+import 'package:boomerang/features/feed/domain/entities/ranked_post.dart';
+import 'package:boomerang/features/feed/domain/ranking/feed_surface.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +16,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
@@ -43,14 +45,8 @@ class _PaginatedBoomerangList extends ConsumerStatefulWidget {
 class _PaginatedBoomerangListState
     extends ConsumerState<_PaginatedBoomerangList> {
   final _controller = ScrollController();
-  final _docs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   final _localLiked = <String, bool>{};
   final _localLikeCounts = <String, int>{};
-  DocumentSnapshot<Map<String, dynamic>>? _last;
-  bool _loading = false;
-  bool _hasMore = true;
-  bool _refreshing = false;
-  bool _initialFollowingLoaded = false;
 
   @override
   void initState() {
@@ -67,54 +63,19 @@ class _PaginatedBoomerangListState
 
   void _onScroll() {
     if (!_controller.hasClients) return;
-    final threshold = 300.0;
+    const threshold = 300.0;
     if (_controller.position.maxScrollExtent - _controller.position.pixels <=
         threshold) {
-      _fetchNext();
-    }
-  }
-
-  Future<void> _fetchNext() async {
-    if (_loading || !_hasMore) return;
-    final me = ref.read(currentUserProfileProvider).value;
-    final followingIds = ref.read(followingIdsProvider).value;
-    if (me == null || followingIds == null) return;
-
-    setState(() => _loading = true);
-    try {
-      final docs = await ref
-          .read(boomerangRepoProvider)
-          .fetchFollowingFeedPage(
-            followingIds: followingIds,
-            myUid: me.uid,
-            startAfter: _last,
-            limit: 20,
-          );
-      if (mounted) {
-        setState(() {
-          _docs.addAll(docs);
-          if (docs.isNotEmpty) {
-            _last = docs.last;
-          }
-          if (docs.length < 20) {
-            _hasMore = false;
-          }
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      ref
+          .read(feedControllerProvider(FeedSurface.home).notifier)
+          .fetchNext();
     }
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _refreshing = true;
-      _docs.clear();
-      _last = null;
-      _hasMore = true;
-    });
-    await _fetchNext();
-    if (mounted) setState(() => _refreshing = false);
+    await ref
+        .read(feedControllerProvider(FeedSurface.home).notifier)
+        .refresh();
   }
 
   @override
@@ -123,15 +84,15 @@ class _PaginatedBoomerangListState
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     final followingAsync = ref.watch(followingIdsProvider);
+    final feedAsync =
+        ref.watch(feedControllerProvider(FeedSurface.home));
 
-    // Trigger initial fetch once following list resolves
-    if (!_initialFollowingLoaded && followingAsync.hasValue) {
-      _initialFollowingLoaded = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchNext());
-    }
+    final hasFollowing = followingAsync.hasValue;
+    final hasFeedValue = feedAsync.hasValue;
+    final feedState = feedAsync.value;
 
-    // Still waiting for following list
-    if (!followingAsync.hasValue && _docs.isEmpty) {
+    // Render shimmer until both the follow set and the first page resolve.
+    if (!hasFollowing || !hasFeedValue) {
       return ColoredBox(
         color: InstagramShimmerColors.lightCanvas,
         child: ListView(
@@ -151,18 +112,22 @@ class _PaginatedBoomerangListState
     final me = ref.watch(currentUserProfileProvider).value;
     final meUid = me?.uid ?? '';
     final currentFollowingIds = followingAsync.value ?? const <String>{};
-    final visibleDocs = _docs.where((d) {
-      final data = d.data();
-      final uid = (data['userId'] ?? '') as String;
-      if (blockedSet.contains(uid)) return false;
-      if (data['ownerIsPrivate'] == true &&
-          !currentFollowingIds.contains(uid) &&
-          uid != meUid) {
+
+    // Defense-in-depth: re-apply block + privacy filters in case the user
+    // blocked someone mid-session. The repo already filters at fetch time.
+    final visibleItems = feedState!.items.where((p) {
+      if (blockedSet.contains(p.authorId)) return false;
+      if (p.ownerIsPrivate &&
+          !currentFollowingIds.contains(p.authorId) &&
+          p.authorId != meUid) {
         return false;
       }
       return true;
-    }).toList();
-    final isLoadingInitial = visibleDocs.isEmpty && _loading && !_refreshing;
+    }).toList(growable: false);
+
+    final hasMore = feedState.hasMore;
+    final isLoading = feedState.isLoading;
+    final isLoadingInitial = visibleItems.isEmpty && isLoading;
 
     return RefreshIndicator(
       color: Colors.black,
@@ -173,11 +138,10 @@ class _PaginatedBoomerangListState
         controller: _controller,
         addAutomaticKeepAlives: false,
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
-        itemCount:
-            isLoadingInitial
-                ? 3
-                : (visibleDocs.length +
-                    (_hasMore ? 1 : (visibleDocs.isEmpty ? 1 : 0))),
+        itemCount: isLoadingInitial
+            ? 3
+            : (visibleItems.length +
+                (hasMore ? 1 : (visibleItems.isEmpty ? 1 : 0))),
         separatorBuilder: (_, __) => const SizedBox(),
         itemBuilder: (context, i) {
           if (isLoadingInitial) {
@@ -186,7 +150,7 @@ class _PaginatedBoomerangListState
               child: const BoomerangFeedPostShimmer(),
             );
           }
-          if (visibleDocs.isEmpty) {
+          if (visibleItems.isEmpty) {
             return Padding(
               padding: EdgeInsets.symmetric(vertical: 60.h),
               child: Column(
@@ -205,27 +169,26 @@ class _PaginatedBoomerangListState
               ),
             );
           }
-          if (i >= visibleDocs.length) {
+          if (i >= visibleItems.length) {
             return Padding(
               padding: EdgeInsets.symmetric(vertical: 16.h),
               child: const BoomerangFeedPostShimmer(),
             );
           }
-          final d = visibleDocs[i];
-          final data = d.data();
-          final overrideLiked = _localLiked[d.id];
-          final likesOverride = _localLikeCounts[d.id];
-          final isLiked = overrideLiked ?? likedIds.contains(d.id);
+          final RankedPost post = visibleItems[i];
+          final overrideLiked = _localLiked[post.id];
+          final likesOverride = _localLikeCounts[post.id];
+          final isLiked = overrideLiked ?? likedIds.contains(post.id);
           return _BoomerangCard(
-            key: ValueKey(d.id),
-            id: d.id,
-            data: data,
+            key: ValueKey(post.id),
+            id: post.id,
+            data: post.raw,
             likedOverride: isLiked,
             likesOverride: likesOverride,
             onToggleLike: (liked, likes) {
               setState(() {
-                _localLiked[d.id] = liked;
-                _localLikeCounts[d.id] = likes;
+                _localLiked[post.id] = liked;
+                _localLikeCounts[post.id] = likes;
               });
             },
           );

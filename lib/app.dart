@@ -38,7 +38,7 @@ class BoomerangApp extends ConsumerWidget {
           title: 'Boomerang',
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(),
-          routerConfig: router,
+          routerConfig: ref.watch(routerProvider),
           builder: (context, child) {
             return GestureDetector(
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),

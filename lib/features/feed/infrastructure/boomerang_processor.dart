@@ -32,7 +32,7 @@ class BoomerangProcessor {
     _assertExists(inputPath);
     final outPath = await _tmpPath('poster', 'jpg');
 
-    Future<bool> _tryPoster(String vf, {String seekTo = '0.1'}) async {
+    Future<bool> tryPoster(String vf, {String seekTo = '0.1'}) async {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
         '-ss', seekTo,
@@ -54,10 +54,10 @@ class BoomerangProcessor {
 
     // Try seeking to 0.1 s first; fall back to frame 0 for very short videos.
     for (final seek in ['0.1', '0']) {
-      if (await _tryPoster(fullVf, seekTo: seek)) return outPath;
+      if (await tryPoster(fullVf, seekTo: seek)) return outPath;
 
       if (videoFilter != null && videoFilter.isNotEmpty) {
-        if (await _tryPoster('scale=$targetWidth:-1', seekTo: seek)) {
+        if (await tryPoster('scale=$targetWidth:-1', seekTo: seek)) {
           return outPath;
         }
       }
@@ -301,7 +301,7 @@ class BoomerangProcessor {
       final maxFrames = (segmentSeconds * 60).ceil();
       final framePattern = '${tempDir.path}/$framePrefix%05d.jpg';
 
-      List<String> _buildExtractArgs(String? vf) => <String>[
+      List<String> buildExtractArgs(String? vf) => <String>[
         '-y',
         '-ss', '0',
         '-i', inputPath,
@@ -319,7 +319,7 @@ class BoomerangProcessor {
       final fullVf = vfParts.isNotEmpty ? vfParts.join(',') : null;
 
       var extractSession = await FFmpegKit.executeWithArguments(
-        _buildExtractArgs(fullVf),
+        buildExtractArgs(fullVf),
       );
       var extractRc = await extractSession.getReturnCode();
 
@@ -328,7 +328,7 @@ class BoomerangProcessor {
         _cleanupByPrefix(tempDir, framePrefix);
         final fallbackVf = scaleWidth != null ? 'scale=$scaleWidth:-2' : null;
         extractSession = await FFmpegKit.executeWithArguments(
-          _buildExtractArgs(fallbackVf),
+          buildExtractArgs(fallbackVf),
         );
         extractRc = await extractSession.getReturnCode();
       }
