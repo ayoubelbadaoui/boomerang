@@ -1,7 +1,9 @@
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:developer' show log;
+import 'dart:async';
 
 class UserBoomerangsState {
   const UserBoomerangsState({
@@ -44,9 +46,21 @@ final userBoomerangsControllerProvider =
 
 class UserBoomerangsController extends AsyncNotifier<UserBoomerangsState> {
   static const int _pageSize = 20;
+  String? _activeUid;
 
   @override
   Future<UserBoomerangsState> build() async {
+    _activeUid = ref.read(currentUserProfileProvider).value?.uid;
+    ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider, (previous, next) {
+      final nextUid = next.asData?.value?.uid;
+      if (nextUid == _activeUid) return;
+      _activeUid = nextUid;
+      state = const AsyncData(UserBoomerangsState.initial);
+      if (nextUid != null && nextUid.isNotEmpty) {
+        unawaited(fetchNext());
+      }
+    });
+
     // Start with an empty state; UI can trigger fetchNext or we can prefetch here.
     return UserBoomerangsState.initial;
   }
@@ -83,6 +97,7 @@ class UserBoomerangsController extends AsyncNotifier<UserBoomerangsState> {
     // Resolve current user
     final me = await ref.read(currentUserProfileProvider.future);
     if (me == null) return;
+    final requestUid = me.uid;
 
     // Mark loading
     state = AsyncData(currentState.copyWith(isLoading: true));
@@ -97,6 +112,11 @@ class UserBoomerangsController extends AsyncNotifier<UserBoomerangsState> {
       final nextLast =
           snap.docs.isNotEmpty ? snap.docs.last : currentState.last;
       final nextHasMore = snap.docs.length >= _pageSize;
+      final liveUid = ref.read(currentUserProfileProvider).value?.uid;
+      if (liveUid != requestUid) {
+        // Drop late result from previous account session.
+        return;
+      }
       state = AsyncData(
         currentState.copyWith(
           docs: nextDocs,

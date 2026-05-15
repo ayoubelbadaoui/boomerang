@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,16 +11,36 @@ final profileControllerProvider =
     );
 
 class ProfileController extends AsyncNotifier<UserProfile?> {
+  String? _activeUid;
+
   @override
   Future<UserProfile?> build() async {
     // Ensure there is always at least a minimal profile document
     final repo = ref.read(userProfileRepoProvider);
     await repo.ensureBasicProfileIfMissing();
 
+    _activeUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+
+    // Clear stale profile state immediately when auth user changes.
+    ref.listen(authStateProvider, (previous, next) {
+      final nextUid = next.asData?.value?.uid;
+      if (nextUid == _activeUid) return;
+      _activeUid = nextUid;
+      state = const AsyncLoading();
+      ref.invalidate(userBoomerangsControllerProvider);
+    });
+
     // Keep state in sync with the Firestore stream
     ref.listen(currentUserProfileProvider, (previous, next) {
       next.when(
-        data: (value) => state = AsyncData(value),
+        data: (value) {
+          final authUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+          if (value != null && authUid != null && value.uid != authUid) {
+            // Ignore late emissions from a previous account session.
+            return;
+          }
+          state = AsyncData(value);
+        },
         loading: () => state = const AsyncLoading(),
         error: (error, stackTrace) => state = AsyncError(error, stackTrace),
       );
