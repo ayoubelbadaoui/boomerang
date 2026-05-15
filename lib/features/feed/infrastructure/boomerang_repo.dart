@@ -230,17 +230,28 @@ class BoomerangRepo {
         .snapshots();
   }
 
-  /// Paginated fetch for a specific user's posts
+  /// Paginated fetch for a specific user's posts.
+  ///
+  /// When [onlyPublic] is true the query is additionally constrained to
+  /// `ownerIsPrivate == false`. This is REQUIRED whenever the caller is
+  /// not the owner and is not a confirmed follower — Firestore's rules
+  /// reject any list query that *might* return a private post the viewer
+  /// can't read, so the constraint must be on the query itself, not
+  /// applied after the fact. Without it, viewing a private user's
+  /// profile races into a PERMISSION_DENIED error.
   Future<QuerySnapshot<Map<String, dynamic>>> fetchUserBoomerangsPage({
     required String userId,
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
     int limit = 20,
+    bool onlyPublic = false,
   }) {
     Query<Map<String, dynamic>> q = _fs
         .collection('boomerangs')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit);
+        .where('userId', isEqualTo: userId);
+    if (onlyPublic) {
+      q = q.where('ownerIsPrivate', isEqualTo: false);
+    }
+    q = q.orderBy('createdAt', descending: true).limit(limit);
     if (startAfter != null) {
       q = q.startAfterDocument(startAfter);
     }

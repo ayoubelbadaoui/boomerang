@@ -2,6 +2,16 @@ import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Whether the current viewer is allowed to see this target's private posts.
+/// Used to decide if the Firestore query needs the `ownerIsPrivate == false`
+/// constraint that keeps it within the rules-engine's prove-safe window.
+Future<bool> _canViewPrivatePostsOf(Ref ref, String targetUid) async {
+  final me = await ref.read(currentUserProfileProvider.future);
+  if (me?.uid == targetUid) return true; // owner
+  final following = await ref.read(followingIdsProvider.future);
+  return following.contains(targetUid);
+}
+
 class UserBoomerangsState {
   const UserBoomerangsState({
     required this.docs,
@@ -76,11 +86,13 @@ class UserBoomerangsByUserController
     final userId = arg;
     state = AsyncData(currentState.copyWith(isLoading: true));
     try {
+      final canSeePrivate = await _canViewPrivatePostsOf(ref, userId);
       final repo = ref.read(boomerangRepoProvider);
       final snap = await repo.fetchUserBoomerangsPage(
         userId: userId,
         startAfter: currentState.last,
         limit: _pageSize,
+        onlyPublic: !canSeePrivate,
       );
       final nextDocs = [...currentState.docs, ...snap.docs];
       final nextLast =
