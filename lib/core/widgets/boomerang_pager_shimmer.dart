@@ -12,7 +12,8 @@ class BoomerangPagerShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     final top = MediaQuery.viewPaddingOf(context).top;
     return ColoredBox(
-      color: InstagramShimmerColors.darkCanvas,
+      // Keep fullscreen loading neutral gray (not pure black) for softer UX.
+      color: const Color(0xFF2A2A2A),
       child: ShimmerScope(
         brightness: Brightness.dark,
         duration: const Duration(milliseconds: 1700),

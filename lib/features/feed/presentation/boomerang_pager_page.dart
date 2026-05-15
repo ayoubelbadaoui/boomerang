@@ -28,11 +28,19 @@ class BoomerangPagerPage extends ConsumerStatefulWidget {
 
 class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   final _docs = <({String id, Map<String, dynamic> data})>[];
+  final _videoWarmups = <String, Future<void>>{};
   bool _loading = false;
   bool _hasMore = true;
   dynamic _last;
   late final PageController _pageController;
   int _currentPage = 0;
+  int _prewarmedUntil = -1;
+
+  // Slightly aggressive defaults to hide per-item loading while keeping
+  // memory/network usage bounded.
+  static const int _initialPrewarmCount = 6;
+  static const int _rollingPrewarmBatch = 4;
+  static const int _prewarmTriggerRemaining = 2;
 
   @override
   void initState() {
@@ -40,6 +48,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     _pageController = PageController(initialPage: 0);
     _docs.add((id: widget.initialId, data: widget.initialData));
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _advancePrewarmWindow(fromIndex: 0, count: _initialPrewarmCount);
       _fetchNext();
     });
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -90,8 +99,60 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         if (snap.docs.isNotEmpty) _last = snap.docs.last;
         if (snap.docs.length < 10) _hasMore = false;
       });
+      _advancePrewarmWindow(fromIndex: _currentPage, count: _rollingPrewarmBatch);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _advancePrewarmWindow({required int fromIndex, required int count}) {
+    if (!mounted || _docs.isEmpty) return;
+    final safeFrom = fromIndex.clamp(0, _docs.length - 1);
+    final target = (safeFrom + count).clamp(0, _docs.length - 1);
+    if (target <= _prewarmedUntil) return;
+    for (var i = _prewarmedUntil + 1; i <= target; i++) {
+      _warmPosterFor(i);
+      _warmVideoFor(i);
+    }
+    _prewarmedUntil = target;
+  }
+
+  void _warmPosterFor(int index) {
+    final poster = _docs[index].data['imageUrl'] as String?;
+    if (poster == null || poster.isEmpty) return;
+    precacheImage(NetworkImage(poster), context);
+  }
+
+  void _warmVideoFor(int index) {
+    final id = _docs[index].id;
+    if (_videoWarmups.containsKey(id)) return;
+    final videoUrl = _docs[index].data['videoUrl'] as String?;
+    if (videoUrl == null || videoUrl.isEmpty) return;
+    _videoWarmups[id] = _primeVideo(videoUrl);
+  }
+
+  Future<void> _primeVideo(String url) async {
+    VideoPlayerController? controller;
+    try {
+      controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      await controller.initialize().timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // Best-effort warmup; ignore failures.
+    } finally {
+      await controller?.dispose();
+    }
+  }
+
+  void _ensureRollingPrewarm(int pageIndex) {
+    final remainingPrewarmed = _prewarmedUntil - pageIndex;
+    if (remainingPrewarmed <= _prewarmTriggerRemaining) {
+      _advancePrewarmWindow(
+        fromIndex: pageIndex,
+        count: _rollingPrewarmBatch,
+      );
+      if (_hasMore && (_docs.length - pageIndex) <= (_rollingPrewarmBatch + 1)) {
+        _fetchNext();
+      }
     }
   }
 
@@ -123,8 +184,10 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
       body: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
+        allowImplicitScrolling: true,
         onPageChanged: (i) {
           setState(() => _currentPage = i);
+          _ensureRollingPrewarm(i);
           if (_docs.length - i <= 3) _fetchNext();
         },
         itemCount: _docs.length + (_hasMore ? 1 : 0),
@@ -311,10 +374,11 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
     }
 
     final videoOk = c?.value.isInitialized ?? false;
-    if (!hasPoster) {
-      return videoOk;
+    if (hasPoster) {
+      // Show the poster as soon as it resolves; let video catch up in background.
+      return _posterResolved;
     }
-    return videoOk && _posterResolved;
+    return videoOk;
   }
 
   void _onTap() {
