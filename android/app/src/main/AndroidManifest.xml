@@ -44,6 +44,15 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Required by image_cropper (uCrop). Without this declaration,
+             cropping on Android throws ActivityNotFoundException and the
+             plugin's onActivityResult double-submits the channel reply,
+             killing the process. Theme must extend AppCompat. -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
