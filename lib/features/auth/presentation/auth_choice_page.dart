@@ -30,8 +30,8 @@ class AuthChoicePage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24.r),
                   child: Image.asset(
                     'assets/logo.png',
-                    width: 120.w,
-                    height: 120.w,
+                    width: 148.w,
+                    height: 148.w,
                   ),
                 ),
               ),

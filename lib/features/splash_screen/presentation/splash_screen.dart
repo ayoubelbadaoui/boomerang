@@ -42,8 +42,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         if (u is String && u.isNotEmpty) urls.add(u);
       }
       if (!mounted || urls.isEmpty) return;
-      precacheImages(urls, context, concurrency: 2, cacheWidth: 400)
-          .timeout(const Duration(seconds: 5), onTimeout: () {});
+      precacheImages(
+        urls,
+        context,
+        concurrency: 2,
+        cacheWidth: 400,
+      ).timeout(const Duration(seconds: 5), onTimeout: () {});
     } catch (_) {}
   }
 
@@ -52,23 +56,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // `logoLight` is the black-on-transparent version of the logo,
-            // designed for light surfaces. Using `logoDark` (white logo)
-            // here would render invisible on the white background.
-            Image.asset(Assets.logoLight, cacheWidth: 240),
-            const SizedBox(height: 24),
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.4,
-                color: Colors.black,
-              ),
-            ),
-          ],
+        child: Image.asset(
+          Assets.logoLight,
+          width: 248,
+          height: 248,
+          fit: BoxFit.contain,
+          cacheWidth: 496,
         ),
       ),
     );

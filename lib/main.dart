@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:boomerang/core/audio/app_audio_session.dart';
+import 'package:boomerang/core/assets/shared_assets.dart';
 import 'package:boomerang/firebase_options.dart';
 import 'package:boomerang/infrastructure/auth/install_session_guard.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -108,8 +109,15 @@ class _BootstrapAppState extends State<_BootstrapApp> {
         }
         return const MaterialApp(
           home: Scaffold(
-            backgroundColor: Colors.black,
-            body: SizedBox.shrink(),
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Image(
+                image: AssetImage(Assets.logoLight),
+                width: 248,
+                height: 248,
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
         );
       },

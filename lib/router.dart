@@ -1,5 +1,5 @@
 import 'package:boomerang/features/splash_screen/presentation/splash_screen.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/auth/presentation/login_page.dart';
@@ -23,10 +23,22 @@ class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(this._ref) {
     _subs = [
       _ref.listen<Object?>(authStateProvider, (_, __) => notifyListeners()),
-      _ref.listen<Object?>(userHasNicknameProvider, (_, __) => notifyListeners()),
-      _ref.listen<Object?>(userProfileExistsProvider, (_, __) => notifyListeners()),
-      _ref.listen<Object?>(userProfileCompleteProvider, (_, __) => notifyListeners()),
-      _ref.listen<Object?>(isSwitchingAccountProvider, (_, __) => notifyListeners()),
+      _ref.listen<Object?>(
+        userHasNicknameProvider,
+        (_, __) => notifyListeners(),
+      ),
+      _ref.listen<Object?>(
+        userProfileExistsProvider,
+        (_, __) => notifyListeners(),
+      ),
+      _ref.listen<Object?>(
+        userProfileCompleteProvider,
+        (_, __) => notifyListeners(),
+      ),
+      _ref.listen<Object?>(
+        isSwitchingAccountProvider,
+        (_, __) => notifyListeners(),
+      ),
     ];
   }
 
@@ -51,6 +63,11 @@ final routerProvider = Provider<GoRouter>((ref) {
   return _buildRouter(refresh);
 });
 
+NoTransitionPage<void> _startupPage({
+  required GoRouterState state,
+  required Widget child,
+}) => NoTransitionPage<void>(key: state.pageKey, child: child);
+
 GoRouter _buildRouter(Listenable refresh) => GoRouter(
   refreshListenable: refresh,
   initialLocation: SplashScreen.routeName,
@@ -58,27 +75,40 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
   routes: [
     GoRoute(
       path: SplashScreen.routeName,
-      builder: (c, s) => const SplashScreen(),
+      pageBuilder:
+          (c, s) => _startupPage(state: s, child: const SplashScreen()),
     ),
     GoRoute(
       path: OnboardingPage.routeName,
-      builder: (c, s) => const OnboardingPage(),
+      pageBuilder:
+          (c, s) => _startupPage(state: s, child: const OnboardingPage()),
     ),
     GoRoute(
       path: AuthChoicePage.routeName,
-      builder: (c, s) => const AuthChoicePage(),
+      pageBuilder:
+          (c, s) => _startupPage(state: s, child: const AuthChoicePage()),
     ),
-    GoRoute(path: LoginPage.routeName, builder: (c, s) => const LoginPage()),
-    GoRoute(path: SignupPage.routeName, builder: (c, s) => const SignupPage()),
+    GoRoute(
+      path: LoginPage.routeName,
+      pageBuilder: (c, s) => _startupPage(state: s, child: const LoginPage()),
+    ),
+    GoRoute(
+      path: SignupPage.routeName,
+      pageBuilder: (c, s) => _startupPage(state: s, child: const SignupPage()),
+    ),
     GoRoute(
       path: SetupProfilePage.routeName,
       builder: (c, s) => const SetupProfilePage(),
     ),
     GoRoute(
       path: SetupFlowPage.routeName,
-      builder: (c, s) => const SetupFlowPage(),
+      pageBuilder:
+          (c, s) => _startupPage(state: s, child: const SetupFlowPage()),
     ),
-    GoRoute(path: HomeShell.routeName, builder: (c, s) => const HomeShell()),
+    GoRoute(
+      path: HomeShell.routeName,
+      pageBuilder: (c, s) => _startupPage(state: s, child: const HomeShell()),
+    ),
     GoRoute(
       path: SettingsPage.routeName,
       builder: (c, s) => const SettingsPage(),
@@ -89,15 +119,16 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
     ),
     GoRoute(
       path: '/chat/:conversationId',
-      builder: (c, s) => ChatPage(
-        conversationId: s.pathParameters['conversationId']!,
-      ),
+      builder:
+          (c, s) =>
+              ChatPage(conversationId: s.pathParameters['conversationId']!),
     ),
     GoRoute(
       path: '/boomerang/:boomerangId',
-      builder: (c, s) => SingleBoomerangPage(
-        boomerangId: s.pathParameters['boomerangId']!,
-      ),
+      builder:
+          (c, s) => SingleBoomerangPage(
+            boomerangId: s.pathParameters['boomerangId']!,
+          ),
     ),
   ],
   redirect: (context, state) {
@@ -125,8 +156,7 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
       // Splash is a hand-off-only screen; once we know there is no
       // authenticated user, push to onboarding. Other auth-entry pages
       // (login/signup/onboarding/auth-choice) are valid terminals.
-      final isAuthEntry =
-          isOnboarding || isAuthChoice || isLogin || isSignup;
+      final isAuthEntry = isOnboarding || isAuthChoice || isLogin || isSignup;
       return isAuthEntry ? null : OnboardingPage.routeName;
     }
 
@@ -150,7 +180,12 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
       return isSetupFlow ? null : SetupFlowPage.routeName;
     }
 
-    if (isSplash || isOnboarding || isAuthChoice || isLogin || isSignup || isSetupFlow) {
+    if (isSplash ||
+        isOnboarding ||
+        isAuthChoice ||
+        isLogin ||
+        isSignup ||
+        isSetupFlow) {
       return HomeShell.routeName;
     }
     return null;
