@@ -63,6 +63,17 @@ class UserProfileRepo {
     return owner.isEmpty || owner == uid;
   }
 
+  /// Public availability check for the username/nickname edit flow.
+  /// Returns true when the (sanitized) candidate is either unclaimed
+  /// or already owned by the current user — matching the rule used by
+  /// signup's live check, so the UI is consistent across surfaces.
+  Future<bool> isUsernameAvailable(String candidate) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw StateError('No authenticated user');
+    final sanitized = _sanitizeNicknameForRules(candidate, uid);
+    return _isAliasAvailable(uid: uid, alias: sanitized);
+  }
+
   Future<void> _ensureAliasesAvailable({
     required String uid,
     required Set<String> aliases,

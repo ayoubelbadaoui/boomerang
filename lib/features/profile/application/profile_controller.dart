@@ -34,6 +34,14 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     return repo.uploadAvatar(file);
   }
 
+  /// Live availability check for the username/nickname edit UI. Matches
+  /// the signup-time semantics: returns true when the candidate is
+  /// unclaimed or already owned by the current user.
+  Future<bool> isUsernameAvailable(String candidate) async {
+    final repo = ref.read(userProfileRepoProvider);
+    return repo.isUsernameAvailable(candidate);
+  }
+
   Future<void> updateProfile({
     String? fullName,
     String? nickname,
