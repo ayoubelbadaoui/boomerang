@@ -5,6 +5,8 @@ import 'package:boomerang/features/moderation/presentation/widgets/block_confirm
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/profile/application/follow_controller.dart';
+import 'package:boomerang/features/profile/application/profile_refresh_controller.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_by_user_controller.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid_for_user.dart';
 import 'package:boomerang/core/widgets/profile_loading_skeleton.dart';
@@ -14,12 +16,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
-class OtherUserProfilePage extends ConsumerWidget {
+class OtherUserProfilePage extends ConsumerStatefulWidget {
   const OtherUserProfilePage({super.key, required this.userId});
   final String userId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OtherUserProfilePage> createState() =>
+      _OtherUserProfilePageState();
+}
+
+class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(profileRefreshControllerProvider.notifier)
+          .onProfileOpened(widget.userId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userId = widget.userId;
     final asyncProfile = ref.watch(userProfileByIdProvider(userId));
     final me = ref.watch(currentUserProfileProvider).value;
     final isSelf = me?.uid == userId;
@@ -36,79 +56,91 @@ class OtherUserProfilePage extends ConsumerWidget {
         ),
         centerTitle: true,
         title: asyncProfile.maybeWhen(
-          data: (p) => Text(
-            (p?.nickname.isNotEmpty == true ? p!.nickname : p?.fullName ?? ''),
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 18.sp,
-              fontWeight: FontWeight.w700,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
+          data:
+              (p) => Text(
+                (p?.nickname.isNotEmpty == true
+                    ? p!.nickname
+                    : p?.fullName ?? ''),
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.w700,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
           orElse: () => const Text('Profile'),
         ),
-        actions: isSelf
-            ? null
-            : [
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.black),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onSelected: (value) {
-                    final profile = asyncProfile.value;
-                    final handle = profile != null && profile.nickname.isNotEmpty
-                        ? profile.handle
-                        : '@user';
-                    if (value == 'report') {
-                      showReportSheet(context, reportedUid: userId);
-                    } else if (value == 'block') {
-                      showBlockDialog(
-                        context,
-                        ref: ref,
-                        blockedUid: userId,
-                        handle: handle,
-                        blockedName: profile?.nickname,
-                        blockedAvatar: profile?.avatarUrl,
-                      );
-                    } else if (value == 'unblock') {
-                      showUnblockDialog(
-                        context,
-                        ref: ref,
-                        blockedUid: userId,
-                        handle: handle,
-                      );
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'report',
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag_outlined, color: Colors.redAccent),
-                          SizedBox(width: 8),
-                          Text('Report'),
-                        ],
-                      ),
+        actions:
+            isSelf
+                ? null
+                : [
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.black),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    PopupMenuItem(
-                      value: isBlocked ? 'unblock' : 'block',
-                      child: Row(
-                        children: [
-                          Icon(
-                            isBlocked
-                                ? Icons.lock_open_rounded
-                                : Icons.block_rounded,
-                            color: isBlocked ? Colors.blueAccent : Colors.redAccent,
+                    onSelected: (value) {
+                      final profile = asyncProfile.value;
+                      final handle =
+                          profile != null && profile.nickname.isNotEmpty
+                              ? profile.handle
+                              : '@user';
+                      if (value == 'report') {
+                        showReportSheet(context, reportedUid: userId);
+                      } else if (value == 'block') {
+                        showBlockDialog(
+                          context,
+                          ref: ref,
+                          blockedUid: userId,
+                          handle: handle,
+                          blockedName: profile?.nickname,
+                          blockedAvatar: profile?.avatarUrl,
+                        );
+                      } else if (value == 'unblock') {
+                        showUnblockDialog(
+                          context,
+                          ref: ref,
+                          blockedUid: userId,
+                          handle: handle,
+                        );
+                      }
+                    },
+                    itemBuilder:
+                        (_) => [
+                          const PopupMenuItem(
+                            value: 'report',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.flag_outlined,
+                                  color: Colors.redAccent,
+                                ),
+                                SizedBox(width: 8),
+                                Text('Report'),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(isBlocked ? 'Unblock' : 'Block'),
+                          PopupMenuItem(
+                            value: isBlocked ? 'unblock' : 'block',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isBlocked
+                                      ? Icons.lock_open_rounded
+                                      : Icons.block_rounded,
+                                  color:
+                                      isBlocked
+                                          ? Colors.blueAccent
+                                          : Colors.redAccent,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(isBlocked ? 'Unblock' : 'Block'),
+                              ],
+                            ),
+                          ),
                         ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
       ),
       body: asyncProfile.when(
         loading:
@@ -155,145 +187,144 @@ class _ProfileBody extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        minChildSize: 0.3,
-        builder: (_, controller) =>
-            FollowListSheet(mode: mode, userId: userId),
-      ),
+      builder:
+          (_) => DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.6,
+            maxChildSize: 0.9,
+            minChildSize: 0.3,
+            builder:
+                (_, controller) => FollowListSheet(mode: mode, userId: userId),
+          ),
     );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = profile;
-    final isFollowing =
-        ref.watch(isFollowingStreamProvider(userId)).value ?? false;
+    final social = ref.watch(profileSocialStateProvider(userId));
+    final isFollowing = social.followRelationshipStatus == FollowState.approved;
     final canViewContent = !isPrivate || isFollowing || isSelf;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(height: 8.h),
-          AppAvatar(
-            url: p?.avatarUrl,
-            size: 96.r,
-            enableFullscreen: true,
-            heroTag: 'other_profile_avatar_$userId',
-          ),
-          SizedBox(height: 12.h),
-          if (p != null && p.nickname.isNotEmpty)
-            Text(
-              '@${p.nickname.replaceAll(' ', '_').toLowerCase()}',
-              style: TextStyle(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w700,
-              ),
+    return RefreshIndicator(
+      color: Colors.black,
+      onRefresh: () async {
+        await ref
+            .read(profileRefreshControllerProvider.notifier)
+            .refreshProfile(userId, forceRefresh: true);
+        await ref
+            .read(userBoomerangsByUserControllerProvider(userId).notifier)
+            .refresh();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(horizontal: 20.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(height: 8.h),
+            AppAvatar(
+              url: p?.avatarUrl,
+              size: 96.r,
+              enableFullscreen: true,
+              heroTag: 'other_profile_avatar_$userId',
             ),
-          SizedBox(height: 6.h),
-          if (p != null && p.bio.isNotEmpty)
-            Text(
-              p.bio,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 14.sp),
-              textAlign: TextAlign.center,
-            ),
-          SizedBox(height: 20.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Consumer(
-                builder: (context, ref, _) {
-                  final posts =
-                      ref.watch(userBoomerangsCountProvider(userId));
-                  final value = posts.maybeWhen(
-                    data: (v) => '$v',
-                    orElse: () => '0',
-                  );
-                  return _Stat(value: value, label: 'Bmg.');
-                },
+            SizedBox(height: 12.h),
+            if (p != null && p.nickname.isNotEmpty)
+              Text(
+                '@${p.nickname.replaceAll(' ', '_').toLowerCase()}',
+                style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700),
               ),
-              GestureDetector(
-                onTap: () => _openFollowList(
-                    context, FollowMode.followers, canViewContent),
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    final followers =
-                        ref.watch(followersCountProvider(userId));
-                    final value = followers.maybeWhen(
-                      data: (v) => '$v',
-                      orElse: () => '0',
-                    );
-                    return _Stat(value: value, label: 'Followers');
-                  },
-                ),
+            SizedBox(height: 6.h),
+            if (p != null && p.bio.isNotEmpty)
+              Text(
+                p.bio,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 14.sp),
+                textAlign: TextAlign.center,
               ),
-              GestureDetector(
-                onTap: () => _openFollowList(
-                    context, FollowMode.following, canViewContent),
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    final following =
-                        ref.watch(followingCountProvider(userId));
-                    final value = following.maybeWhen(
-                      data: (v) => '$v',
-                      orElse: () => '0',
-                    );
-                    return _Stat(value: value, label: 'Following');
-                  },
-                ),
-              ),
-              Consumer(
-                builder: (context, ref, _) {
-                  final likes =
-                      ref.watch(userTotalLikesProvider(userId));
-                  final value = likes.maybeWhen(
-                    data: (v) => '$v',
-                    orElse: () => '0',
-                  );
-                  return _Stat(value: value, label: 'Likes');
-                },
-              ),
-            ],
-          ),
-          SizedBox(height: 16.h),
-          if (!isSelf)
+            SizedBox(height: 20.h),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Expanded(
-                  child: _FollowButton(
-                    userId: userId,
-                    isPrivate: isPrivate,
+                Consumer(
+                  builder: (context, ref, _) {
+                    final posts = ref.watch(
+                      userBoomerangsCountProvider(userId),
+                    );
+                    final value = posts.maybeWhen(
+                      data: (v) => '$v',
+                      orElse: () => '0',
+                    );
+                    return _Stat(value: value, label: 'Bmg.');
+                  },
+                ),
+                GestureDetector(
+                  onTap:
+                      () => _openFollowList(
+                        context,
+                        FollowMode.followers,
+                        canViewContent,
+                      ),
+                  child: _Stat(
+                    value: '${social.followerCount}',
+                    label: 'Followers',
                   ),
                 ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: _MessageButton(userId: userId),
+                GestureDetector(
+                  onTap:
+                      () => _openFollowList(
+                        context,
+                        FollowMode.following,
+                        canViewContent,
+                      ),
+                  child: _Stat(
+                    value: '${social.followingCount}',
+                    label: 'Following',
+                  ),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final likes = ref.watch(userTotalLikesProvider(userId));
+                    final value = likes.maybeWhen(
+                      data: (v) => '$v',
+                      orElse: () => '0',
+                    );
+                    return _Stat(value: value, label: 'Likes');
+                  },
                 ),
               ],
             ),
-          if (!isSelf)
-            Consumer(
-              builder: (context, ref, _) {
-                final incoming =
-                    ref.watch(incomingFollowRequestProvider(userId)).value;
-                final pending = incoming?.isPending == true;
-                if (!pending) return const SizedBox.shrink();
-                return _IncomingRequestBanner(userId: userId);
-              },
-            ),
-          SizedBox(height: 16.h),
-          Divider(height: 1.h, color: Colors.black12),
-          SizedBox(height: 12.h),
-          if (canViewContent)
-            UserBoomerangsGridForUser(userId: userId)
-          else
-            _PrivateAccountNotice(),
-          SizedBox(height: 80.h),
-        ],
+            SizedBox(height: 16.h),
+            if (!isSelf)
+              Row(
+                children: [
+                  Expanded(
+                    child: _FollowButton(userId: userId, isPrivate: isPrivate),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(child: _MessageButton(userId: userId)),
+                ],
+              ),
+            if (!isSelf)
+              Consumer(
+                builder: (context, ref, _) {
+                  final pending = ref.watch(
+                    incomingRequestPendingProvider(userId),
+                  );
+                  if (!pending) return const SizedBox.shrink();
+                  return _IncomingRequestBanner(userId: userId);
+                },
+              ),
+            SizedBox(height: 16.h),
+            Divider(height: 1.h, color: Colors.black12),
+            SizedBox(height: 12.h),
+            if (canViewContent)
+              UserBoomerangsGridForUser(userId: userId)
+            else
+              _PrivateAccountNotice(),
+            SizedBox(height: 80.h),
+          ],
+        ),
       ),
     );
   }
@@ -318,10 +349,7 @@ class _PrivateAccountNotice extends StatelessWidget {
           SizedBox(height: 16.h),
           Text(
             'This Account is Private',
-            style: TextStyle(
-              fontSize: 18.sp,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700),
           ),
           SizedBox(height: 6.h),
           Text(
@@ -336,10 +364,7 @@ class _PrivateAccountNotice extends StatelessWidget {
 }
 
 class _BlockedProfileBody extends ConsumerWidget {
-  const _BlockedProfileBody({
-    required this.userId,
-    required this.profile,
-  });
+  const _BlockedProfileBody({required this.userId, required this.profile});
 
   final String userId;
   final UserProfile? profile;
@@ -347,9 +372,7 @@ class _BlockedProfileBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = profile;
-    final handle = p != null && p.nickname.isNotEmpty
-        ? p.handle
-        : '@user';
+    final handle = p != null && p.nickname.isNotEmpty ? p.handle : '@user';
     return Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 32.w),
@@ -367,10 +390,7 @@ class _BlockedProfileBody extends ConsumerWidget {
             if (p != null && p.nickname.isNotEmpty)
               Text(
                 handle,
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700),
               ),
             SizedBox(height: 40.h),
             Container(
@@ -380,8 +400,11 @@ class _BlockedProfileBody extends ConsumerWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.black26, width: 2),
               ),
-              child:
-                  Icon(Icons.block_rounded, size: 32.r, color: Colors.black26),
+              child: Icon(
+                Icons.block_rounded,
+                size: 32.r,
+                color: Colors.black26,
+              ),
             ),
             SizedBox(height: 16.h),
             Text(
@@ -403,12 +426,13 @@ class _BlockedProfileBody extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () => showUnblockDialog(
-                  context,
-                  ref: ref,
-                  blockedUid: userId,
-                  handle: handle,
-                ),
+                onPressed:
+                    () => showUnblockDialog(
+                      context,
+                      ref: ref,
+                      blockedUid: userId,
+                      handle: handle,
+                    ),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.black, width: 1),
                   padding: EdgeInsets.symmetric(vertical: 14.h),
@@ -458,6 +482,23 @@ class _FollowButton extends ConsumerStatefulWidget {
 }
 
 class _FollowButtonState extends ConsumerState<_FollowButton> {
+  Future<void> _toggle(FollowState state) async {
+    try {
+      await ref
+          .read(followFlowControllerProvider.notifier)
+          .toggleRelationship(
+            targetUserId: widget.userId,
+            targetIsPrivate: widget.isPrivate,
+            currentState: state,
+          );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update follow status: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final blockedSet =
@@ -467,32 +508,27 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
 
     final state = ref.watch(followStateProvider(widget.userId));
     final loading = ref.watch(isFollowActionInFlightProvider(widget.userId));
-    final onPressed = loading
-        ? null
-        : () => ref.read(followFlowControllerProvider.notifier).toggleRelationship(
-              targetUserId: widget.userId,
-              targetIsPrivate: widget.isPrivate,
-              currentState: state,
-            );
+    final onPressed = loading ? null : () => _toggle(state);
 
     return OutlinedButton.icon(
       onPressed: onPressed,
-      icon: loading
-          ? SizedBox(
-              width: 16.r,
-              height: 16.r,
-              child: const CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(state == FollowState.approved
-              ? Icons.check
-              : Icons.person_add_alt_1),
+      icon:
+          loading
+              ? SizedBox(
+                width: 16.r,
+                height: 16.r,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              )
+              : Icon(
+                state == FollowState.approved
+                    ? Icons.check
+                    : Icons.person_add_alt_1,
+              ),
       label: Text(followButtonLabelForState(state)),
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: Colors.black, width: 1),
         padding: EdgeInsets.symmetric(vertical: 14.h),
-        shape: StadiumBorder(
-          side: BorderSide(color: Colors.black, width: 1.w),
-        ),
+        shape: StadiumBorder(side: BorderSide(color: Colors.black, width: 1.w)),
         backgroundColor:
             state == FollowState.approved ? Colors.white : Colors.black,
         foregroundColor:
@@ -553,9 +589,10 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
         return;
       }
       final repo = ref.read(chatRepoProvider);
-      final convId = await repo.getOrCreateConversation(
-        [me.uid, widget.userId],
-      );
+      final convId = await repo.getOrCreateConversation([
+        me.uid,
+        widget.userId,
+      ]);
       if (!mounted) return;
       context.push('/chat/$convId');
     } finally {
@@ -567,13 +604,14 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: _loading ? null : _openChat,
-      icon: _loading
-          ? SizedBox(
-              width: 16.r,
-              height: 16.r,
-              child: const CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.chat_bubble_outline),
+      icon:
+          _loading
+              ? SizedBox(
+                width: 16.r,
+                height: 16.r,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              )
+              : const Icon(Icons.chat_bubble_outline),
       label: const Text('Message'),
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: Colors.black, width: 1),
@@ -596,15 +634,29 @@ class _IncomingRequestBanner extends ConsumerStatefulWidget {
 class _IncomingRequestBannerState
     extends ConsumerState<_IncomingRequestBanner> {
   Future<void> _accept() async {
-    await ref.read(followFlowControllerProvider.notifier).approveIncomingRequest(
-          senderId: widget.userId,
-        );
+    try {
+      await ref
+          .read(followFlowControllerProvider.notifier)
+          .approveIncomingRequest(senderId: widget.userId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not accept follow request: $e')),
+      );
+    }
   }
 
   Future<void> _reject() async {
-    await ref.read(followFlowControllerProvider.notifier).rejectIncomingRequest(
-          senderId: widget.userId,
-        );
+    try {
+      await ref
+          .read(followFlowControllerProvider.notifier)
+          .rejectIncomingRequest(senderId: widget.userId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not reject follow request: $e')),
+      );
+    }
   }
 
   @override
@@ -622,10 +674,7 @@ class _IncomingRequestBannerState
         children: [
           Text(
             'Follow request pending',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14.sp,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.sp),
           ),
           SizedBox(height: 8.h),
           Row(
@@ -655,14 +704,16 @@ class _IncomingRequestBannerState
                       borderRadius: BorderRadius.circular(24.r),
                     ),
                   ),
-                  child: busy
-                      ? SizedBox(
-                          width: 16.r,
-                          height: 16.r,
-                          child:
-                              const CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Accept'),
+                  child:
+                      busy
+                          ? SizedBox(
+                            width: 16.r,
+                            height: 16.r,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : const Text('Accept'),
                 ),
               ),
             ],
@@ -672,9 +723,3 @@ class _IncomingRequestBannerState
     );
   }
 }
-
-
-
-
-
-

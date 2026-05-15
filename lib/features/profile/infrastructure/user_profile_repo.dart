@@ -1,8 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
+
+enum UserProfileFetchStatus {
+  serverData,
+  serverAndCacheData,
+  cacheFallbackData,
+  failed,
+}
+
+class UserProfileFetchResult {
+  const UserProfileFetchResult({
+    required this.profile,
+    required this.status,
+    this.error,
+  });
+
+  final UserProfile? profile;
+  final UserProfileFetchStatus status;
+  final Object? error;
+}
 
 class UserProfileRepo {
   UserProfileRepo(this._firestore, this._auth, this._storage);
@@ -30,10 +50,11 @@ class UserProfileRepo {
   }) async {
     final safeEmail = email.trim();
     if (safeEmail.isEmpty || aliases.isEmpty) return;
-    final safeAliases = aliases
-        .map((a) => a.trim().toLowerCase())
-        .where((a) => a.isNotEmpty)
-        .toSet();
+    final safeAliases =
+        aliases
+            .map((a) => a.trim().toLowerCase())
+            .where((a) => a.isNotEmpty)
+            .toSet();
     if (safeAliases.isEmpty) return;
 
     final batch = _firestore.batch();
@@ -81,9 +102,78 @@ class UserProfileRepo {
     for (final alias in aliases) {
       final available = await _isAliasAvailable(uid: uid, alias: alias);
       if (!available) {
-        throw StateError('Username "$alias" is already taken. Please choose another one.');
+        throw StateError(
+          'Username "$alias" is already taken. Please choose another one.',
+        );
       }
     }
+  }
+
+  Future<UserProfileFetchResult> getProfileWithTelemetry(
+    String userId, {
+    bool forceRefresh = false,
+  }) async {
+    if (userId.isEmpty) {
+      return const UserProfileFetchResult(
+        profile: null,
+        status: UserProfileFetchStatus.serverAndCacheData,
+      );
+    }
+    final ref = _firestore.collection('users').doc(userId);
+    try {
+      final source = forceRefresh ? Source.server : Source.serverAndCache;
+      final snap = await ref.get(GetOptions(source: source));
+      final data = snap.data();
+      return UserProfileFetchResult(
+        profile:
+            !snap.exists || data == null
+                ? null
+                : UserProfile.fromMap(snap.id, data),
+        status:
+            forceRefresh
+                ? UserProfileFetchStatus.serverData
+                : UserProfileFetchStatus.serverAndCacheData,
+      );
+    } on FirebaseException catch (firstError) {
+      try {
+        final snap = await ref.get(const GetOptions(source: Source.cache));
+        final data = snap.data();
+        return UserProfileFetchResult(
+          profile:
+              !snap.exists || data == null
+                  ? null
+                  : UserProfile.fromMap(snap.id, data),
+          status: UserProfileFetchStatus.cacheFallbackData,
+        );
+      } catch (_) {
+        return UserProfileFetchResult(
+          profile: null,
+          status: UserProfileFetchStatus.failed,
+          error: firstError,
+        );
+      }
+    } catch (error) {
+      return UserProfileFetchResult(
+        profile: null,
+        status: UserProfileFetchStatus.failed,
+        error: error,
+      );
+    }
+  }
+
+  Future<UserProfile?> getProfile(
+    String userId, {
+    bool forceRefresh = false,
+  }) async {
+    final result = await getProfileWithTelemetry(
+      userId,
+      forceRefresh: forceRefresh,
+    );
+    if (result.status == UserProfileFetchStatus.failed &&
+        result.error != null) {
+      throw result.error!;
+    }
+    return result.profile;
   }
 
   Future<String> _pickAvailableAlias({
@@ -106,7 +196,9 @@ class UserProfileRepo {
         return retry;
       }
     }
-    throw StateError('Could not allocate an available username. Please try another nickname.');
+    throw StateError(
+      'Could not allocate an available username. Please try another nickname.',
+    );
   }
 
   Future<void> upsertCurrentUserProfile({
@@ -116,13 +208,15 @@ class UserProfileRepo {
     required String nickname,
     required String email,
     String? avatarUrl,
+
     /// Stored as Firestore `isPrivate`. Defaults to public (`false`) when omitted.
     bool isPrivate = false,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('No authenticated user');
     final safeFullName = fullName.trim();
-    final rawNickname = nickname.trim().isNotEmpty ? nickname.trim() : safeFullName;
+    final rawNickname =
+        nickname.trim().isNotEmpty ? nickname.trim() : safeFullName;
     final fullNameLower = safeFullName.toLowerCase();
     // Firestore rules require nickname/nicknameLower: 3–20 chars, [a-z0-9._] only.
     // Build merged doc from existing + our data so merged result always passes rules.
@@ -158,10 +252,7 @@ class UserProfileRepo {
         }
       }
 
-      await _ensureAliasesAvailable(
-        uid: uid,
-        aliases: _aliasesFromData(data),
-      );
+      await _ensureAliasesAvailable(uid: uid, aliases: _aliasesFromData(data));
       await ref.set(data, SetOptions(merge: true));
       await _syncLoginAliases(
         uid: uid,
@@ -182,9 +273,13 @@ class UserProfileRepo {
 
   /// Sanitize nickname to satisfy Firestore rules: 3–20 chars, [a-z0-9._] only.
   static String _sanitizeNicknameForRules(String raw, String uid) {
-    if (raw.isEmpty) return 'user_${uid.substring(0, uid.length >= 6 ? 6 : uid.length)}';
+    if (raw.isEmpty) {
+      return 'user_${uid.substring(0, uid.length >= 6 ? 6 : uid.length)}';
+    }
     var s = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._]'), '_');
-    if (s.length < 3) s = 'user_${uid.substring(0, uid.length >= 6 ? 6 : uid.length)}';
+    if (s.length < 3) {
+      s = 'user_${uid.substring(0, uid.length >= 6 ? 6 : uid.length)}';
+    }
     if (s.length > 20) s = s.substring(0, 20);
     return s;
   }
@@ -289,10 +384,7 @@ class UserProfileRepo {
     };
     if (nickname != null) {
       sanitizedNickname = _sanitizeNicknameForRules(nickname, uid);
-      await _ensureAliasesAvailable(
-        uid: uid,
-        aliases: {sanitizedNickname},
-      );
+      await _ensureAliasesAvailable(uid: uid, aliases: {sanitizedNickname});
       data['nickname'] = sanitizedNickname;
       data['nicknameLower'] = sanitizedNickname;
     }

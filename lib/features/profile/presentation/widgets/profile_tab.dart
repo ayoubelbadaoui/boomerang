@@ -1,4 +1,5 @@
 import 'package:boomerang/features/profile/application/profile_controller.dart';
+import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/profile/presentation/widgets/account_switcher_sheet.dart';
 import 'package:boomerang/features/profile/presentation/widgets/edit_profile_page.dart';
@@ -177,13 +178,8 @@ class ProfileTab extends ConsumerWidget {
                       Builder(
                         builder: (_) {
                           final uid = p?.uid ?? '';
-                          final followers = ref.watch(
-                            followersCountProvider(uid),
-                          );
-                          final followersText = followers.maybeWhen(
-                            data: (v) => '$v',
-                            orElse: () => '0',
-                          );
+                          final social = ref.watch(profileSocialStateProvider(uid));
+                          final followersText = '${social.followerCount}';
                           return Stat(
                             value: followersText,
                             label: 'Followers',
@@ -212,13 +208,8 @@ class ProfileTab extends ConsumerWidget {
                       Builder(
                         builder: (_) {
                           final uid = p?.uid ?? '';
-                          final following = ref.watch(
-                            followingCountProvider(uid),
-                          );
-                          final followingText = following.maybeWhen(
-                            data: (v) => '$v',
-                            orElse: () => '0',
-                          );
+                          final social = ref.watch(profileSocialStateProvider(uid));
+                          final followingText = '${social.followingCount}';
                           return Stat(
                             value: followingText,
                             label: 'Following',

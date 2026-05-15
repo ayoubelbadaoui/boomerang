@@ -56,8 +56,8 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
         state == FollowState.approved
             ? Icons.check
             : state == FollowState.requested
-                ? Icons.schedule
-                : Icons.person_add_alt_1;
+            ? Icons.schedule
+            : Icons.person_add_alt_1;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
@@ -96,7 +96,8 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
             ),
             Consumer(
               builder: (context, ref, _) {
-                final profile = ref.watch(userProfileByIdProvider(widget.userId)).value;
+                final profile =
+                    ref.watch(userProfileByIdProvider(widget.userId)).value;
                 final bio = profile?.bio ?? '';
                 if (bio.isEmpty) return const SizedBox.shrink();
                 return Padding(
@@ -106,7 +107,10 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14.sp),
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 14.sp,
+                    ),
                   ),
                 );
               },
@@ -131,13 +135,10 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    final followers = ref.watch(
-                      followersCountProvider(widget.userId),
+                    final social = ref.watch(
+                      profileSocialStateProvider(widget.userId),
                     );
-                    final text = followers.maybeWhen(
-                      data: (v) => '$v',
-                      orElse: () => '0',
-                    );
+                    final text = '${social.followerCount}';
                     // On private accounts we still show the real count,
                     // but tapping is disabled until the current user is
                     // accepted — they can't see *who* follows, just how
@@ -145,8 +146,9 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     return _Stat(
                       value: text,
                       label: 'Followers',
-                      onTap: canViewPrivateContent
-                          ? () => showModalBottomSheet<void>(
+                      onTap:
+                          canViewPrivateContent
+                              ? () => showModalBottomSheet<void>(
                                 context: context,
                                 isScrollControlled: true,
                                 backgroundColor: Colors.white,
@@ -155,32 +157,31 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                                     top: Radius.circular(24),
                                   ),
                                 ),
-                                builder: (_) => SizedBox(
-                                  height: 500,
-                                  child: FollowListSheet(
-                                    mode: FollowMode.followers,
-                                    userId: widget.userId,
-                                  ),
-                                ),
+                                builder:
+                                    (_) => SizedBox(
+                                      height: 500,
+                                      child: FollowListSheet(
+                                        mode: FollowMode.followers,
+                                        userId: widget.userId,
+                                      ),
+                                    ),
                               )
-                          : null,
+                              : null,
                     );
                   },
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    final following = ref.watch(
-                      followingCountProvider(widget.userId),
+                    final social = ref.watch(
+                      profileSocialStateProvider(widget.userId),
                     );
-                    final text = following.maybeWhen(
-                      data: (v) => '$v',
-                      orElse: () => '0',
-                    );
+                    final text = '${social.followingCount}';
                     return _Stat(
                       value: text,
                       label: 'Following',
-                      onTap: canViewPrivateContent
-                          ? () => showModalBottomSheet<void>(
+                      onTap:
+                          canViewPrivateContent
+                              ? () => showModalBottomSheet<void>(
                                 context: context,
                                 isScrollControlled: true,
                                 backgroundColor: Colors.white,
@@ -189,15 +190,16 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                                     top: Radius.circular(24),
                                   ),
                                 ),
-                                builder: (_) => SizedBox(
-                                  height: 500,
-                                  child: FollowListSheet(
-                                    mode: FollowMode.following,
-                                    userId: widget.userId,
-                                  ),
-                                ),
+                                builder:
+                                    (_) => SizedBox(
+                                      height: 500,
+                                      child: FollowListSheet(
+                                        mode: FollowMode.following,
+                                        userId: widget.userId,
+                                      ),
+                                    ),
                               )
-                          : null,
+                              : null,
                     );
                   },
                 ),
@@ -224,28 +226,42 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       onPressed:
                           loading
                               ? null
-                              : () => ref
-                                  .read(followFlowControllerProvider.notifier)
-                                  .toggleRelationship(
-                                    targetUserId: widget.userId,
-                                    targetIsPrivate: targetIsPrivate,
-                                    currentState: state,
-                                  ),
+                              : () async {
+                                try {
+                                  await ref
+                                      .read(
+                                        followFlowControllerProvider.notifier,
+                                      )
+                                      .toggleRelationship(
+                                        targetUserId: widget.userId,
+                                        targetIsPrivate: targetIsPrivate,
+                                        currentState: state,
+                                      );
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Could not update follow status: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
                       icon:
                           loading
                               ? SizedBox(
-                                  width: 16.r,
-                                  height: 16.r,
-                                  child: const CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor:
-                                        AlwaysStoppedAnimation(Colors.white),
+                                width: 16.r,
+                                height: 16.r,
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    Colors.white,
                                   ),
-                                )
+                                ),
+                              )
                               : Icon(followIcon),
-                      label: Text(
-                        followLabel,
-                      ),
+                      label: Text(followLabel),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
                             state == FollowState.approved
@@ -300,8 +316,7 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           );
                           return;
                         }
-                        if (targetIsPrivate &&
-                            state != FollowState.approved) {
+                        if (targetIsPrivate && state != FollowState.approved) {
                           if (navigator.canPop()) navigator.pop();
                           rootMessenger.showSnackBar(
                             const SnackBar(
@@ -313,9 +328,10 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                           return;
                         }
                         final repo = ref.read(chatRepoProvider);
-                        final convId = await repo.getOrCreateConversation(
-                          [me.uid, widget.userId],
-                        );
+                        final convId = await repo.getOrCreateConversation([
+                          me.uid,
+                          widget.userId,
+                        ]);
                         if (!context.mounted) return;
                         Navigator.pop(context);
                         context.push('/chat/$convId');
@@ -343,13 +359,13 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       TextButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
-                          showReportSheet(
-                            context,
-                            reportedUid: widget.userId,
-                          );
+                          showReportSheet(context, reportedUid: widget.userId);
                         },
-                        icon: Icon(Icons.flag_outlined,
-                            size: 18.r, color: Colors.redAccent),
+                        icon: Icon(
+                          Icons.flag_outlined,
+                          size: 18.r,
+                          color: Colors.redAccent,
+                        ),
                         label: Text(
                           'Report',
                           style: TextStyle(
@@ -383,17 +399,17 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                               ? Icons.lock_open_rounded
                               : Icons.block_rounded,
                           size: 18.r,
-                          color: isBlocked
-                              ? Colors.blueAccent
-                              : Colors.redAccent,
+                          color:
+                              isBlocked ? Colors.blueAccent : Colors.redAccent,
                         ),
                         label: Text(
                           isBlocked ? 'Unblock' : 'Block',
                           style: TextStyle(
                             fontSize: 13.sp,
-                            color: isBlocked
-                                ? Colors.blueAccent
-                                : Colors.redAccent,
+                            color:
+                                isBlocked
+                                    ? Colors.blueAccent
+                                    : Colors.redAccent,
                           ),
                         ),
                       ),

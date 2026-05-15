@@ -141,9 +141,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       orElse: () => null,
     );
     final otherUid = conversation?.otherParticipantId(myUid) ?? '';
-    final canReply = otherUid.isEmpty
-        ? true
-        : ref.read(canDirectMessageProvider(otherUid)).allowed;
+    final canReply =
+        otherUid.isEmpty
+            ? true
+            : ref.read(canDirectMessageProvider(otherUid)).allowed;
 
     showModalBottomSheet<void>(
       context: context,
@@ -195,8 +196,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _navToken = token;
     bool cancelled() => !mounted || _navToken != token;
 
-    final notifier =
-        ref.read(chatControllerProvider(widget.conversationId).notifier);
+    final notifier = ref.read(
+      chatControllerProvider(widget.conversationId).notifier,
+    );
 
     final inWindow = ref
         .read(chatControllerProvider(widget.conversationId))
@@ -254,8 +256,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!_scrollController.hasClients) return;
       final position = _scrollController.position;
       final avg = _estimateAverageItemHeight();
-      final estimated = (targetItemIndex * avg)
-          .clamp(0.0, position.maxScrollExtent);
+      final estimated = (targetItemIndex * avg).clamp(
+        0.0,
+        position.maxScrollExtent,
+      );
       await _scrollController.animateTo(
         estimated,
         duration: const Duration(milliseconds: 220),
@@ -342,9 +346,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ? ref.watch(userProfileByIdProvider(otherUid)).value
             : null;
 
-    final permission = otherUid.isNotEmpty
-        ? ref.watch(canDirectMessageProvider(otherUid))
-        : const CanDirectMessage(allowed: true, reason: null);
+    final permission =
+        otherUid.isNotEmpty
+            ? ref.watch(canDirectMessageProvider(otherUid))
+            : const CanDirectMessage(allowed: true, reason: null);
 
     return Scaffold(
       appBar: _ChatAppBar(profile: otherProfile, onDelete: _confirmDeleteChat),
@@ -584,11 +589,20 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
     required FollowState currentState,
     required bool targetIsPrivate,
   }) async {
-    await ref.read(followFlowControllerProvider.notifier).toggleRelationship(
-          targetUserId: widget.otherUid,
-          targetIsPrivate: targetIsPrivate,
-          currentState: currentState,
-        );
+    try {
+      await ref
+          .read(followFlowControllerProvider.notifier)
+          .toggleRelationship(
+            targetUserId: widget.otherUid,
+            targetIsPrivate: targetIsPrivate,
+            currentState: currentState,
+          );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update follow status: $e')),
+      );
+    }
   }
 
   @override
@@ -647,38 +661,38 @@ class _FollowBackBannerState extends ConsumerState<_FollowBackBanner> {
           SizedBox(
             height: 32.h,
             child: ElevatedButton(
-              onPressed: loading
-                  ? null
-                  : () => _onPressed(
+              onPressed:
+                  loading
+                      ? null
+                      : () => _onPressed(
                         currentState: state,
                         targetIsPrivate: isPrivate,
                       ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: requested
-                    ? Colors.white
-                    : theme.colorScheme.primary,
-                foregroundColor: requested
-                    ? Colors.black87
-                    : Colors.white,
-                side: requested
-                    ? const BorderSide(color: Colors.black26)
-                    : BorderSide.none,
+                backgroundColor:
+                    requested ? Colors.white : theme.colorScheme.primary,
+                foregroundColor: requested ? Colors.black87 : Colors.white,
+                side:
+                    requested
+                        ? const BorderSide(color: Colors.black26)
+                        : BorderSide.none,
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
                 shape: const StadiumBorder(),
                 textStyle: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child: loading
-                  ? SizedBox(
-                      width: 14.w,
-                      height: 14.w,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: requested ? Colors.black54 : Colors.white,
-                      ),
-                    )
-                  : Text(buttonLabel),
+              child:
+                  loading
+                      ? SizedBox(
+                        width: 14.w,
+                        height: 14.w,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: requested ? Colors.black54 : Colors.white,
+                        ),
+                      )
+                      : Text(buttonLabel),
             ),
           ),
         ],
@@ -719,8 +733,7 @@ class _DirectMessageLockBanner extends StatelessWidget {
           SizedBox(width: 10.w),
           Expanded(
             child: Text(
-              reason ??
-                  'You can\'t reply to this conversation right now.',
+              reason ?? 'You can\'t reply to this conversation right now.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.black54,
                 height: 1.3,

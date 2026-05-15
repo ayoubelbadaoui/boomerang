@@ -400,18 +400,33 @@ class _FollowBackButton extends ConsumerWidget {
     final state = ref.watch(followStateProvider(item.actorId));
     final loading = ref.watch(isFollowActionInFlightProvider(item.actorId));
     final targetIsPrivate =
-        ref.watch(userProfileByIdProvider(item.actorId)).value?.isPrivate ?? false;
+        ref.watch(userProfileByIdProvider(item.actorId)).value?.isPrivate ??
+        false;
     final label = followButtonLabelForState(state);
 
     return _FollowButton(
       label: label,
-      onPressed: loading
-          ? null
-          : () => ref.read(followFlowControllerProvider.notifier).toggleRelationship(
-                targetUserId: item.actorId,
-                targetIsPrivate: targetIsPrivate,
-                currentState: state,
-              ),
+      onPressed:
+          loading
+              ? null
+              : () async {
+                try {
+                  await ref
+                      .read(followFlowControllerProvider.notifier)
+                      .toggleRelationship(
+                        targetUserId: item.actorId,
+                        targetIsPrivate: targetIsPrivate,
+                        currentState: state,
+                      );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Could not update follow status: $e'),
+                    ),
+                  );
+                }
+              },
     );
   }
 }
@@ -463,21 +478,39 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
   Future<void> _accept() async {
     final busy = ref.read(isFollowActionInFlightProvider(widget.item.actorId));
     if (busy) return;
-    await ref.read(followFlowControllerProvider.notifier).approveIncomingRequest(
-          senderId: widget.item.actorId,
-          notificationId: widget.item.id,
-        );
-    await _markRead();
+    try {
+      await ref
+          .read(followFlowControllerProvider.notifier)
+          .approveIncomingRequest(
+            senderId: widget.item.actorId,
+            notificationId: widget.item.id,
+          );
+      await _markRead();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not accept follow request: $e')),
+      );
+    }
   }
 
   Future<void> _reject() async {
     final busy = ref.read(isFollowActionInFlightProvider(widget.item.actorId));
     if (busy) return;
-    await ref.read(followFlowControllerProvider.notifier).rejectIncomingRequest(
-          senderId: widget.item.actorId,
-          notificationId: widget.item.id,
-        );
-    await _markRead();
+    try {
+      await ref
+          .read(followFlowControllerProvider.notifier)
+          .rejectIncomingRequest(
+            senderId: widget.item.actorId,
+            notificationId: widget.item.id,
+          );
+      await _markRead();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not reject follow request: $e')),
+      );
+    }
   }
 
   @override
@@ -493,8 +526,7 @@ class _FollowRequestActionsState extends ConsumerState<_FollowRequestActions> {
     final cachedStatus = (widget.item.status ?? '').trim();
     final cachedSaysAccepted = cachedStatus == 'accepted';
     final cachedSaysRejected = cachedStatus == 'rejected';
-    final cachedTreatedAsPending =
-        !cachedSaysAccepted && !cachedSaysRejected;
+    final cachedTreatedAsPending = !cachedSaysAccepted && !cachedSaysRejected;
 
     final stillPending = liveAsync.when(
       data: (req) => req?.isPending ?? false,

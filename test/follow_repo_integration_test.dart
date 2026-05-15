@@ -1,4 +1,5 @@
 import 'package:boomerang/features/profile/infrastructure/follow_repo.dart';
+import 'package:boomerang/features/profile/domain/follow_privacy.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
@@ -111,31 +112,35 @@ void main() {
       expect(await followersCount(targetId), 1);
     });
 
-    test('request then reject removes request and denies follow access', () async {
-      final outcome = await requesterRepo.followOrRequest(targetId);
-      expect(outcome, FollowOutcome.requested);
-      expect((await requestDoc()).exists, isTrue);
+    test(
+      'request then reject removes request and denies follow access',
+      () async {
+        final outcome = await requesterRepo.followOrRequest(targetId);
+        expect(outcome, FollowOutcome.requested);
+        expect((await requestDoc()).exists, isTrue);
 
-      await targetRepo.rejectRequest(senderId: requesterId);
+        await targetRepo.rejectRequest(senderId: requesterId);
 
-      expect((await requestDoc()).exists, isFalse);
-      expect((await followingEdge()).exists, isFalse);
-      expect((await followerEdge()).exists, isFalse);
-      expect(await requesterRepo.isFollowing(targetId), isFalse);
-      expect(await followingCount(requesterId), 0);
-      expect(await followersCount(targetId), 0);
-    });
+        expect((await requestDoc()).exists, isFalse);
+        expect((await followingEdge()).exists, isFalse);
+        expect((await followerEdge()).exists, isFalse);
+        expect(await requesterRepo.isFollowing(targetId), isFalse);
+        expect(await followingCount(requesterId), 0);
+        expect(await followersCount(targetId), 0);
+      },
+    );
 
     test('repeat taps and retries are idempotent', () async {
       await requesterRepo.followOrRequest(targetId);
       await requesterRepo.followOrRequest(targetId);
 
-      final requests = await fs
-          .collection('users')
-          .doc(targetId)
-          .collection('followRequests')
-          .where('senderId', isEqualTo: requesterId)
-          .get();
+      final requests =
+          await fs
+              .collection('users')
+              .doc(targetId)
+              .collection('followRequests')
+              .where('senderId', isEqualTo: requesterId)
+              .get();
       expect(requests.docs.length, 1);
 
       await targetRepo.acceptRequest(senderId: requesterId);

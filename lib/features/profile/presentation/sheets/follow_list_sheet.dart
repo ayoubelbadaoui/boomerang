@@ -123,11 +123,18 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
     required bool targetIsPrivate,
   }) async {
     if (widget.userId.isEmpty) return;
-    await ref.read(followFlowControllerProvider.notifier).toggleRelationship(
-          targetUserId: widget.userId,
-          targetIsPrivate: targetIsPrivate,
-          currentState: state,
-        );
+    try {
+      await ref.read(followFlowControllerProvider.notifier).toggleRelationship(
+            targetUserId: widget.userId,
+            targetIsPrivate: targetIsPrivate,
+            currentState: state,
+          );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update follow status: $e')),
+      );
+    }
   }
 
   @override

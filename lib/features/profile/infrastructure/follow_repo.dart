@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:boomerang/features/profile/domain/follow_privacy.dart';
 
 class FollowRepo {
   FollowRepo(this._fs, this._auth);
@@ -7,6 +8,74 @@ class FollowRepo {
   final FirebaseAuth _auth;
 
   String? get _uid => _auth.currentUser?.uid;
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value') ?? 0;
+  }
+
+  Future<FollowMutationServerState> _readAuthoritativeServerState({
+    required String targetUserId,
+    required FollowState fallbackRelationshipStatus,
+  }) async {
+    final me = _uid;
+    if (me == null || targetUserId.isEmpty) {
+      return FollowMutationServerState(
+        relationshipStatus: fallbackRelationshipStatus,
+      );
+    }
+
+    try {
+      final targetDoc = await _fs
+          .collection('users')
+          .doc(targetUserId)
+          .get(const GetOptions(source: Source.server));
+      final meDoc = await _fs
+          .collection('users')
+          .doc(me)
+          .get(const GetOptions(source: Source.server));
+
+      final followingEdge = await _fs
+          .collection('following')
+          .doc(me)
+          .collection('users')
+          .doc(targetUserId)
+          .get(const GetOptions(source: Source.server));
+      final outgoingRequest = await _fs
+          .collection('users')
+          .doc(targetUserId)
+          .collection('followRequests')
+          .doc(me)
+          .get(const GetOptions(source: Source.server));
+
+      final relationshipStatus =
+          followingEdge.exists
+              ? FollowState.approved
+              : ((outgoingRequest.data()?['status'] ?? '') == 'pending'
+                  ? FollowState.requested
+                  : FollowState.none);
+
+      final targetData = targetDoc.data() ?? <String, dynamic>{};
+      final meData = meDoc.data() ?? <String, dynamic>{};
+
+      return FollowMutationServerState(
+        relationshipStatus: relationshipStatus,
+        targetCounts: SocialGraphCounts(
+          followersCount: _toInt(targetData['followersCount']),
+          followingCount: _toInt(targetData['followingCount']),
+        ),
+        currentUserCounts: SocialGraphCounts(
+          followersCount: _toInt(meData['followersCount']),
+          followingCount: _toInt(meData['followingCount']),
+        ),
+      );
+    } catch (_) {
+      return FollowMutationServerState(
+        relationshipStatus: fallbackRelationshipStatus,
+      );
+    }
+  }
 
   String pickName(Map<String, dynamic> data) {
     final nickname = (data['nickname'] ?? data['username'] ?? '') as String;
@@ -47,9 +116,8 @@ class FollowRepo {
         .doc(senderId)
         .snapshots()
         .map(
-          (snap) => snap.exists
-              ? FollowRequest.fromMap(snap.data()!, snap.id)
-              : null,
+          (snap) =>
+              snap.exists ? FollowRequest.fromMap(snap.data()!, snap.id) : null,
         );
   }
 
@@ -59,9 +127,15 @@ class FollowRepo {
   ///   notification is produced server-side by the `onFollowRequestCreated`
   ///   Cloud Function — we deliberately don't write it from the client to
   ///   avoid duplicate cards in the inbox.
-  Future<FollowOutcome> followOrRequest(String targetUserId) async {
+  Future<FollowMutationServerState> followOrRequestWithServerState(
+    String targetUserId,
+  ) async {
     final me = _uid;
-    if (me == null || me == targetUserId) return FollowOutcome.followed;
+    if (me == null || me == targetUserId) {
+      return const FollowMutationServerState(
+        relationshipStatus: FollowState.none,
+      );
+    }
 
     final targetDoc = await _fs.collection('users').doc(targetUserId).get();
     final meDoc = await _fs.collection('users').doc(me).get();
@@ -69,6 +143,7 @@ class FollowRepo {
     final targetData = targetDoc.data() ?? <String, dynamic>{};
     final meData = meDoc.data() ?? <String, dynamic>{};
     final isPrivate = (targetData['isPrivate'] ?? false) as bool;
+    FollowState fallbackRelationshipStatus = FollowState.none;
 
     if (isPrivate) {
       final followingRef = _fs
@@ -83,13 +158,21 @@ class FollowRepo {
           .doc(me);
 
       final followingSnap = await followingRef.get();
-      if (followingSnap.exists) return FollowOutcome.followed;
+      if (followingSnap.exists) {
+        return _readAuthoritativeServerState(
+          targetUserId: targetUserId,
+          fallbackRelationshipStatus: FollowState.approved,
+        );
+      }
 
       final existing = await reqRef.get();
       if (existing.exists) {
         final status = (existing.data()?['status'] ?? 'pending') as String;
         if (status == 'pending') {
-          return FollowOutcome.requested;
+          return _readAuthoritativeServerState(
+            targetUserId: targetUserId,
+            fallbackRelationshipStatus: FollowState.requested,
+          );
         }
       }
 
@@ -99,7 +182,11 @@ class FollowRepo {
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
-      return FollowOutcome.requested;
+      fallbackRelationshipStatus = FollowState.requested;
+      return _readAuthoritativeServerState(
+        targetUserId: targetUserId,
+        fallbackRelationshipStatus: fallbackRelationshipStatus,
+      );
     }
 
     final followingRef = _fs
@@ -141,11 +228,22 @@ class FollowRepo {
 
     // Push notification is handled server-side by Cloud Functions
     // (onFollowerAdded trigger).
-    return FollowOutcome.followed;
+    fallbackRelationshipStatus = FollowState.approved;
+    return _readAuthoritativeServerState(
+      targetUserId: targetUserId,
+      fallbackRelationshipStatus: fallbackRelationshipStatus,
+    );
+  }
+
+  Future<FollowOutcome> followOrRequest(String targetUserId) async {
+    final state = await followOrRequestWithServerState(targetUserId);
+    return state.relationshipStatus == FollowState.requested
+        ? FollowOutcome.requested
+        : FollowOutcome.followed;
   }
 
   Future<void> follow(String targetUserId) async {
-    await followOrRequest(targetUserId);
+    await followOrRequestWithServerState(targetUserId);
   }
 
   /// Remove any in-app follow_request notification for the given sender
@@ -156,13 +254,14 @@ class FollowRepo {
     required String senderId,
   }) async {
     try {
-      final query = await _fs
-          .collection('users')
-          .doc(receiverId)
-          .collection('notifications')
-          .where('type', isEqualTo: 'follow_request')
-          .where('senderId', isEqualTo: senderId)
-          .get();
+      final query =
+          await _fs
+              .collection('users')
+              .doc(receiverId)
+              .collection('notifications')
+              .where('type', isEqualTo: 'follow_request')
+              .where('senderId', isEqualTo: senderId)
+              .get();
       for (final doc in query.docs) {
         await doc.reference.delete();
       }
@@ -170,12 +269,16 @@ class FollowRepo {
   }
 
   /// Accept a pending follow request (current user is receiver).
-  Future<void> acceptRequest({
+  Future<FollowMutationServerState> acceptRequestWithServerState({
     required String senderId,
     String? notificationId,
   }) async {
     final receiver = _uid;
-    if (receiver == null) return;
+    if (receiver == null) {
+      return const FollowMutationServerState(
+        relationshipStatus: FollowState.none,
+      );
+    }
 
     final receiverDoc = await _fs.collection('users').doc(receiver).get();
     final senderDoc = await _fs.collection('users').doc(senderId).get();
@@ -240,43 +343,61 @@ class FollowRepo {
           .doc(receiver)
           .collection('notifications')
           .doc(notificationId);
-      await notifRef.set(
-        {
-          'read': true,
-          'type': 'follow',
-          'status': 'accepted',
-        },
-        SetOptions(merge: true),
-      );
+      await notifRef.set({
+        'read': true,
+        'type': 'follow',
+        'status': 'accepted',
+      }, SetOptions(merge: true));
     }
     // Always sweep up sibling follow_request notifications for the same
     // sender (there may be more than one if duplicate cloud-function and
     // client-side writes happened) so the inbox can never show stale
     // accept/reject buttons.
-    final notifQuery = await _fs
-        .collection('users')
-        .doc(receiver)
-        .collection('notifications')
-        .where('type', isEqualTo: 'follow_request')
-        .where('senderId', isEqualTo: senderId)
-        .get();
+    final notifQuery =
+        await _fs
+            .collection('users')
+            .doc(receiver)
+            .collection('notifications')
+            .where('type', isEqualTo: 'follow_request')
+            .where('senderId', isEqualTo: senderId)
+            .get();
     for (final doc in notifQuery.docs) {
       if (notificationId != null && doc.id == notificationId) continue;
-      await doc.reference.set(
-        {'read': true, 'type': 'follow', 'status': 'accepted'},
-        SetOptions(merge: true),
-      );
+      await doc.reference.set({
+        'read': true,
+        'type': 'follow',
+        'status': 'accepted',
+      }, SetOptions(merge: true));
     }
+
+    return _readAuthoritativeServerState(
+      targetUserId: senderId,
+      fallbackRelationshipStatus: FollowState.none,
+    );
+  }
+
+  Future<void> acceptRequest({
+    required String senderId,
+    String? notificationId,
+  }) async {
+    await acceptRequestWithServerState(
+      senderId: senderId,
+      notificationId: notificationId,
+    );
   }
 
   /// Reject a pending follow request (current user is receiver).
   /// Hard-removes the request doc so request/follower edges never diverge.
-  Future<void> rejectRequest({
+  Future<FollowMutationServerState> rejectRequestWithServerState({
     required String senderId,
     String? notificationId,
   }) async {
     final receiver = _uid;
-    if (receiver == null) return;
+    if (receiver == null) {
+      return const FollowMutationServerState(
+        relationshipStatus: FollowState.none,
+      );
+    }
     final requestRef = _fs
         .collection('users')
         .doc(receiver)
@@ -331,6 +452,21 @@ class FollowRepo {
       receiverId: receiver,
       senderId: senderId,
     );
+
+    return _readAuthoritativeServerState(
+      targetUserId: senderId,
+      fallbackRelationshipStatus: FollowState.none,
+    );
+  }
+
+  Future<void> rejectRequest({
+    required String senderId,
+    String? notificationId,
+  }) async {
+    await rejectRequestWithServerState(
+      senderId: senderId,
+      notificationId: notificationId,
+    );
   }
 
   /// Cancel an outgoing pending follow request (current user is sender).
@@ -352,9 +488,15 @@ class FollowRepo {
   }
 
   /// Stop following a user. Removes relationship documents.
-  Future<void> unfollow(String targetUserId) async {
+  Future<FollowMutationServerState> unfollowWithServerState(
+    String targetUserId,
+  ) async {
     final me = _uid;
-    if (me == null || me == targetUserId) return;
+    if (me == null || me == targetUserId) {
+      return const FollowMutationServerState(
+        relationshipStatus: FollowState.none,
+      );
+    }
     final followingRef = _fs
         .collection('following')
         .doc(me)
@@ -383,6 +525,15 @@ class FollowRepo {
         });
       }
     });
+
+    return _readAuthoritativeServerState(
+      targetUserId: targetUserId,
+      fallbackRelationshipStatus: FollowState.none,
+    );
+  }
+
+  Future<void> unfollow(String targetUserId) async {
+    await unfollowWithServerState(targetUserId);
   }
 
   /// Whether current user follows target.
@@ -422,11 +573,12 @@ class FollowRepo {
   /// Auto-accept all pending requests when switching to public.
   /// Rejected requests are cleaned up, not accepted.
   Future<void> acceptAllPendingFor(String receiverId) async {
-    final requests = await _fs
-        .collection('users')
-        .doc(receiverId)
-        .collection('followRequests')
-        .get();
+    final requests =
+        await _fs
+            .collection('users')
+            .doc(receiverId)
+            .collection('followRequests')
+            .get();
     for (final doc in requests.docs) {
       final data = doc.data();
       final status = (data['status'] ?? 'pending') as String;
@@ -477,5 +629,3 @@ class FollowRequest {
     );
   }
 }
-
-enum FollowOutcome { followed, requested }

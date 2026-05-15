@@ -1,9 +1,30 @@
-enum FollowState {
-  none,
-  requested,
-  approved,
-  removed,
-  blocked,
+enum FollowState { none, requested, approved, removed, blocked }
+
+enum FollowOutcome { followed, requested }
+
+class SocialGraphCounts {
+  const SocialGraphCounts({
+    required this.followersCount,
+    required this.followingCount,
+  });
+
+  final int followersCount;
+  final int followingCount;
+}
+
+class FollowMutationServerState {
+  const FollowMutationServerState({
+    required this.relationshipStatus,
+    this.targetCounts,
+    this.currentUserCounts,
+  });
+
+  final FollowState relationshipStatus;
+  final SocialGraphCounts? targetCounts;
+  final SocialGraphCounts? currentUserCounts;
+
+  bool get hasAuthoritativeCounts =>
+      targetCounts != null && currentUserCounts != null;
 }
 
 enum FollowTransition {
@@ -79,8 +100,6 @@ FollowDecision decideFollowAction({
 /// When switching privacy from private to public, we auto-accept all pending
 /// requests to mirror Instagram behavior. This helper is a documented decision
 /// to make the rule testable.
-bool shouldAutoAcceptPendingOnPublicSwitch({
-  required bool newIsPrivate,
-}) {
+bool shouldAutoAcceptPendingOnPublicSwitch({required bool newIsPrivate}) {
   return newIsPrivate == false;
 }
