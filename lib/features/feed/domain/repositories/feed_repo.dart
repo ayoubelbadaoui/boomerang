@@ -31,11 +31,15 @@ class HomeCursor extends FeedCursor {
     this.lastFollowingCreatedAtMs,
     this.lastExplorationScore,
     this.lastExplorationCreatedAtMs,
+    this.followingExhausted = false,
+    this.fallbackChronological = false,
   });
 
   final int? lastFollowingCreatedAtMs;
   final double? lastExplorationScore;
   final int? lastExplorationCreatedAtMs;
+  final bool followingExhausted;
+  final bool fallbackChronological;
 }
 
 /// Surface-specific cursor for Discovery. Either by `rankScore` (preferred)

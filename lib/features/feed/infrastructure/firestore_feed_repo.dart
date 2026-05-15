@@ -23,86 +23,56 @@ class FirestoreFeedRepo implements FeedRepo {
     int followingLimit = 60,
     int explorationLimit = 20,
   }) async {
-    // 1. Followed authors (createdAt-cursor pagination).
-    final followingDocs = await _boomerangs.fetchFollowingByCreatedAtPage(
-      followingIds: followingIds,
+    final hasFollowing = followingIds.isNotEmpty;
+    final followingExhausted = cursor?.followingExhausted ?? !hasFollowing;
+
+    // Stage 1 — followed feed first. This keeps Home feeling personal for
+    // users who already follow people.
+    if (!followingExhausted) {
+      final followingDocs = await _boomerangs.fetchFollowingByCreatedAtPage(
+        followingIds: followingIds,
+        myUid: myUid,
+        startAfterMillis: cursor?.lastFollowingCreatedAtMs,
+        limit: followingLimit,
+      );
+      final packed = _packHomeFollowing(
+        docs: followingDocs,
+        myUid: myUid,
+        followingIds: followingIds,
+        blockedIds: blockedIds,
+        requested: followingLimit,
+      );
+      // Keep paging follows while there are more.
+      if (packed.hasMore) {
+        return packed;
+      }
+      // If follows are exhausted but we still surfaced some posts, hand
+      // them to the user first and flip to exploration on next page.
+      if (packed.posts.isNotEmpty) {
+        return CandidatePool(
+          posts: packed.posts,
+          hasMore: true,
+          nextCursor: HomeCursor(
+            lastFollowingCreatedAtMs:
+                (packed.nextCursor as HomeCursor?)?.lastFollowingCreatedAtMs ??
+                    cursor?.lastFollowingCreatedAtMs,
+            lastExplorationScore: cursor?.lastExplorationScore,
+            lastExplorationCreatedAtMs: cursor?.lastExplorationCreatedAtMs,
+            followingExhausted: true,
+            fallbackChronological: cursor?.fallbackChronological ?? false,
+          ),
+        );
+      }
+      // No visible followed posts left; immediately switch to exploration.
+    }
+
+    // Stage 2 — ranked exploration for fresh users or once follows dry up.
+    return _fetchHomeExploration(
       myUid: myUid,
-      startAfterMillis: cursor?.lastFollowingCreatedAtMs,
-      limit: followingLimit,
-    );
-
-    // 2. Exploration: globally hi-score public posts whose author the user
-    //    does not follow. Skipped when the dataset has no rankScore yet —
-    //    in that case the follow set carries the page on its own.
-    final explorationSnap = await _boomerangs.fetchPublicByRankScorePage(
-      startAfterScore: cursor?.lastExplorationScore,
+      followingIds: followingIds,
+      blockedIds: blockedIds,
+      cursor: cursor,
       limit: explorationLimit,
-    );
-
-    // 3. Combine + filter + map to domain.
-    final seenIds = <String>{};
-    final candidates = <RankedPost>[];
-
-    int? lastFollowingMs;
-    for (final d in followingDocs) {
-      final data = d.data();
-      if (!_passesFilters(
-        data: data,
-        myUid: myUid,
-        blockedIds: blockedIds,
-        followingIds: followingIds,
-      )) {
-        continue;
-      }
-      if (!seenIds.add(d.id)) continue;
-      candidates.add(_mapDoc(d.id, data));
-      final t = data['createdAt'];
-      if (t is Timestamp) {
-        lastFollowingMs = t.millisecondsSinceEpoch;
-      }
-    }
-
-    double? lastExplorationScore;
-    int? lastExplorationMs;
-    for (final d in explorationSnap.docs) {
-      final data = d.data();
-      final authorId = (data['userId'] ?? '') as String;
-      // Skip authors already represented by the follow set ⇒ exploration
-      // genuinely brings new authors in.
-      if (followingIds.contains(authorId) || authorId == myUid) continue;
-      if (!_passesFilters(
-        data: data,
-        myUid: myUid,
-        blockedIds: blockedIds,
-        followingIds: followingIds,
-      )) {
-        continue;
-      }
-      if (!seenIds.add(d.id)) continue;
-      candidates.add(_mapDoc(d.id, data));
-      final s = data['rankScore'];
-      if (s is num) lastExplorationScore = s.toDouble();
-      final t = data['createdAt'];
-      if (t is Timestamp) lastExplorationMs = t.millisecondsSinceEpoch;
-    }
-
-    final hasMore = followingDocs.length >= followingLimit ||
-        explorationSnap.docs.length >= explorationLimit;
-    final next = hasMore
-        ? HomeCursor(
-            lastFollowingCreatedAtMs: lastFollowingMs ??
-                cursor?.lastFollowingCreatedAtMs,
-            lastExplorationScore:
-                lastExplorationScore ?? cursor?.lastExplorationScore,
-            lastExplorationCreatedAtMs:
-                lastExplorationMs ?? cursor?.lastExplorationCreatedAtMs,
-          )
-        : null;
-
-    return CandidatePool(
-      posts: candidates,
-      nextCursor: next,
-      hasMore: hasMore,
     );
   }
 
@@ -230,6 +200,184 @@ class FirestoreFeedRepo implements FeedRepo {
             )
           : null,
       hasMore: hasMore,
+    );
+  }
+
+  CandidatePool _packHomeFollowing({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required String myUid,
+    required Set<String> followingIds,
+    required Set<String> blockedIds,
+    required int requested,
+  }) {
+    final posts = <RankedPost>[];
+    int? lastFollowingMs;
+    for (final d in docs) {
+      final data = d.data();
+      if (!_passesFilters(
+        data: data,
+        myUid: myUid,
+        blockedIds: blockedIds,
+        followingIds: followingIds,
+      )) {
+        continue;
+      }
+      posts.add(_mapDoc(d.id, data));
+      final t = data['createdAt'];
+      if (t is Timestamp) {
+        lastFollowingMs = t.millisecondsSinceEpoch;
+      }
+    }
+    final hasMore = docs.length >= requested;
+    return CandidatePool(
+      posts: posts,
+      hasMore: hasMore,
+      nextCursor: HomeCursor(
+        lastFollowingCreatedAtMs: lastFollowingMs,
+        followingExhausted: !hasMore,
+      ),
+    );
+  }
+
+  Future<CandidatePool> _fetchHomeExploration({
+    required String myUid,
+    required Set<String> followingIds,
+    required Set<String> blockedIds,
+    required HomeCursor? cursor,
+    required int limit,
+  }) async {
+    final useChronologicalFallback = cursor?.fallbackChronological ?? false;
+    if (!useChronologicalFallback) {
+      final snap = await _boomerangs.fetchPublicByRankScorePage(
+        startAfterScore: cursor?.lastExplorationScore,
+        limit: limit,
+      );
+      if (snap.docs.isNotEmpty) {
+        return _packHomeExplorationByScore(
+          docs: snap.docs,
+          myUid: myUid,
+          followingIds: followingIds,
+          blockedIds: blockedIds,
+          requested: limit,
+          previous: cursor,
+        );
+      }
+      // No rankScore yet (or exhausted right away): chronological fallback.
+      if (cursor == null || cursor.lastExplorationScore == null) {
+        final fallback = await _boomerangs.fetchPublicByCreatedAtPage(
+          startAfterMillis: cursor?.lastExplorationCreatedAtMs,
+          limit: limit,
+        );
+        return _packHomeExplorationByTime(
+          docs: fallback.docs,
+          myUid: myUid,
+          followingIds: followingIds,
+          blockedIds: blockedIds,
+          requested: limit,
+          previous: cursor,
+        );
+      }
+      return CandidatePool.empty;
+    }
+    final snap = await _boomerangs.fetchPublicByCreatedAtPage(
+      startAfterMillis: cursor?.lastExplorationCreatedAtMs,
+      limit: limit,
+    );
+    return _packHomeExplorationByTime(
+      docs: snap.docs,
+      myUid: myUid,
+      followingIds: followingIds,
+      blockedIds: blockedIds,
+      requested: limit,
+      previous: cursor,
+    );
+  }
+
+  CandidatePool _packHomeExplorationByScore({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required String myUid,
+    required Set<String> followingIds,
+    required Set<String> blockedIds,
+    required int requested,
+    required HomeCursor? previous,
+  }) {
+    final posts = <RankedPost>[];
+    double? lastScore;
+    int? lastMs;
+    for (final d in docs) {
+      final data = d.data();
+      final authorId = (data['userId'] ?? '') as String;
+      // Exploration on Home should prefer non-followed authors.
+      if (followingIds.contains(authorId) || authorId == myUid) continue;
+      if (!_passesFilters(
+        data: data,
+        myUid: myUid,
+        blockedIds: blockedIds,
+        followingIds: followingIds,
+      )) {
+        continue;
+      }
+      posts.add(_mapDoc(d.id, data));
+      final s = data['rankScore'];
+      if (s is num) lastScore = s.toDouble();
+      final t = data['createdAt'];
+      if (t is Timestamp) lastMs = t.millisecondsSinceEpoch;
+    }
+    final hasMore = docs.length >= requested;
+    return CandidatePool(
+      posts: posts,
+      hasMore: hasMore,
+      nextCursor: hasMore
+          ? HomeCursor(
+              lastFollowingCreatedAtMs: previous?.lastFollowingCreatedAtMs,
+              lastExplorationScore: lastScore,
+              lastExplorationCreatedAtMs: lastMs,
+              followingExhausted: true,
+              fallbackChronological: false,
+            )
+          : null,
+    );
+  }
+
+  CandidatePool _packHomeExplorationByTime({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    required String myUid,
+    required Set<String> followingIds,
+    required Set<String> blockedIds,
+    required int requested,
+    required HomeCursor? previous,
+  }) {
+    final posts = <RankedPost>[];
+    int? lastMs;
+    for (final d in docs) {
+      final data = d.data();
+      final authorId = (data['userId'] ?? '') as String;
+      if (followingIds.contains(authorId) || authorId == myUid) continue;
+      if (!_passesFilters(
+        data: data,
+        myUid: myUid,
+        blockedIds: blockedIds,
+        followingIds: followingIds,
+      )) {
+        continue;
+      }
+      posts.add(_mapDoc(d.id, data));
+      final t = data['createdAt'];
+      if (t is Timestamp) lastMs = t.millisecondsSinceEpoch;
+    }
+    final hasMore = docs.length >= requested;
+    return CandidatePool(
+      posts: posts,
+      hasMore: hasMore,
+      nextCursor: hasMore
+          ? HomeCursor(
+              lastFollowingCreatedAtMs: previous?.lastFollowingCreatedAtMs,
+              lastExplorationScore: null,
+              lastExplorationCreatedAtMs: lastMs,
+              followingExhausted: true,
+              fallbackChronological: true,
+            )
+          : null,
     );
   }
 

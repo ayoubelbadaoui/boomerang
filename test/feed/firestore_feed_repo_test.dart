@@ -130,7 +130,7 @@ void main() {
   });
 
   group('fetchHomeCandidates', () {
-    test('returns followed-author posts + exploration tail', () async {
+    test('prioritizes followed-author posts before exploration', () async {
       // Followed-author posts (no rankScore needed).
       await _seedPost(fs,
           id: 'f1',
@@ -158,7 +158,60 @@ void main() {
         blockedIds: const <String>{},
       );
       final ids = pool.posts.map((p) => p.id).toSet();
-      expect(ids, containsAll(<String>{'f1', 'f2', 'mine', 'trending'}));
+      expect(ids, containsAll(<String>{'f1', 'f2', 'mine'}));
+      expect(ids, isNot(contains('trending')));
+      expect(pool.hasMore, isTrue);
+      expect(pool.nextCursor, isA<HomeCursor>());
+    });
+
+    test('falls through to ranked exploration once following feed is exhausted',
+        () async {
+      await _seedPost(fs,
+          id: 'f1',
+          userId: 'friend',
+          createdAt: now.subtract(const Duration(hours: 1)));
+      await _seedPost(fs,
+          id: 'trend',
+          userId: 'celebrity',
+          createdAt: now,
+          rankScore: 0.95);
+
+      final page1 = await repo.fetchHomeCandidates(
+        myUid: 'me',
+        followingIds: const <String>{'friend'},
+        blockedIds: const <String>{},
+      );
+      expect(page1.posts.map((p) => p.id).toSet(), contains('f1'));
+      expect(page1.posts.map((p) => p.id).toSet(), isNot(contains('trend')));
+
+      final page2 = await repo.fetchHomeCandidates(
+        myUid: 'me',
+        followingIds: const <String>{'friend'},
+        blockedIds: const <String>{},
+        cursor: page1.nextCursor as HomeCursor?,
+      );
+      expect(page2.posts.map((p) => p.id).toSet(), contains('trend'));
+    });
+
+    test('fresh users (no following) receive exploration content', () async {
+      await _seedPost(fs,
+          id: 'trend1',
+          userId: 'u1',
+          createdAt: now,
+          rankScore: 0.9);
+      await _seedPost(fs,
+          id: 'trend2',
+          userId: 'u2',
+          createdAt: now.subtract(const Duration(minutes: 30)),
+          rankScore: 0.7);
+
+      final pool = await repo.fetchHomeCandidates(
+        myUid: 'fresh',
+        followingIds: const <String>{},
+        blockedIds: const <String>{},
+      );
+      final ids = pool.posts.map((p) => p.id).toSet();
+      expect(ids, containsAll(<String>{'trend1', 'trend2'}));
     });
 
     test('private non-followed post never appears in Home candidates',
