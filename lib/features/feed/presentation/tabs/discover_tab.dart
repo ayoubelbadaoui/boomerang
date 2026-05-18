@@ -8,12 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/core/utils/image_precache.dart';
-import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
-import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
 import 'package:boomerang/core/widgets/boomerang_grid_shimmers.dart';
 import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:boomerang/core/widgets/instagram_shimmer.dart';
@@ -188,23 +187,13 @@ class _UsersSearchList extends ConsumerWidget {
               leading: AppAvatar(url: avatar),
               title: Text(nick.isNotEmpty ? nick : name),
               subtitle: Text(handle),
-              onTap: () {
-                showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.white,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(24),
-                    ),
+              onTap:
+                  () => openUserProfilePreview(
+                    context,
+                    ref,
+                    userId: uid,
+                    handle: handle,
                   ),
-                  builder:
-                      (_) => ProfilePreviewSheet(
-                        userId: uid,
-                        handle: handle,
-                      ),
-                );
-              },
             );
           },
         );
@@ -406,15 +395,12 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
                       SizedBox(width: 8.w),
                       Expanded(
                         child: InkWell(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => OtherUserProfilePage(
-                                  userId: post.authorId,
-                                ),
+                          onTap:
+                              () => openUserProfilePage(
+                                context,
+                                ref,
+                                userId: post.authorId,
                               ),
-                            );
-                          },
                           child: Text(
                             name,
                             maxLines: 1,
@@ -547,16 +533,12 @@ class _BmgGridContent extends ConsumerWidget {
                         SizedBox(width: 8.w),
                         Expanded(
                           child: InkWell(
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => OtherUserProfilePage(
-                                        userId: (d['userId'] ?? '') as String,
-                                      ),
+                            onTap:
+                                () => openUserProfilePage(
+                                  context,
+                                  ref,
+                                  userId: (d['userId'] ?? '') as String,
                                 ),
-                              );
-                            },
                             child: Text(
                               name,
                               maxLines: 1,

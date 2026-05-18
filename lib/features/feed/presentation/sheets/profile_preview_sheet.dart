@@ -9,8 +9,9 @@ import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/block_confirmation_dialog.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
-import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
+import 'package:boomerang/core/navigation/own_profile_navigation.dart';
 import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
+import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 
 class ProfilePreviewSheet extends ConsumerStatefulWidget {
   const ProfilePreviewSheet({
@@ -31,8 +32,7 @@ class ProfilePreviewSheet extends ConsumerStatefulWidget {
 class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
   @override
   Widget build(BuildContext context) {
-    final me = ref.watch(currentUserProfileProvider).value;
-    final isSelf = me?.uid == widget.userId;
+    final isSelf = isCurrentUserId(ref, widget.userId);
     final blockedList = ref.watch(blockedUsersProvider).value ?? const [];
     final isBlocked = blockedList.contains(widget.userId);
 
@@ -83,11 +83,17 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
             SizedBox(height: 12.h),
             InkWell(
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => OtherUserProfilePage(userId: widget.userId),
-                  ),
-                );
+                Navigator.pop(context);
+                if (isCurrentUserId(ref, widget.userId)) {
+                  navigateToOwnProfile(context, ref);
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => OtherUserProfilePage(userId: widget.userId),
+                    ),
+                  );
+                }
               },
               child: Text(
                 widget.handle,

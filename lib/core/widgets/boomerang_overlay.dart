@@ -1,6 +1,6 @@
 import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
-import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 import 'package:boomerang/features/chat/presentation/widgets/send_post_sheet.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
@@ -192,8 +192,13 @@ class BoomerangOverlay extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
-                onTap: () => _showProfilePreview(
-                    context, handle, userId),
+                onTap:
+                    () => openUserProfilePreview(
+                      context,
+                      ref,
+                      userId: userId,
+                      handle: handle,
+                    ),
                 child: Row(
                   children: [
                     LiveAvatar(
@@ -301,25 +306,6 @@ class _LikeIcon extends ConsumerWidget {
       ),
     );
   }
-}
-
-void _showProfilePreview(
-  BuildContext context,
-  String handle,
-  String userId,
-) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (_) => ProfilePreviewSheet(
-      userId: userId,
-      handle: handle,
-    ),
-  );
 }
 
 void _showCommentsSheet(

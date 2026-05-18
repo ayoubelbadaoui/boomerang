@@ -1,7 +1,7 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
-import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -171,7 +171,13 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
     final borderColor = filled ? Colors.black : Colors.black26;
 
     return ListTile(
-      onTap: () => _showProfilePreview(context, widget.handle, widget.userId),
+      onTap:
+          () => openUserProfilePreview(
+            context,
+            ref,
+            userId: widget.userId,
+            handle: widget.handle,
+          ),
       leading: SizedBox(
         width: 44.r,
         height: 44.r,
@@ -229,14 +235,3 @@ class _FollowListTileState extends ConsumerState<_FollowListTile> {
   }
 }
 
-void _showProfilePreview(BuildContext context, String handle, String userId) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (_) => ProfilePreviewSheet(userId: userId, handle: handle),
-  );
-}

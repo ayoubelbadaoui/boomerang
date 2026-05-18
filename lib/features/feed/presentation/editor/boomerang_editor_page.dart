@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:boomerang/features/feed/application/upload_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
-import 'package:boomerang/features/feed/presentation/home_shell.dart';
+import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

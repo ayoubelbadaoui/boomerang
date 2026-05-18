@@ -9,6 +9,7 @@ import 'package:boomerang/features/profile/application/profile_refresh_controlle
 import 'package:boomerang/features/profile/application/user_boomerangs_by_user_controller.dart';
 import 'package:boomerang/features/profile/presentation/sheets/follow_list_sheet.dart';
 import 'package:boomerang/features/profile/presentation/widgets/user_boomerangs_grid_for_user.dart';
+import 'package:boomerang/core/navigation/own_profile_navigation.dart';
 import 'package:boomerang/core/widgets/profile_loading_skeleton.dart';
 import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +32,10 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (isCurrentUserId(ref, widget.userId)) {
+        navigateToOwnProfile(context, ref);
+        return;
+      }
       ref
           .read(profileRefreshControllerProvider.notifier)
           .onProfileOpened(widget.userId);
@@ -41,8 +46,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   Widget build(BuildContext context) {
     final userId = widget.userId;
     final asyncProfile = ref.watch(userProfileByIdProvider(userId));
-    final me = ref.watch(currentUserProfileProvider).value;
-    final isSelf = me?.uid == userId;
+    final isSelf = isCurrentUserId(ref, userId);
     final blockedList = ref.watch(blockedUsersProvider).value ?? const [];
     final isBlocked = blockedList.contains(userId);
     return Scaffold(

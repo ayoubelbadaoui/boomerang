@@ -14,7 +14,7 @@ import 'package:boomerang/features/chat/presentation/widgets/date_separator.dart
 import 'package:boomerang/features/chat/presentation/widgets/message_actions_sheet.dart';
 import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
-import 'package:boomerang/features/profile/presentation/other_user_profile_page.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key, required this.conversationId});
@@ -508,7 +508,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
 // ── App bar ─────────────────────────────────────────────────────────────
 
-class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
+class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const _ChatAppBar({required this.profile, required this.onDelete});
 
   final UserProfile? profile;
@@ -518,17 +518,17 @@ class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return AppBar(
       leading: const BackButton(),
       title: GestureDetector(
         onTap:
             profile != null
-                ? () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => OtherUserProfilePage(userId: profile!.uid),
-                  ),
+                ? () => openUserProfilePage(
+                  context,
+                  ref,
+                  userId: profile!.uid,
                 )
                 : null,
         child: Text(

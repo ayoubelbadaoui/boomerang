@@ -1,5 +1,5 @@
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
-import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 import 'package:boomerang/features/profile/application/follow_controller.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -613,19 +613,11 @@ Future<void> _openProfile(
   _Item item,
 ) async {
   if (item.actorId.isEmpty) return;
-  await showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (_) {
-      return ProfilePreviewSheet(
-        userId: item.actorId,
-        handle: '@${item.title.replaceAll(' ', '').toLowerCase()}',
-      );
-    },
+  openUserProfilePreview(
+    context,
+    ref,
+    userId: item.actorId,
+    handle: '@${item.title.replaceAll(' ', '').toLowerCase()}',
   );
 }
 

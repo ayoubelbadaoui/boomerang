@@ -1,5 +1,5 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
-import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -222,7 +222,10 @@ class _CommentTile extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
               GestureDetector(
-                onTap: userId.isEmpty ? null : () => _openProfile(context),
+                onTap:
+                    userId.isEmpty
+                        ? null
+                        : () => _openProfile(context, ref),
                 child: LiveAvatar(userId: userId, fallbackUrl: userAvatar, size: 56.r),
               ),
                 SizedBox(width: 12.w),
@@ -231,7 +234,10 @@ class _CommentTile extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       GestureDetector(
-                        onTap: userId.isEmpty ? null : () => _openProfile(context),
+                        onTap:
+                            userId.isEmpty
+                                ? null
+                                : () => _openProfile(context, ref),
                         child: Text(
                           userName,
                           style: TextStyle(
@@ -393,18 +399,12 @@ class _CommentTile extends ConsumerWidget {
     );
   }
 
-  void _openProfile(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => ProfilePreviewSheet(
-        userId: userId,
-        handle: userName,
-      ),
+  void _openProfile(BuildContext context, WidgetRef ref) {
+    openUserProfilePreview(
+      context,
+      ref,
+      userId: userId,
+      handle: userName,
     );
   }
 
@@ -494,21 +494,16 @@ class _RepliesList extends ConsumerWidget {
   final String? targetReplyId;
 
   void _openReplyProfile(
-    BuildContext context, {
+    BuildContext context,
+    WidgetRef ref, {
     required String userId,
     required String handle,
   }) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => ProfilePreviewSheet(
-        userId: userId,
-        handle: handle,
-      ),
+    openUserProfilePreview(
+      context,
+      ref,
+      userId: userId,
+      handle: handle,
     );
   }
 
@@ -569,6 +564,7 @@ class _RepliesList extends ConsumerWidget {
                                 ? null
                                 : () => _openReplyProfile(
                                       context,
+                                      ref,
                                       userId: replyUserId,
                                       handle: name,
                                     ),
@@ -584,6 +580,7 @@ class _RepliesList extends ConsumerWidget {
                                       ? null
                                       : () => _openReplyProfile(
                                             context,
+                                            ref,
                                             userId: replyUserId,
                                             handle: name,
                                           ),

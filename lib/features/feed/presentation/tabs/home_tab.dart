@@ -16,7 +16,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
-import 'package:boomerang/features/feed/presentation/sheets/profile_preview_sheet.dart';
+import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
@@ -282,10 +282,11 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                     children: [
                       InkWell(
                         onTap:
-                            () => _showProfilePreview(
+                            () => openUserProfilePreview(
                               context,
-                              handle,
-                              userId,
+                              ref,
+                              userId: userId,
+                              handle: handle,
                             ),
                         customBorder: const CircleBorder(),
                         child: LiveAvatar(userId: userId, fallbackUrl: avatarFallback, size: 36.r),
@@ -293,10 +294,11 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                       SizedBox(width: 10.w),
                       InkWell(
                         onTap:
-                            () => _showProfilePreview(
+                            () => openUserProfilePreview(
                               context,
-                              handle,
-                              userId,
+                              ref,
+                              userId: userId,
+                              handle: handle,
                             ),
                         child: Text(
                           handle,
@@ -676,26 +678,6 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
       ),
     );
   }
-}
-
-void _showProfilePreview(
-  BuildContext context,
-  String handle,
-  String userId,
-) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder:
-        (_) => ProfilePreviewSheet(
-          userId: userId,
-          handle: handle,
-        ),
-  );
 }
 
 void _showShareSheet(

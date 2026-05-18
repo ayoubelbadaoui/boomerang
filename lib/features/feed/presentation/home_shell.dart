@@ -12,8 +12,7 @@ import 'package:boomerang/features/chat/presentation/pages/conversations_page.da
 import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/features/feed/presentation/widgets/upload_progress_bar.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
-
-final homeTabIndexProvider = StateProvider<int>((ref) => 0);
+import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
