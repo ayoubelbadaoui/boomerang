@@ -75,8 +75,7 @@ class FeedState {
 /// One controller per [FeedSurface]. Maintains pagination, session seed,
 /// dedup set, and ranking version. Presentation reads `state.value.items`
 /// and calls `refresh()` / `fetchNext()`.
-class FeedController
-    extends FamilyAsyncNotifier<FeedState, FeedSurface> {
+class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
   static const int _pageSize = 20;
   static const FeedMetrics _metrics = FeedMetrics();
 
@@ -104,11 +103,12 @@ class FeedController
 
   Future<void> refresh() async {
     final me = await ref.read(currentUserProfileProvider.future);
-    final rotated = SessionSeed.bootstrap(
-      uid: me?.uid ?? 'anon',
-      surface: _surface.name,
-      now: DateTime.now(),
-    ).rotated();
+    final rotated =
+        SessionSeed.bootstrap(
+          uid: me?.uid ?? 'anon',
+          surface: _surface.name,
+          now: DateTime.now(),
+        ).rotated();
 
     final previous = state.value?.items ?? const <RankedPost>[];
 
@@ -143,21 +143,22 @@ class FeedController
         state = AsyncData(current.copyWith(isLoading: false, hasMore: false));
         return;
       }
-      final followingIds =
-          await ref.read(followingIdsProvider.future);
-      final blockedList =
-          await ref.read(blockedUsersProvider.future);
+      final requestUid = me.uid;
+      final followingIds = await ref.read(followingIdsProvider.future);
+      final blockedList = await ref.read(blockedUsersProvider.future);
       final blockedIds = blockedList.toSet();
       final policy = ref.read(rankingPolicyProvider);
       final flag = ref.read(rankingFeatureFlagProvider);
 
       final useLegacy = flag == RankingFlag.disabled;
-      final weights = useLegacy
-          ? RankingWeights.legacy
-          : RankingWeights.forSurface(_surface);
-      final rankingVersion = useLegacy
-          ? FeedMetrics.rankingVersionLegacy
-          : FeedMetrics.rankingVersionV2;
+      final weights =
+          useLegacy
+              ? RankingWeights.legacy
+              : RankingWeights.forSurface(_surface);
+      final rankingVersion =
+          useLegacy
+              ? FeedMetrics.rankingVersionLegacy
+              : FeedMetrics.rankingVersionV2;
 
       final repo = ref.read(feedRepoProvider);
       final pool = await _fetchPool(
@@ -175,9 +176,10 @@ class FeedController
 
       // Re-rank using the policy + previously-shown tail for cross-page
       // burst control.
-      final tail = current.items.length > 5
-          ? current.items.sublist(current.items.length - 5)
-          : current.items;
+      final tail =
+          current.items.length > 5
+              ? current.items.sublist(current.items.length - 5)
+              : current.items;
       final context = RankingContext(
         surface: _surface,
         weights: weights,
@@ -204,6 +206,13 @@ class FeedController
         sessionSeed: current.sessionSeed,
         rankingVersion: rankingVersion,
       );
+
+      final liveUid = ref.read(currentUserProfileProvider).value?.uid;
+      if (liveUid != requestUid) {
+        // Keep UI interactive; a new account session is already in progress.
+        state = AsyncData(current.copyWith(isLoading: false));
+        return;
+      }
 
       state = AsyncData(
         current.copyWith(
@@ -254,5 +263,5 @@ class FeedController
 
 final feedControllerProvider =
     AsyncNotifierProvider.family<FeedController, FeedState, FeedSurface>(
-  FeedController.new,
-);
+      FeedController.new,
+    );

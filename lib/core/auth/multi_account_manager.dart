@@ -34,10 +34,23 @@ class MultiAccountManager {
       '(was $hadBefore) uids=${sessions.map((s) => s.uid.substring(0, 6)).join(",")}',
     );
 
-    await storage.saveSessions(sessions);
-    await storage.setActiveAccountId(session.uid);
+    final sessionsSaved = await storage.saveSessions(sessions);
+    if (!sessionsSaved) {
+      throw StateError('Failed to persist accounts');
+    }
+    final activeSaved = await storage.setActiveAccountId(session.uid);
+    if (!activeSaved) {
+      throw StateError('Failed to persist active account');
+    }
     if (password != null) {
-      await storage.saveCredentials(session.uid, session.email, password);
+      final credsSaved = await storage.saveCredentials(
+        session.uid,
+        session.email,
+        password,
+      );
+      if (!credsSaved) {
+        throw StateError('Failed to persist account credentials');
+      }
     }
     dev.log('[multi-account] addAccount DONE for ${session.email}');
   }
@@ -88,13 +101,39 @@ class MultiAccountManager {
       return false;
     }
 
+    final previousActiveId = await storage.getActiveAccountId();
+    final previousUserUid = firebaseAuth.currentUser?.uid;
+
+    if (previousUserUid == uid) {
+      final persisted = await storage.setActiveAccountId(uid);
+      if (!persisted) {
+        dev.log(
+          '[multi-account] switchAccount FAILED: could not persist active id '
+          'for already-active user',
+        );
+        return false;
+      }
+      dev.log('[multi-account] switchAccount NOOP (already active) for $uid');
+      return true;
+    }
+
+    final activeSaved = await storage.setActiveAccountId(uid);
+    if (!activeSaved) {
+      dev.log('[multi-account] switchAccount FAILED: active id persist failed');
+      return false;
+    }
+
     try {
-      await firebaseAuth.signOut();
-      await firebaseAuth.signInWithEmailAndPassword(
-        email: creds['email']!,
-        password: creds['password']!,
-      );
-      await storage.setActiveAccountId(uid);
+      await firebaseAuth.signOut().timeout(const Duration(seconds: 12));
+      final credential = await firebaseAuth
+          .signInWithEmailAndPassword(
+            email: creds['email']!,
+            password: creds['password']!,
+          )
+          .timeout(const Duration(seconds: 20));
+      if (credential.user?.uid != uid) {
+        throw StateError('Switched into unexpected account');
+      }
 
       final sessions = await storage.getSessions();
       final idx = sessions.indexWhere((s) => s.uid == uid);
@@ -105,6 +144,7 @@ class MultiAccountManager {
       dev.log('[multi-account] switchAccount SUCCESS for $uid');
       return true;
     } catch (e) {
+      await storage.setActiveAccountId(previousActiveId ?? '');
       dev.log('[multi-account] switchAccount FAILED: $e');
       return false;
     }

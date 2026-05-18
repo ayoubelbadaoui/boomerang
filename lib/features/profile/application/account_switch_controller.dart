@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class AccountSwitchController {
   AccountSwitchController(this._container);
   final ProviderContainer _container;
+  int _switchGeneration = 0;
 
   /// Whether stored credentials exist for [uid].
   Future<bool> hasCredentials(String uid) async {
@@ -38,9 +39,10 @@ class AccountSwitchController {
         if (profile != null) {
           await manager.updateAccountProfile(
             user.uid,
-            displayName: profile.fullName.isNotEmpty
-                ? profile.fullName
-                : profile.nickname,
+            displayName:
+                profile.fullName.isNotEmpty
+                    ? profile.fullName
+                    : profile.nickname,
             photoUrl: profile.avatarUrl,
           );
           _container.invalidate(storedAccountsProvider);
@@ -69,28 +71,25 @@ class AccountSwitchController {
   /// If [password] is provided (re-login case), credentials are persisted
   /// first so [MultiAccountManager.switchAccount] can sign in.
   /// Returns `true` on success.
-  Future<bool> switchTo(
-    UserSession target, {
-    String? password,
-  }) async {
+  Future<bool> switchTo(UserSession target, {String? password}) async {
+    final switchId = ++_switchGeneration;
     _container.read(isSwitchingAccountProvider.notifier).state = true;
     try {
       final manager = _container.read(multiAccountManagerProvider);
       final storage = _container.read(sessionStorageProvider);
       final firestore = _container.read(firestoreProvider);
 
-      final currentUid =
-          _container.read(firebaseAuthProvider).currentUser?.uid;
-      final currentProfile =
-          _container.read(currentUserProfileProvider).value;
+      final currentUid = _container.read(firebaseAuthProvider).currentUser?.uid;
+      final currentProfile = _container.read(currentUserProfileProvider).value;
 
       // Snapshot outgoing user's profile so the switcher shows correct data
       if (currentUid != null && currentProfile != null) {
         await manager.updateAccountProfile(
           currentUid,
-          displayName: currentProfile.fullName.isNotEmpty
-              ? currentProfile.fullName
-              : currentProfile.nickname,
+          displayName:
+              currentProfile.fullName.isNotEmpty
+                  ? currentProfile.fullName
+                  : currentProfile.nickname,
           photoUrl: currentProfile.avatarUrl,
         );
       }
@@ -104,12 +103,27 @@ class AccountSwitchController {
 
       // For the password path, save credentials before switching
       if (password != null) {
-        await storage.saveCredentials(target.uid, target.email, password);
+        final credsSaved = await storage.saveCredentials(
+          target.uid,
+          target.email,
+          password,
+        );
+        if (!credsSaved) {
+          dev.log(
+            '[multi-account] switchTo FAILED: could not persist password',
+          );
+          return false;
+        }
       }
 
       // signOut → signIn via stored credentials
       final success = await manager.switchAccount(target.uid);
       dev.log('[multi-account] switchTo result=$success uid=${target.uid}');
+
+      if (switchId != _switchGeneration) {
+        // A newer switch already started; ignore this stale completion.
+        return false;
+      }
 
       if (success) {
         invalidateUserScopedProviders(_container);
@@ -119,8 +133,13 @@ class AccountSwitchController {
       }
 
       return success;
+    } catch (e, st) {
+      dev.log('[multi-account] switchTo FAILED: $e', error: e, stackTrace: st);
+      return false;
     } finally {
-      _container.read(isSwitchingAccountProvider.notifier).state = false;
+      if (switchId == _switchGeneration) {
+        _container.read(isSwitchingAccountProvider.notifier).state = false;
+      }
     }
   }
 }

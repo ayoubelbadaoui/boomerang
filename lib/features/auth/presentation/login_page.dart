@@ -172,16 +172,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     if (prevUser != null) {
                       prevSession = UserSession(
                         uid: prevUser.uid,
-                        email: prevProfile?.email ??
-                            prevUser.email ??
-                            '',
-                        displayName: prevProfile?.fullName.isNotEmpty == true
-                            ? prevProfile!.fullName
-                            : prevProfile?.nickname ??
-                                prevUser.displayName ??
-                                '',
-                        photoUrl:
-                            prevProfile?.avatarUrl ?? prevUser.photoURL,
+                        email: prevProfile?.email ?? prevUser.email ?? '',
+                        displayName:
+                            prevProfile?.fullName.isNotEmpty == true
+                                ? prevProfile!.fullName
+                                : prevProfile?.nickname ??
+                                    prevUser.displayName ??
+                                    '',
+                        photoUrl: prevProfile?.avatarUrl ?? prevUser.photoURL,
                         lastLogin: DateTime.now(),
                       );
                     }
@@ -196,7 +194,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     if (!mounted) return;
                     final next = ref.read(authStateProvider).asData?.value;
                     if (next != null) {
-                      final container = ProviderScope.containerOf(context, listen: false);
+                      final container = ProviderScope.containerOf(
+                        context,
+                        listen: false,
+                      );
                       invalidateUserScopedProviders(container);
                       container.invalidate(profileControllerProvider);
                       container.invalidate(userBoomerangsControllerProvider);
@@ -229,7 +230,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       style: TextStyle(fontSize: 14.sp, color: Colors.black54),
                     ),
                     GestureDetector(
-                      onTap: () => context.push(SignupPage.routeName),
+                      onTap: () {
+                        final addAccountMode =
+                            GoRouterState.of(
+                              context,
+                            ).uri.queryParameters['addAccount'] ==
+                            '1';
+                        final signupTarget =
+                            addAccountMode
+                                ? '${SignupPage.routeName}?addAccount=1'
+                                : SignupPage.routeName;
+                        context.push(signupTarget);
+                      },
                       child: Text(
                         'Sign up',
                         style: TextStyle(

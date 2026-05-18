@@ -143,6 +143,7 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
     final isSignup = state.fullPath == SignupPage.routeName;
     final isOnboarding = state.fullPath == OnboardingPage.routeName;
     final isSetupFlow = state.fullPath == SetupFlowPage.routeName;
+    final allowAddAccountAuth = state.uri.queryParameters['addAccount'] == '1';
 
     // While an account switch is in progress, don't react to transient
     // sign-out states — let the switch complete before applying guards.
@@ -178,6 +179,10 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
     final shouldRunSetup = !hasName || !hasProfile || !isComplete;
     if (shouldRunSetup) {
       return isSetupFlow ? null : SetupFlowPage.routeName;
+    }
+
+    if (allowAddAccountAuth && (isLogin || isSignup)) {
+      return null;
     }
 
     if (isSplash ||

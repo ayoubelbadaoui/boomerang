@@ -3,6 +3,7 @@ import 'package:boomerang/features/profile/application/user_boomerangs_controlle
 import 'package:boomerang/features/profile/presentation/settings/manage_account_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/notifications_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/privacy_page.dart';
+import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
 import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -246,13 +247,40 @@ class _LogoutButton extends StatelessWidget {
   }
 }
 
-Future<void> _performLogout(WidgetRef ref, ProviderContainer container) async {
+Future<bool> _performLogout(WidgetRef ref, ProviderContainer container) async {
+  final manager = ref.read(multiAccountManagerProvider);
+  final currentUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+  final nextAccount =
+      currentUid == null || currentUid.isEmpty
+          ? null
+          : await manager.nextAccountAfterRemoval(currentUid);
+
   try {
-    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-    if (uid != null && uid.isNotEmpty) {
-      await removeCurrentDeviceTokenForUser(ref.read(firestoreProvider), uid);
+    if (currentUid != null && currentUid.isNotEmpty) {
+      await removeCurrentDeviceTokenForUser(
+        ref.read(firestoreProvider),
+        currentUid,
+      );
     }
   } catch (_) {}
+
+  if (currentUid != null && currentUid.isNotEmpty) {
+    await manager.removeAccount(currentUid);
+  }
+
+  if (nextAccount != null) {
+    final switched = await manager.switchAccount(nextAccount.uid);
+    if (switched) {
+      try {
+        invalidateUserScopedProviders(container);
+        container.invalidate(profileControllerProvider);
+        container.invalidate(userBoomerangsControllerProvider);
+        container.invalidate(storedAccountsProvider);
+      } catch (_) {}
+      return true;
+    }
+  }
+
   try {
     invalidateUserScopedProviders(container);
     container.invalidate(profileControllerProvider);
@@ -262,6 +290,7 @@ Future<void> _performLogout(WidgetRef ref, ProviderContainer container) async {
   try {
     await ref.read(authControllerProvider.notifier).logout();
   } catch (_) {}
+  return false;
 }
 
 void _confirmLogout(BuildContext navigatorContext, WidgetRef ref) {
@@ -313,8 +342,15 @@ void _confirmLogout(BuildContext navigatorContext, WidgetRef ref) {
                       ),
                       onPressed: () async {
                         Navigator.of(sheetContext).pop();
-                        await _performLogout(ref, container);
-                        goRouter.go(OnboardingPage.routeName);
+                        final switchedToRemaining = await _performLogout(
+                          ref,
+                          container,
+                        );
+                        goRouter.go(
+                          switchedToRemaining
+                              ? HomeShell.routeName
+                              : OnboardingPage.routeName,
+                        );
                       },
                       child: const Text('Logout'),
                     ),

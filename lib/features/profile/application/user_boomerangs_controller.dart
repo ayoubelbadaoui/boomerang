@@ -51,7 +51,10 @@ class UserBoomerangsController extends AsyncNotifier<UserBoomerangsState> {
   @override
   Future<UserBoomerangsState> build() async {
     _activeUid = ref.read(currentUserProfileProvider).value?.uid;
-    ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider, (previous, next) {
+    ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider, (
+      previous,
+      next,
+    ) {
       final nextUid = next.asData?.value?.uid;
       if (nextUid == _activeUid) return;
       _activeUid = nextUid;
@@ -75,10 +78,9 @@ class UserBoomerangsController extends AsyncNotifier<UserBoomerangsState> {
     final me = await ref.read(currentUserProfileProvider.future);
     if (me == null) return;
 
-    await ref.read(boomerangRepoProvider).deleteBoomerang(
-          boomerangId: boomerangId,
-          userId: me.uid,
-        );
+    await ref
+        .read(boomerangRepoProvider)
+        .deleteBoomerang(boomerangId: boomerangId, userId: me.uid);
 
     final current = state.value;
     if (current != null) {
@@ -115,6 +117,7 @@ class UserBoomerangsController extends AsyncNotifier<UserBoomerangsState> {
       final liveUid = ref.read(currentUserProfileProvider).value?.uid;
       if (liveUid != requestUid) {
         // Drop late result from previous account session.
+        state = AsyncData(currentState.copyWith(isLoading: false));
         return;
       }
       state = AsyncData(

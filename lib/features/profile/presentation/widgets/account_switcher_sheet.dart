@@ -32,9 +32,11 @@ Future<void> showAccountSwitcher(BuildContext context, WidgetRef ref) async {
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
     ),
-    builder: (_) => _AccountSwitcherBody(
-      onAddAccount: () => goRouter.push(LoginPage.routeName),
-    ),
+    builder:
+        (_) => _AccountSwitcherBody(
+          onAddAccount:
+              () => goRouter.push('${LoginPage.routeName}?addAccount=1'),
+        ),
   );
 
   if (result == null || !context.mounted) return;
@@ -84,10 +86,7 @@ Future<void> showAccountSwitcher(BuildContext context, WidgetRef ref) async {
 }
 
 /// Bottom sheet that prompts for a password and returns the entered text.
-Future<String?> _showPasswordSheet(
-  BuildContext context,
-  UserSession target,
-) {
+Future<String?> _showPasswordSheet(BuildContext context, UserSession target) {
   final passwordController = TextEditingController();
   final theme = Theme.of(context);
 
@@ -124,8 +123,9 @@ Future<String?> _showPasswordSheet(
                 decoration: InputDecoration(
                   hintText: 'Password',
                   filled: true,
-                  fillColor:
-                      theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                  fillColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.05,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.r),
                     borderSide: BorderSide.none,
@@ -173,8 +173,7 @@ class _AccountSwitcherBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final storedAccounts =
-        ref.watch(storedAccountsProvider).valueOrNull ?? [];
+    final storedAccounts = ref.watch(storedAccountsProvider).valueOrNull ?? [];
     final currentProfile = ref.watch(currentUserProfileProvider).value;
     final currentUid = ref.watch(firebaseAuthProvider).currentUser?.uid;
 
@@ -208,9 +207,10 @@ class _AccountSwitcherBody extends ConsumerWidget {
             // Current user — tapping just dismisses the sheet
             if (currentUid != null)
               _AccountTile(
-                displayName: currentProfile?.fullName.isNotEmpty == true
-                    ? currentProfile!.fullName
-                    : currentProfile?.nickname ?? '',
+                displayName:
+                    currentProfile?.fullName.isNotEmpty == true
+                        ? currentProfile!.fullName
+                        : currentProfile?.nickname ?? '',
                 subtitle: currentProfile?.email ?? '',
                 photoUrl: currentProfile?.avatarUrl,
                 isActive: true,
@@ -237,8 +237,7 @@ class _AccountSwitcherBody extends ConsumerWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                     width: 1.5,
                   ),
                 ),
@@ -289,9 +288,7 @@ class _AccountTile extends StatelessWidget {
       leading: AppAvatar(url: photoUrl, size: 48.r),
       title: Text(
         displayName.isNotEmpty ? displayName : 'User',
-        style: theme.textTheme.bodyLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
+        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -303,13 +300,14 @@ class _AccountTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: isActive
-          ? Icon(
-              Icons.check_circle,
-              color: theme.colorScheme.primary,
-              size: 24.r,
-            )
-          : null,
+      trailing:
+          isActive
+              ? Icon(
+                Icons.check_circle,
+                color: theme.colorScheme.primary,
+                size: 24.r,
+              )
+              : null,
       onTap: onTap,
     );
   }

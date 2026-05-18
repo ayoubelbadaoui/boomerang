@@ -57,8 +57,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final nicknameState = ref.watch(userHasNicknameProvider);
-    if (nicknameState.isLoading || nicknameState.hasError) {
+    if (nicknameState.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (nicknameState.hasError) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Could not load account data.'),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () {
+                  ref.invalidate(userHasNicknameProvider);
+                  ref.invalidate(currentUserProfileProvider);
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     final hasNickname = nicknameState.valueOrNull ?? false;
     if (!hasNickname) {

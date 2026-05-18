@@ -93,18 +93,20 @@ class SessionStorage {
     }
   }
 
-  Future<void> setActiveAccountId(String uid) async {
+  Future<bool> setActiveAccountId(String uid) async {
     try {
       final file = await _getActiveFile();
       await file.writeAsString(uid, flush: true);
+      return true;
     } catch (e) {
       dev.log('[multi-account] storage.setActiveAccountId FAILED: $e');
+      return false;
     }
   }
 
   // ── Credentials ───────────────────────────────────────────────────────
 
-  Future<void> saveCredentials(
+  Future<bool> saveCredentials(
     String uid,
     String email,
     String password,
@@ -114,8 +116,10 @@ class SessionStorage {
       final payload = jsonEncode({'email': email, 'password': password});
       await file.writeAsString(payload, flush: true);
       dev.log('[multi-account] storage.saveCredentials OK for $email');
+      return true;
     } catch (e) {
       dev.log('[multi-account] storage.saveCredentials FAILED: $e');
+      return false;
     }
   }
 
