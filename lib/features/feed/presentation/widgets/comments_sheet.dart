@@ -74,9 +74,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
   Widget build(BuildContext context) {
     final stream = ref.watch(commentsRepoProvider).watch(widget.boomerangId);
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Column(
         children: [
           SizedBox(height: 8.h),
@@ -207,12 +205,13 @@ class _CommentTile extends ConsumerWidget {
     final me = ref.watch(currentUserProfileProvider).value;
     final myUid = me?.uid;
     final isLiked = me != null && likedBy.contains(me.uid);
+    final liveName = ref.watch(userDisplayNameByIdProvider(userId));
+    final displayName =
+        liveName?.trim().isNotEmpty == true ? liveName!.trim() : userName;
     final canDelete =
         myUid != null && (myUid == userId || myUid == postOwnerId);
     return GestureDetector(
-      onLongPress: canDelete
-          ? () => _confirmDelete(context, ref)
-          : null,
+      onLongPress: canDelete ? () => _confirmDelete(context, ref) : null,
       child: Padding(
         padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
         child: Column(
@@ -221,13 +220,17 @@ class _CommentTile extends ConsumerWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              GestureDetector(
-                onTap:
-                    userId.isEmpty
-                        ? null
-                        : () => _openProfile(context, ref),
-                child: LiveAvatar(userId: userId, fallbackUrl: userAvatar, size: 56.r),
-              ),
+                GestureDetector(
+                  onTap:
+                      userId.isEmpty
+                          ? null
+                          : () => _openProfile(context, ref, displayName),
+                  child: LiveAvatar(
+                    userId: userId,
+                    fallbackUrl: userAvatar,
+                    size: 56.r,
+                  ),
+                ),
                 SizedBox(width: 12.w),
                 Expanded(
                   child: Column(
@@ -237,9 +240,9 @@ class _CommentTile extends ConsumerWidget {
                         onTap:
                             userId.isEmpty
                                 ? null
-                                : () => _openProfile(context, ref),
+                                : () => _openProfile(context, ref, displayName),
                         child: Text(
-                          userName,
+                          displayName,
                           style: TextStyle(
                             fontFamily: 'Urbanist',
                             fontWeight: FontWeight.w700,
@@ -267,16 +270,20 @@ class _CommentTile extends ConsumerWidget {
                                 me == null
                                     ? null
                                     : () {
-                                        final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-                                        if (uid == null) return;
-                                        ref
-                                            .read(commentsRepoProvider)
-                                            .toggleLike(
-                                              boomerangId: boomerangId,
-                                              commentId: commentId,
-                                              userId: uid,
-                                            );
-                                      },
+                                      final uid =
+                                          ref
+                                              .read(firebaseAuthProvider)
+                                              .currentUser
+                                              ?.uid;
+                                      if (uid == null) return;
+                                      ref
+                                          .read(commentsRepoProvider)
+                                          .toggleLike(
+                                            boomerangId: boomerangId,
+                                            commentId: commentId,
+                                            userId: uid,
+                                          );
+                                    },
                             customBorder: const CircleBorder(),
                             child: Row(
                               children: [
@@ -355,57 +362,58 @@ class _CommentTile extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: Text(
-                  'Delete comment',
-                  style: TextStyle(
-                    fontFamily: 'Urbanist',
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
+      builder:
+          (ctx) => SafeArea(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                    ),
+                    title: Text(
+                      'Delete comment',
+                      style: TextStyle(
+                        fontFamily: 'Urbanist',
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ref
+                          .read(commentsRepoProvider)
+                          .delete(
+                            boomerangId: boomerangId,
+                            commentId: commentId,
+                          );
+                    },
                   ),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ref.read(commentsRepoProvider).delete(
-                    boomerangId: boomerangId,
-                    commentId: commentId,
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    fontFamily: 'Urbanist',
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
+                  ListTile(
+                    leading: const Icon(Icons.close),
+                    title: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontFamily: 'Urbanist',
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onTap: () => Navigator.pop(ctx),
                   ),
-                ),
-                onTap: () => Navigator.pop(ctx),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
-  void _openProfile(BuildContext context, WidgetRef ref) {
-    openUserProfilePreview(
-      context,
-      ref,
-      userId: userId,
-      handle: userName,
-    );
+  void _openProfile(BuildContext context, WidgetRef ref, String displayName) {
+    openUserProfilePreview(context, ref, userId: userId, handle: displayName);
   }
 
   void _openReply(BuildContext context, WidgetRef ref) {
@@ -458,7 +466,9 @@ class _CommentTile extends ConsumerWidget {
                           userName:
                               profile?.nickname.isNotEmpty == true
                                   ? profile!.nickname
-                                  : (profile?.fullName ?? authUser?.displayName ?? 'User'),
+                                  : (profile?.fullName ??
+                                      authUser?.displayName ??
+                                      'User'),
                           userAvatar: profile?.avatarUrl ?? authUser?.photoURL,
                           text: text,
                         );
@@ -499,12 +509,7 @@ class _RepliesList extends ConsumerWidget {
     required String userId,
     required String handle,
   }) {
-    openUserProfilePreview(
-      context,
-      ref,
-      userId: userId,
-      handle: handle,
-    );
+    openUserProfilePreview(context, ref, userId: userId, handle: handle);
   }
 
   @override
@@ -535,20 +540,29 @@ class _RepliesList extends ConsumerWidget {
                   final replyId = d.id;
                   final replyUserId = (r['userId'] ?? '') as String;
                   final avatar = r['userAvatar'] as String?;
-                  final name = (r['userName'] ?? 'User') as String;
+                  final fallbackName = (r['userName'] ?? 'User') as String;
+                  final liveName = ref.watch(
+                    userDisplayNameByIdProvider(replyUserId),
+                  );
+                  final name =
+                      liveName?.trim().isNotEmpty == true
+                          ? liveName!.trim()
+                          : fallbackName;
                   final text = (r['text'] ?? '') as String;
                   final ts = r['createdAt'];
                   final createdAt =
                       ts is Timestamp ? ts.toDate() : DateTime.now();
                   final key = replyKeys.putIfAbsent(replyId, () => GlobalKey());
                   final isHighlight = targetReplyId == replyId;
-                  final canDelete = myUid != null &&
+                  final canDelete =
+                      myUid != null &&
                       (myUid == replyUserId || myUid == postOwnerId);
                   return GestureDetector(
                     key: key,
-                    onLongPress: canDelete
-                        ? () => _confirmDeleteReply(context, ref, replyId)
-                        : null,
+                    onLongPress:
+                        canDelete
+                            ? () => _confirmDeleteReply(context, ref, replyId)
+                            : null,
                     child: Padding(
                       padding: EdgeInsets.only(bottom: 10.h),
                       child: Container(
@@ -558,32 +572,38 @@ class _RepliesList extends ConsumerWidget {
                                 : Colors.transparent,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: replyUserId.isEmpty
-                                ? null
-                                : () => _openReplyProfile(
-                                      context,
-                                      ref,
-                                      userId: replyUserId,
-                                      handle: name,
-                                    ),
-                            child: LiveAvatar(userId: replyUserId, fallbackUrl: avatar, size: 40.r),
-                          ),
-                          SizedBox(width: 8.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                GestureDetector(
-                                  onTap: replyUserId.isEmpty
+                          children: [
+                            GestureDetector(
+                              onTap:
+                                  replyUserId.isEmpty
                                       ? null
                                       : () => _openReplyProfile(
-                                            context,
-                                            ref,
-                                            userId: replyUserId,
-                                            handle: name,
-                                          ),
+                                        context,
+                                        ref,
+                                        userId: replyUserId,
+                                        handle: name,
+                                      ),
+                              child: LiveAvatar(
+                                userId: replyUserId,
+                                fallbackUrl: avatar,
+                                size: 40.r,
+                              ),
+                            ),
+                            SizedBox(width: 8.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  GestureDetector(
+                                    onTap:
+                                        replyUserId.isEmpty
+                                            ? null
+                                            : () => _openReplyProfile(
+                                              context,
+                                              ref,
+                                              userId: replyUserId,
+                                              handle: name,
+                                            ),
                                     child: Text(
                                       name,
                                       style: TextStyle(
@@ -640,48 +660,54 @@ class _RepliesList extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: Text(
-                  'Delete reply',
-                  style: TextStyle(
-                    fontFamily: 'Urbanist',
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
+      builder:
+          (ctx) => SafeArea(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                    ),
+                    title: Text(
+                      'Delete reply',
+                      style: TextStyle(
+                        fontFamily: 'Urbanist',
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ref
+                          .read(commentsRepoProvider)
+                          .deleteReply(
+                            boomerangId: boomerangId,
+                            parentCommentId: commentId,
+                            replyId: replyId,
+                          );
+                    },
                   ),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ref.read(commentsRepoProvider).deleteReply(
-                    boomerangId: boomerangId,
-                    parentCommentId: commentId,
-                    replyId: replyId,
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    fontFamily: 'Urbanist',
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
+                  ListTile(
+                    leading: const Icon(Icons.close),
+                    title: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontFamily: 'Urbanist',
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onTap: () => Navigator.pop(ctx),
                   ),
-                ),
-                onTap: () => Navigator.pop(ctx),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 }
@@ -713,7 +739,12 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
   Widget build(BuildContext context) {
     final bottomSafe = MediaQuery.paddingOf(context).bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h + (bottomSafe > 0 ? bottomSafe * 0.5 : 0)),
+      padding: EdgeInsets.fromLTRB(
+        16.w,
+        8.h,
+        16.w,
+        16.h + (bottomSafe > 0 ? bottomSafe * 0.5 : 0),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -753,7 +784,9 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
                     userName:
                         profile?.nickname.isNotEmpty == true
                             ? profile!.nickname
-                            : (profile?.fullName ?? authUser?.displayName ?? 'User'),
+                            : (profile?.fullName ??
+                                authUser?.displayName ??
+                                'User'),
                     userAvatar: profile?.avatarUrl ?? authUser?.photoURL,
                     text: text,
                   );

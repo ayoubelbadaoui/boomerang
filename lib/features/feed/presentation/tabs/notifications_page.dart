@@ -59,7 +59,7 @@ class NotificationsPage extends ConsumerWidget {
                               final senderId =
                                   ((d['senderId'] ?? d['actorUserId']) ?? '')
                                       as String;
-                              final title =
+                              final fallbackTitle =
                                   rawTitle.trim().isNotEmpty
                                       ? rawTitle
                                       : (senderId.isNotEmpty
@@ -104,7 +104,7 @@ class NotificationsPage extends ConsumerWidget {
                                     (avatar != null && avatar.isNotEmpty)
                                         ? avatar
                                         : '',
-                                title: title,
+                                title: fallbackTitle,
                                 subtitle: subtitle,
                                 trailingThumb: thumb,
                                 actionLabel: action,
@@ -262,6 +262,12 @@ class _ActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
+        final liveName =
+            item.actorId.isEmpty
+                ? null
+                : ref.watch(userDisplayNameByIdProvider(item.actorId));
+        final displayTitle =
+            liveName?.trim().isNotEmpty == true ? liveName!.trim() : item.title;
         return InkWell(
           onTap: () => _handleTap(context, ref, item),
           borderRadius: BorderRadius.circular(16.r),
@@ -286,7 +292,7 @@ class _ActivityTile extends StatelessWidget {
                       InkWell(
                         onTap: () => _openProfile(context, ref, item),
                         child: Text(
-                          item.title,
+                          displayTitle,
                           style: TextStyle(
                             fontSize: 18.sp,
                             fontWeight:
@@ -613,11 +619,14 @@ Future<void> _openProfile(
   _Item item,
 ) async {
   if (item.actorId.isEmpty) return;
+  final liveName = ref.read(userDisplayNameByIdProvider(item.actorId));
+  final displayName =
+      liveName?.trim().isNotEmpty == true ? liveName!.trim() : item.title;
   openUserProfilePreview(
     context,
     ref,
     userId: item.actorId,
-    handle: '@${item.title.replaceAll(' ', '').toLowerCase()}',
+    handle: '@${displayName.replaceAll(' ', '_').toLowerCase()}',
   );
 }
 

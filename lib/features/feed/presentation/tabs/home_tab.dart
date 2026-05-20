@@ -235,9 +235,12 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
   Widget build(BuildContext context) {
     final data = widget.data;
     final id = widget.id;
-    final handle =
-        '@${(data['userName'] ?? 'user').toString().replaceAll(' ', '_').toLowerCase()}';
     final userId = (data['userId'] ?? '') as String;
+    final liveName = ref.watch(userDisplayNameByIdProvider(userId));
+    final fallbackName = (data['userName'] ?? 'user').toString();
+    final displayName =
+        liveName?.trim().isNotEmpty == true ? liveName!.trim() : fallbackName;
+    final handle = '@${displayName.replaceAll(' ', '_').toLowerCase()}';
     final avatarFallback = data['userAvatar'] as String?;
     final image = data['imageUrl'] as String?; // optional poster
     final video = data['videoUrl'] as String?;

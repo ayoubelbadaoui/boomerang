@@ -257,6 +257,25 @@ final userProfileByIdProvider = StreamProvider.family<UserProfile?, String>((
     }
   }
 });
+
+/// Canonical display name for a user id.
+///
+/// Uses live profile data so post/comment/notification UI reflects renames
+/// immediately. Returns null when the profile doc is unavailable, allowing
+/// callers to fall back to denormalized document fields.
+final userDisplayNameByIdProvider = Provider.family<String?, String>((
+  ref,
+  uid,
+) {
+  if (uid.isEmpty) return null;
+  final profile = ref.watch(userProfileByIdProvider(uid)).value;
+  if (profile == null) return null;
+  final nickname = profile.nickname.trim();
+  if (nickname.isNotEmpty) return nickname;
+  final fullName = profile.fullName.trim();
+  if (fullName.isNotEmpty) return fullName;
+  return null;
+});
 final commentsRepoProvider = Provider<CommentsRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return CommentsRepo(fs);
@@ -466,6 +485,8 @@ void invalidateUserScopedProviders(ProviderContainer container) {
   container.invalidate(userProfileExistsProvider);
   container.invalidate(userProfileCompleteProvider);
   container.invalidate(currentUserProfileProvider);
+  container.invalidate(userProfileByIdProvider);
+  container.invalidate(userDisplayNameByIdProvider);
   container.invalidate(likedPostIdsProvider);
   container.invalidate(postLikeUiControllerProvider);
   container.invalidate(outgoingFollowRequestProvider);

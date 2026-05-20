@@ -167,10 +167,11 @@ class _UsersSearchList extends ConsumerWidget {
           return const DiscoverUsersListShimmer();
         }
         final allDocs = snapshot.data!;
-        final docs = allDocs.where((d) {
-          if (blockedSet.contains(d.id)) return false;
-          return true;
-        }).toList();
+        final docs =
+            allDocs.where((d) {
+              if (blockedSet.contains(d.id)) return false;
+              return true;
+            }).toList();
         if (docs.isEmpty) return const Center(child: Text('No users found'));
         return ListView.separated(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
@@ -233,11 +234,12 @@ class _BmgGrid extends ConsumerWidget {
         if (!hashtagSnap.hasData) {
           return const DiscoverExploreGridShimmer();
         }
-        final matches = hashtagSnap.data!.docs
-            .map((d) => d.id)
-            .where((id) => id.contains(substring))
-            .take(30)
-            .toList();
+        final matches =
+            hashtagSnap.data!.docs
+                .map((d) => d.id)
+                .where((id) => id.contains(substring))
+                .take(30)
+                .toList();
         if (matches.isEmpty) {
           return const Center(child: Text('No posts for this search'));
         }
@@ -304,8 +306,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final feedAsync =
-        ref.watch(feedControllerProvider(FeedSurface.discovery));
+    final feedAsync = ref.watch(feedControllerProvider(FeedSurface.discovery));
     if (!feedAsync.hasValue) {
       return const DiscoverExploreGridShimmer();
     }
@@ -319,14 +320,16 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
     }
 
     final snapHash =
-        visible.length.hashCode ^ (visible.isNotEmpty ? visible.first.id.hashCode : 0);
+        visible.length.hashCode ^
+        (visible.isNotEmpty ? visible.first.id.hashCode : 0);
     if (snapHash != _lastWarmedHash) {
       _lastWarmedHash = snapHash;
-      final toWarm = visible
-          .take(12)
-          .map((p) => p.raw['imageUrl'])
-          .whereType<String>()
-          .toList();
+      final toWarm =
+          visible
+              .take(12)
+              .map((p) => p.raw['imageUrl'])
+              .whereType<String>()
+              .toList();
       if (toWarm.isNotEmpty) {
         // ignore: discarded_futures
         precacheImages(toWarm, context, concurrency: 4);
@@ -351,7 +354,14 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
             }
             final post = visible[i];
             final d = post.raw;
-            final name = (d['userName'] ?? '') as String;
+            final fallbackName = (d['userName'] ?? '') as String;
+            final liveName = ref.watch(
+              userDisplayNameByIdProvider(post.authorId),
+            );
+            final name =
+                liveName?.trim().isNotEmpty == true
+                    ? liveName!.trim()
+                    : fallbackName;
             final poster = (d['imageUrl'] ?? '') as String;
             final avatar = d['userAvatar'] as String?;
             final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
@@ -363,10 +373,11 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => BoomerangPagerPage(
-                      initialId: post.id,
-                      initialData: d,
-                    ),
+                    builder:
+                        (_) => BoomerangPagerPage(
+                          initialId: post.id,
+                          initialData: d,
+                        ),
                   ),
                 );
               },
@@ -405,9 +416,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
                             name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
@@ -446,32 +455,36 @@ class _BmgGridContent extends ConsumerWidget {
           return const DiscoverExploreGridShimmer();
         }
         final allDocs = snapshot.data!;
-        final docs = allDocs.where((d) {
-          final data = d.data();
-          final uid = (data['userId'] ?? '') as String;
-          if (blockedSet.contains(uid)) return false;
-          if (uid == myUid) return true;
-          // Posts from accounts the current user follows are visible
-          // even when the owner is private (security rules already
-          // verify the follow edge server-side).
-          if (followingIds.contains(uid)) return true;
-          if (data['ownerIsPrivate'] == true) return false;
-          // Defensive check against stale denormalised flags: even when a
-          // boomerang doc says public, look up the owner's live profile and
-          // hide it if the account is private and we don't follow them.
-          final liveProfile = ref.watch(userProfileByIdProvider(uid)).value;
-          if (liveProfile != null && liveProfile.isPrivate) return false;
-          return true;
-        }).toList();
+        final docs =
+            allDocs.where((d) {
+              final data = d.data();
+              final uid = (data['userId'] ?? '') as String;
+              if (blockedSet.contains(uid)) return false;
+              if (uid == myUid) return true;
+              // Posts from accounts the current user follows are visible
+              // even when the owner is private (security rules already
+              // verify the follow edge server-side).
+              if (followingIds.contains(uid)) return true;
+              if (data['ownerIsPrivate'] == true) return false;
+              // Defensive check against stale denormalised flags: even when a
+              // boomerang doc says public, look up the owner's live profile and
+              // hide it if the account is private and we don't follow them.
+              final liveProfile = ref.watch(userProfileByIdProvider(uid)).value;
+              if (liveProfile != null && liveProfile.isPrivate) return false;
+              return true;
+            }).toList();
         // Warm-cache first page posters once per snapshot.
-        final snapHash = docs.length.hashCode ^ (docs.isNotEmpty ? docs.first.id.hashCode : 0);
+        final snapHash =
+            docs.length.hashCode ^
+            (docs.isNotEmpty ? docs.first.id.hashCode : 0);
         if (snapHash != _lastWarmedHash) {
           _lastWarmedHash = snapHash;
-          final toWarm = docs
-              .take(12)
-              .map((d) => d.data()['imageUrl'])
-              .whereType<String>()
-              .toList();
+          final toWarm =
+              docs
+                  .take(12)
+                  .map((d) => d.data()['imageUrl'])
+                  .whereType<String>()
+                  .toList();
           if (toWarm.isNotEmpty) {
             // ignore: discarded_futures
             precacheImages(toWarm, context, concurrency: 4);
@@ -487,7 +500,13 @@ class _BmgGridContent extends ConsumerWidget {
             itemBuilder: (context, i) {
               final d = docs[i].data();
               final id = docs[i].id;
-              final name = (d['userName'] ?? '') as String;
+              final authorId = (d['userId'] ?? '') as String;
+              final fallbackName = (d['userName'] ?? '') as String;
+              final liveName = ref.watch(userDisplayNameByIdProvider(authorId));
+              final name =
+                  liveName?.trim().isNotEmpty == true
+                      ? liveName!.trim()
+                      : fallbackName;
               final poster = (d['imageUrl'] ?? '') as String;
               final avatar = (d['userAvatar'] as String?);
               final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
@@ -501,10 +520,8 @@ class _BmgGridContent extends ConsumerWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder:
-                          (_) => BoomerangPagerPage(
-                            initialId: id,
-                            initialData: d,
-                          ),
+                          (_) =>
+                              BoomerangPagerPage(initialId: id, initialData: d),
                     ),
                   );
                 },
@@ -526,7 +543,7 @@ class _BmgGridContent extends ConsumerWidget {
                     Row(
                       children: [
                         LiveAvatar(
-                          userId: (d['userId'] ?? '') as String,
+                          userId: authorId,
                           fallbackUrl: avatar,
                           size: 24.r,
                         ),
@@ -537,7 +554,7 @@ class _BmgGridContent extends ConsumerWidget {
                                 () => openUserProfilePage(
                                   context,
                                   ref,
-                                  userId: (d['userId'] ?? '') as String,
+                                  userId: authorId,
                                 ),
                             child: Text(
                               name,
@@ -567,9 +584,8 @@ class _TagsSearchList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final normalizedQuery = query.startsWith('#')
-        ? query.substring(1).trim()
-        : query.trim();
+    final normalizedQuery =
+        query.startsWith('#') ? query.substring(1).trim() : query.trim();
     final needle = normalizedQuery.toLowerCase();
 
     if (normalizedQuery.isEmpty) {

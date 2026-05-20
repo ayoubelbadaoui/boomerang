@@ -33,12 +33,15 @@ class BoomerangOverlay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userName = (data['userName'] ?? 'user').toString();
+    final userId = (data['userId'] ?? '') as String;
+    final liveName = ref.watch(userDisplayNameByIdProvider(userId));
+    final fallbackName = (data['userName'] ?? 'user').toString();
+    final userName =
+        liveName?.trim().isNotEmpty == true ? liveName!.trim() : fallbackName;
     final handle = '@${userName.replaceAll(' ', '_').toLowerCase()}';
     final avatar = data['userAvatar'] as String?;
     final video = data['videoUrl'] as String?;
     final likes = likesOverride ?? (data['likes'] ?? 0) as int;
-    final userId = (data['userId'] ?? '') as String;
     final caption = (data['caption'] ?? '') as String;
     final initialCommentsCount = ((data['commentsCount'] ?? 0) as num).toInt();
     final topInset = MediaQuery.viewPaddingOf(context).top;
@@ -169,7 +172,7 @@ class BoomerangOverlay extends ConsumerWidget {
                       reportedUid: userId,
                       boomerangId: boomerangId,
                       imageUrl: data['imageUrl'] as String?,
-                      userName: (data['userName'] ?? '') as String,
+                      userName: userName,
                       caption: data['caption'] as String?,
                     ),
                 child: Icon(
