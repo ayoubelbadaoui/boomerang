@@ -2,9 +2,17 @@ import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+class BoomerangLikeResult {
+  const BoomerangLikeResult({required this.liked, required this.likes});
+
+  final bool liked;
+  final int likes;
+}
+
 class BoomerangRepo {
   BoomerangRepo(this._fs);
   final FirebaseFirestore _fs;
+  static final Set<String> _inFlightLikeWrites = <String>{};
 
   Future<void> addRandomBoomerang() async {
     // pick a random user
@@ -65,7 +73,7 @@ class BoomerangRepo {
   /// Firestore `whereIn` supports up to 30 values, so we batch if needed
   /// and merge results sorted by createdAt descending.
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-      fetchFollowingFeedPage({
+  fetchFollowingFeedPage({
     required Set<String> followingIds,
     required String myUid,
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
@@ -77,7 +85,9 @@ class BoomerangRepo {
     final chunks = <List<String>>[];
     final idList = allIds.toList();
     for (var i = 0; i < idList.length; i += 30) {
-      chunks.add(idList.sublist(i, i + 30 > idList.length ? idList.length : i + 30));
+      chunks.add(
+        idList.sublist(i, i + 30 > idList.length ? idList.length : i + 30),
+      );
     }
 
     final allDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
@@ -173,7 +183,7 @@ class BoomerangRepo {
   /// snapshot. Functionally identical to [fetchFollowingFeedPage] except
   /// the cursor is portable (no Firestore snapshot leak).
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-      fetchFollowingByCreatedAtPage({
+  fetchFollowingByCreatedAtPage({
     required Set<String> followingIds,
     required String myUid,
     int? startAfterMillis,
@@ -185,8 +195,9 @@ class BoomerangRepo {
     final idList = allIds.toList();
     final chunks = <List<String>>[];
     for (var i = 0; i < idList.length; i += 30) {
-      chunks.add(idList.sublist(
-          i, i + 30 > idList.length ? idList.length : i + 30));
+      chunks.add(
+        idList.sublist(i, i + 30 > idList.length ? idList.length : i + 30),
+      );
     }
 
     final allDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
@@ -258,45 +269,113 @@ class BoomerangRepo {
     return q.get();
   }
 
-  Future<void> toggleLike({
+  Future<BoomerangLikeResult?> setLike({
+    required String boomerangId,
+    required String userId,
+    required bool shouldLike,
+    String? actorName,
+    String? actorAvatar,
+  }) {
+    return _writeLikeState(
+      boomerangId: boomerangId,
+      userId: userId,
+      desiredLike: shouldLike,
+      actorName: actorName,
+      actorAvatar: actorAvatar,
+    );
+  }
+
+  Future<BoomerangLikeResult?> toggleLike({
     required String boomerangId,
     required String userId,
     String? actorName,
     String? actorAvatar,
+  }) {
+    return _writeLikeState(
+      boomerangId: boomerangId,
+      userId: userId,
+      desiredLike: null,
+      actorName: actorName,
+      actorAvatar: actorAvatar,
+    );
+  }
+
+  Future<BoomerangLikeResult?> _writeLikeState({
+    required String boomerangId,
+    required String userId,
+    required bool? desiredLike,
+    String? actorName,
+    String? actorAvatar,
   }) async {
+    final inFlightKey = '$userId::$boomerangId';
+    if (_inFlightLikeWrites.contains(inFlightKey)) {
+      return null;
+    }
+    _inFlightLikeWrites.add(inFlightKey);
     final ref = _fs.collection('boomerangs').doc(boomerangId);
     String? ownerId;
-    bool? wasLiked;
-    await _fs.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) return;
-      final data = snap.data() as Map<String, dynamic>;
-      ownerId = data['userId'] as String?;
-      final List likedBy = (data['likedBy'] as List?) ?? <String>[];
-      wasLiked = likedBy.contains(userId);
-      tx.update(ref, {
-        'likedBy':
-            wasLiked!
-                ? FieldValue.arrayRemove([userId])
-                : FieldValue.arrayUnion([userId]),
-        'likes': FieldValue.increment(wasLiked! ? -1 : 1),
+    bool didChange = false;
+    late BoomerangLikeResult result;
+    var exists = false;
+
+    try {
+      await _fs.runTransaction((tx) async {
+        final snap = await tx.get(ref);
+        if (!snap.exists) return;
+        exists = true;
+        final data = snap.data() as Map<String, dynamic>;
+        ownerId = data['userId'] as String?;
+
+        final rawLikedBy = (data['likedBy'] as List?) ?? const <dynamic>[];
+        final likedBySet = <String>{
+          for (final uid in rawLikedBy)
+            if (uid is String && uid.isNotEmpty) uid,
+        };
+        final wasLiked = likedBySet.contains(userId);
+        final nextLiked = desiredLike ?? !wasLiked;
+        didChange = wasLiked != nextLiked;
+
+        if (nextLiked) {
+          likedBySet.add(userId);
+        } else {
+          likedBySet.remove(userId);
+        }
+
+        final nextLikes = likedBySet.length;
+        result = BoomerangLikeResult(
+          liked: likedBySet.contains(userId),
+          likes: nextLikes < 0 ? 0 : nextLikes,
+        );
+
+        tx.update(ref, {
+          'likedBy': likedBySet.toList(growable: false),
+          'likes': result.likes,
+        });
       });
-    });
-    if (wasLiked != null) {
-      final likeRef = _fs.collection('users').doc(userId).collection('likes').doc(boomerangId);
-      if (wasLiked!) {
-        await likeRef.delete();
-      } else {
+
+      if (!exists) return null;
+
+      final likeRef = _fs
+          .collection('users')
+          .doc(userId)
+          .collection('likes')
+          .doc(boomerangId);
+      if (result.liked) {
         await likeRef.set({'createdAt': FieldValue.serverTimestamp()});
+      } else {
+        await likeRef.delete().catchError((_) {});
       }
+
+      if (ownerId != null && ownerId!.isNotEmpty && didChange) {
+        await _fs.collection('users').doc(ownerId).update({
+          'totalLikes': FieldValue.increment(result.liked ? 1 : -1),
+        });
+      }
+
+      return result;
+    } finally {
+      _inFlightLikeWrites.remove(inFlightKey);
     }
-    if (ownerId != null && ownerId!.isNotEmpty && wasLiked != null) {
-      await _fs.collection('users').doc(ownerId).update({
-        'totalLikes': FieldValue.increment(wasLiked! ? -1 : 1),
-      });
-    }
-    // Push notification is handled server-side by Cloud Functions
-    // (onBoomerangLikeUpdated trigger).
   }
 
   Future<String> createBoomerangPost({
@@ -407,12 +486,10 @@ class BoomerangRepo {
       );
     }
 
-    final followedList = followingIds
-        .where((u) => u.isNotEmpty && u != currentUserId)
-        .toList();
+    final followedList =
+        followingIds.where((u) => u.isNotEmpty && u != currentUserId).toList();
     for (var i = 0; i < followedList.length; i += 30) {
-      final end =
-          i + 30 > followedList.length ? followedList.length : i + 30;
+      final end = i + 30 > followedList.length ? followedList.length : i + 30;
       final chunk = followedList.sublist(i, end);
       substreams.add(
         col
@@ -441,12 +518,13 @@ class BoomerangRepo {
     Set<String> followingIds = const <String>{},
     int followedScanLimit = 50,
   }) {
-    final normalized = tags
-        .map((t) => t.toLowerCase())
-        .where((t) => t.isNotEmpty)
-        .toSet()
-        .take(30)
-        .toList();
+    final normalized =
+        tags
+            .map((t) => t.toLowerCase())
+            .where((t) => t.isNotEmpty)
+            .toSet()
+            .take(30)
+            .toList();
     if (normalized.isEmpty) {
       return Stream.value(const []);
     }
@@ -470,10 +548,11 @@ class BoomerangRepo {
       );
     }
 
-    final followedList = followingIds
-        .where((u) => u.isNotEmpty && u != currentUserId)
-        .take(followedScanLimit)
-        .toList();
+    final followedList =
+        followingIds
+            .where((u) => u.isNotEmpty && u != currentUserId)
+            .take(followedScanLimit)
+            .toList();
     for (final uid in followedList) {
       substreams.add(
         col
@@ -492,14 +571,14 @@ class BoomerangRepo {
   /// every subsequent change. Order of returned docs is unspecified —
   /// callers should sort by `createdAt` if ordering matters.
   static Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-      _combineSnapshotStreams(
+  _combineSnapshotStreams(
     List<Stream<QuerySnapshot<Map<String, dynamic>>>> streams,
   ) {
     if (streams.isEmpty) return Stream.value(const []);
     if (streams.length == 1) return streams.first.map((s) => s.docs);
 
     late StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-        controller;
+    controller;
     final subs = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
     final latest = List<QuerySnapshot<Map<String, dynamic>>?>.filled(
       streams.length,
@@ -520,30 +599,30 @@ class BoomerangRepo {
 
     controller =
         StreamController<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-      onListen: () {
-        for (var i = 0; i < streams.length; i++) {
-          final idx = i;
-          subs.add(
-            streams[idx].listen(
-              (v) {
-                latest[idx] = v;
-                emit();
-              },
-              onError: controller.addError,
-              onDone: () {
-                doneCount++;
-                if (doneCount == streams.length) controller.close();
-              },
-            ),
-          );
-        }
-      },
-      onCancel: () async {
-        for (final s in subs) {
-          await s.cancel();
-        }
-      },
-    );
+          onListen: () {
+            for (var i = 0; i < streams.length; i++) {
+              final idx = i;
+              subs.add(
+                streams[idx].listen(
+                  (v) {
+                    latest[idx] = v;
+                    emit();
+                  },
+                  onError: controller.addError,
+                  onDone: () {
+                    doneCount++;
+                    if (doneCount == streams.length) controller.close();
+                  },
+                ),
+              );
+            }
+          },
+          onCancel: () async {
+            for (final s in subs) {
+              await s.cancel();
+            }
+          },
+        );
     return controller.stream;
   }
 
@@ -555,10 +634,11 @@ class BoomerangRepo {
     required String uid,
     required bool isPrivate,
   }) async {
-    final snap = await _fs
-        .collection('boomerangs')
-        .where('userId', isEqualTo: uid)
-        .get();
+    final snap =
+        await _fs
+            .collection('boomerangs')
+            .where('userId', isEqualTo: uid)
+            .get();
     if (snap.docs.isEmpty) return;
 
     var batch = _fs.batch();
@@ -594,7 +674,8 @@ class BoomerangRepo {
     });
 
     // Decrement hashtag counters (best-effort, mirrors createBoomerangPost)
-    final tags = (data?['hashtags'] as List?)?.cast<String>() ?? const <String>[];
+    final tags =
+        (data?['hashtags'] as List?)?.cast<String>() ?? const <String>[];
     if (tags.isNotEmpty) {
       final batch = _fs.batch();
       for (final tag in tags.toSet()) {

@@ -1,4 +1,5 @@
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 import 'package:boomerang/features/auth/presentation/signup_page.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
@@ -166,8 +167,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     // Snapshot the currently signed-in user (if any)
                     // BEFORE signIn replaces the Firebase session.
                     final prevUser = ref.read(firebaseAuthProvider).currentUser;
-                    final prevProfile =
+                    final profileCandidate =
                         ref.read(currentUserProfileProvider).value;
+                    final prevProfile =
+                        prevUser != null &&
+                                profileCandidate != null &&
+                                profileCandidate.uid == prevUser.uid
+                            ? profileCandidate
+                            : null;
                     UserSession? prevSession;
                     if (prevUser != null) {
                       prevSession = UserSession(
@@ -192,8 +199,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           previousAccount: prevSession,
                         );
                     if (!mounted) return;
+                    final authResult = ref.read(authControllerProvider);
                     final next = ref.read(authStateProvider).asData?.value;
-                    if (next != null) {
+                    final loginSucceeded =
+                        authResult.error == null &&
+                        authResult.success != null &&
+                        next != null;
+                    if (loginSucceeded) {
                       final container = ProviderScope.containerOf(
                         context,
                         listen: false,
@@ -202,6 +214,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       container.invalidate(profileControllerProvider);
                       container.invalidate(userBoomerangsControllerProvider);
                       container.invalidate(storedAccountsProvider);
+                      ref.read(homeTabIndexProvider.notifier).state = 0;
                       if (!mounted) return;
                       context.go(HomeShell.routeName);
                     }

@@ -1,4 +1,8 @@
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/core/navigation/home_tab_navigation.dart';
+import 'package:boomerang/features/feed/presentation/home_shell.dart';
+import 'package:boomerang/features/profile/application/profile_controller.dart';
+import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/auth/presentation/setup_flow_page.dart';
 import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -113,7 +117,8 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   suffix: IconButton(
                     onPressed: () {
                       setState(
-                        () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                        () =>
+                            _obscureConfirmPassword = !_obscureConfirmPassword,
                       );
                     },
                     icon: Icon(
@@ -139,8 +144,8 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                 SizedBox(height: 4.h),
                 _ConsentCheckbox(
                   value: _acceptedPrivacy,
-                  onChanged: (v) =>
-                      setState(() => _acceptedPrivacy = v ?? false),
+                  onChanged:
+                      (v) => setState(() => _acceptedPrivacy = v ?? false),
                   label: 'I agree to the ',
                   linkText: 'Privacy Policy',
                   onLinkTap: () => showPrivacyPolicy(context),
@@ -150,10 +155,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     padding: EdgeInsets.only(top: 4.h, left: 12.w),
                     child: Text(
                       'You must accept both to create an account',
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        color: Colors.black38,
-                      ),
+                      style: TextStyle(fontSize: 12.sp, color: Colors.black38),
                     ),
                   ),
                 SizedBox(height: 16.h),
@@ -173,22 +175,26 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     }
 
                     final prevUser = ref.read(firebaseAuthProvider).currentUser;
-                    final prevProfile =
+                    final profileCandidate =
                         ref.read(currentUserProfileProvider).value;
+                    final prevProfile =
+                        prevUser != null &&
+                                profileCandidate != null &&
+                                profileCandidate.uid == prevUser.uid
+                            ? profileCandidate
+                            : null;
                     UserSession? prevSession;
                     if (prevUser != null) {
                       prevSession = UserSession(
                         uid: prevUser.uid,
-                        email: prevProfile?.email ??
-                            prevUser.email ??
-                            '',
-                        displayName: prevProfile?.fullName.isNotEmpty == true
-                            ? prevProfile!.fullName
-                            : prevProfile?.nickname ??
-                                prevUser.displayName ??
-                                '',
-                        photoUrl:
-                            prevProfile?.avatarUrl ?? prevUser.photoURL,
+                        email: prevProfile?.email ?? prevUser.email ?? '',
+                        displayName:
+                            prevProfile?.fullName.isNotEmpty == true
+                                ? prevProfile!.fullName
+                                : prevProfile?.nickname ??
+                                    prevUser.displayName ??
+                                    '',
+                        photoUrl: prevProfile?.avatarUrl ?? prevUser.photoURL,
                         lastLogin: DateTime.now(),
                       );
                     }
@@ -203,9 +209,33 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                         );
                     if (!mounted) return;
                     final result = ref.read(authControllerProvider);
-                    if (result.error == null) {
+                    final signedInUser =
+                        ref.read(authStateProvider).asData?.value;
+                    final signupSucceeded =
+                        result.error == null &&
+                        result.success != null &&
+                        signedInUser != null;
+                    if (signupSucceeded) {
+                      final container = ProviderScope.containerOf(
+                        context,
+                        listen: false,
+                      );
+                      invalidateUserScopedProviders(container);
+                      container.invalidate(profileControllerProvider);
+                      container.invalidate(userBoomerangsControllerProvider);
+                      container.invalidate(storedAccountsProvider);
+                      ref.read(homeTabIndexProvider.notifier).state = 0;
                       _storeConsent(ref);
-                      context.go(SetupFlowPage.routeName);
+                      final addAccountMode =
+                          GoRouterState.of(
+                            context,
+                          ).uri.queryParameters['addAccount'] ==
+                          '1';
+                      context.go(
+                        addAccountMode
+                            ? HomeShell.routeName
+                            : SetupFlowPage.routeName,
+                      );
                     }
                   },
                   child: Text(
@@ -225,7 +255,16 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                       style: TextStyle(fontSize: 14.sp, color: Colors.black54),
                     ),
                     GestureDetector(
-                      onTap: () => context.go('/login'),
+                      onTap: () {
+                        final addAccountMode =
+                            GoRouterState.of(
+                              context,
+                            ).uri.queryParameters['addAccount'] ==
+                            '1';
+                        final loginTarget =
+                            addAccountMode ? '/login?addAccount=1' : '/login';
+                        context.go(loginTarget);
+                      },
                       child: Text(
                         'Sign in',
                         style: TextStyle(

@@ -29,6 +29,8 @@ class BoomerangPagerPage extends ConsumerStatefulWidget {
 class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   final _docs = <({String id, Map<String, dynamic> data})>[];
   final _videoWarmups = <String, Future<void>>{};
+  final _likedOverrides = <String, bool>{};
+  final _likeCountOverrides = <String, int>{};
   bool _loading = false;
   bool _hasMore = true;
   dynamic _last;
@@ -89,9 +91,11 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
           ref.read(blockedUsersProvider).value?.toSet() ?? const <String>{};
       final items =
           snap.docs
-              .where((d) =>
-                  d.id != widget.initialId &&
-                  !blockedSet.contains((d.data()['userId'] ?? '') as String))
+              .where(
+                (d) =>
+                    d.id != widget.initialId &&
+                    !blockedSet.contains((d.data()['userId'] ?? '') as String),
+              )
               .map((d) => (id: d.id, data: d.data()))
               .toList();
       setState(() {
@@ -99,7 +103,10 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         if (snap.docs.isNotEmpty) _last = snap.docs.last;
         if (snap.docs.length < 10) _hasMore = false;
       });
-      _advancePrewarmWindow(fromIndex: _currentPage, count: _rollingPrewarmBatch);
+      _advancePrewarmWindow(
+        fromIndex: _currentPage,
+        count: _rollingPrewarmBatch,
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -146,14 +153,53 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   void _ensureRollingPrewarm(int pageIndex) {
     final remainingPrewarmed = _prewarmedUntil - pageIndex;
     if (remainingPrewarmed <= _prewarmTriggerRemaining) {
-      _advancePrewarmWindow(
-        fromIndex: pageIndex,
-        count: _rollingPrewarmBatch,
-      );
-      if (_hasMore && (_docs.length - pageIndex) <= (_rollingPrewarmBatch + 1)) {
+      _advancePrewarmWindow(fromIndex: pageIndex, count: _rollingPrewarmBatch);
+      if (_hasMore &&
+          (_docs.length - pageIndex) <= (_rollingPrewarmBatch + 1)) {
         _fetchNext();
       }
     }
+  }
+
+  void _onLikeChanged(String postId, bool liked, int likes) {
+    final safeLikes = likes < 0 ? 0 : likes;
+    ref
+        .read(postLikeUiControllerProvider.notifier)
+        .setStateForPost(postId: postId, liked: liked, likes: safeLikes);
+    if (!mounted) return;
+    setState(() {
+      _likedOverrides[postId] = liked;
+      _likeCountOverrides[postId] = safeLikes;
+    });
+  }
+
+  Map<String, dynamic> _buildReturnLikeState() {
+    final id = widget.initialId;
+    final global = resolveActivePostLikeUiState(
+      ref.read(postLikeUiEntryProvider(id)),
+    );
+    final current = _docs.firstWhere(
+      (d) => d.id == id,
+      orElse: () => (id: id, data: widget.initialData),
+    );
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    final fallbackLikedBy =
+        (current.data['likedBy'] as List?)?.whereType<String>().toSet() ??
+        <String>{};
+    final fallbackLiked = uid != null && fallbackLikedBy.contains(uid);
+    final fallbackLikes = ((current.data['likes'] ?? 0) as num).toInt();
+    return <String, dynamic>{
+      'postId': id,
+      'liked': _likedOverrides[id] ?? global?.liked ?? fallbackLiked,
+      'likes':
+          _likeCountOverrides[id] ??
+          global?.likes ??
+          (fallbackLikes < 0 ? 0 : fallbackLikes),
+    };
+  }
+
+  void _popWithResult() {
+    Navigator.of(context).pop(_buildReturnLikeState());
   }
 
   @override
@@ -167,7 +213,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _popWithResult,
           ),
         ),
         extendBodyBehindAppBar: true,
@@ -179,31 +225,45 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         ),
       );
     }
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        allowImplicitScrolling: true,
-        onPageChanged: (i) {
-          setState(() => _currentPage = i);
-          _ensureRollingPrewarm(i);
-          if (_docs.length - i <= 3) _fetchNext();
-        },
-        itemCount: _docs.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, i) {
-          if (i >= _docs.length) {
-            return BoomerangPagerShimmer(
-              onBack: () => Navigator.of(context).pop(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _popWithResult();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: PageView.builder(
+          controller: _pageController,
+          scrollDirection: Axis.vertical,
+          allowImplicitScrolling: true,
+          onPageChanged: (i) {
+            setState(() => _currentPage = i);
+            _ensureRollingPrewarm(i);
+            if (_docs.length - i <= 3) _fetchNext();
+          },
+          itemCount: _docs.length + (_hasMore ? 1 : 0),
+          itemBuilder: (context, i) {
+            if (i >= _docs.length) {
+              return BoomerangPagerShimmer(onBack: _popWithResult);
+            }
+            final it = _docs[i];
+            final globalLike = resolveActivePostLikeUiState(
+              ref.watch(postLikeUiEntryProvider(it.id)),
             );
-          }
-          final it = _docs[i];
-          return _PostPage(
-            id: it.id,
-            data: it.data,
-            isActive: i == _currentPage,
-          );
-        },
+            return _PostPage(
+              id: it.id,
+              data: it.data,
+              isActive: i == _currentPage,
+              likedOverride: _likedOverrides[it.id] ?? globalLike?.liked,
+              likesOverride: _likeCountOverrides[it.id] ?? globalLike?.likes,
+              onLikeChanged:
+                  (liked, likes) => _onLikeChanged(it.id, liked, likes),
+              onBackPressed: _popWithResult,
+            );
+          },
+        ),
       ),
     );
   }
@@ -214,10 +274,18 @@ class _PostPage extends ConsumerStatefulWidget {
     required this.id,
     required this.data,
     required this.isActive,
+    this.likedOverride,
+    this.likesOverride,
+    this.onLikeChanged,
+    this.onBackPressed,
   });
   final String id;
   final Map<String, dynamic> data;
   final bool isActive;
+  final bool? likedOverride;
+  final int? likesOverride;
+  final void Function(bool liked, int likes)? onLikeChanged;
+  final VoidCallback? onBackPressed;
   @override
   ConsumerState<_PostPage> createState() => _PostPageState();
 }
@@ -233,18 +301,20 @@ class _PostPageState extends ConsumerState<_PostPage> {
     final videoUrl = widget.data['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
       _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        ..initialize().then((_) {
-          if (!mounted) return;
-          _initialized = true;
-          setState(() {});
-          _controller?.setLooping(true);
-          _controller?.setVolume(0.0);
-          if (widget.isActive) _controller?.play();
-          _controller?.addListener(_onVideoTickForPoster);
-          _schedulePosterFallback();
-        }).catchError((Object _) {
-          if (mounted) setState(() {});
-        });
+        ..initialize()
+            .then((_) {
+              if (!mounted) return;
+              _initialized = true;
+              setState(() {});
+              _controller?.setLooping(true);
+              _controller?.setVolume(0.0);
+              if (widget.isActive) _controller?.play();
+              _controller?.addListener(_onVideoTickForPoster);
+              _schedulePosterFallback();
+            })
+            .catchError((Object _) {
+              if (mounted) setState(() {});
+            });
     }
   }
 
@@ -299,6 +369,10 @@ class _PostPageState extends ConsumerState<_PostPage> {
       controller: _controller,
       showPosterOverlay: _showPosterOverlay,
       image: widget.data['imageUrl'] as String?,
+      initialLikedOverride: widget.likedOverride,
+      initialLikesOverride: widget.likesOverride,
+      onLikeChanged: widget.onLikeChanged,
+      onBackPressed: widget.onBackPressed,
     );
   }
 }
@@ -310,12 +384,20 @@ class _PostPageWithTicker extends ConsumerStatefulWidget {
     required this.controller,
     required this.showPosterOverlay,
     required this.image,
+    this.initialLikedOverride,
+    this.initialLikesOverride,
+    this.onLikeChanged,
+    this.onBackPressed,
   });
   final String id;
   final Map<String, dynamic> data;
   final VideoPlayerController? controller;
   final bool showPosterOverlay;
   final String? image;
+  final bool? initialLikedOverride;
+  final int? initialLikesOverride;
+  final void Function(bool liked, int likes)? onLikeChanged;
+  final VoidCallback? onBackPressed;
 
   @override
   ConsumerState<_PostPageWithTicker> createState() =>
@@ -331,13 +413,15 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
 
   bool? _likedOverride;
   int? _likesOverride;
+  bool _likeBusy = false;
   bool _posterResolved = false;
 
   @override
   void initState() {
     super.initState();
-    _posterResolved =
-        widget.image == null || widget.image!.isEmpty;
+    _posterResolved = widget.image == null || widget.image!.isEmpty;
+    _likedOverride = widget.initialLikedOverride;
+    _likesOverride = widget.initialLikesOverride;
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -348,8 +432,13 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   void didUpdateWidget(covariant _PostPageWithTicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.image != oldWidget.image) {
-      _posterResolved =
-          widget.image == null || widget.image!.isEmpty;
+      _posterResolved = widget.image == null || widget.image!.isEmpty;
+    }
+    if (widget.initialLikedOverride != oldWidget.initialLikedOverride) {
+      _likedOverride = widget.initialLikedOverride;
+    }
+    if (widget.initialLikesOverride != oldWidget.initialLikesOverride) {
+      _likesOverride = widget.initialLikesOverride;
     }
   }
 
@@ -401,32 +490,62 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
 
   void _onDoubleTap() async {
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-    if (uid == null) return;
-    final likedBy = (widget.data['likedBy'] as List?)?.cast<String>() ??
-        const <String>[];
+    if (uid == null || _likeBusy) return;
+    final likedBy =
+        (widget.data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final wasLiked = _likedOverride ?? likedBy.contains(uid);
-    final currentLikes =
-        _likesOverride ?? (widget.data['likes'] ?? 0) as int;
+    final currentLikes = _likesOverride ?? (widget.data['likes'] ?? 0) as int;
 
     if (!wasLiked) {
       setState(() {
         _likedOverride = true;
         _likesOverride = currentLikes + 1;
       });
+      widget.onLikeChanged?.call(true, currentLikes + 1);
     }
 
     setState(() => _showHeart = true);
     _anim.forward(from: 0);
 
+    if (wasLiked) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) setState(() => _showHeart = false);
+      return;
+    }
+
     final me = ref.read(currentUserProfileProvider).value;
-    await ref.read(boomerangRepoProvider).toggleLike(
-          boomerangId: widget.id,
-          userId: uid,
-          actorName: me != null
-              ? (me.nickname.isNotEmpty ? me.nickname : me.fullName)
-              : 'User',
-          actorAvatar: me?.avatarUrl,
-        );
+    setState(() => _likeBusy = true);
+    try {
+      final result = await ref
+          .read(boomerangRepoProvider)
+          .setLike(
+            boomerangId: widget.id,
+            userId: uid,
+            shouldLike: true,
+            actorName:
+                me != null
+                    ? (me.nickname.isNotEmpty ? me.nickname : me.fullName)
+                    : 'User',
+            actorAvatar: me?.avatarUrl,
+          );
+      if (result != null && mounted) {
+        setState(() {
+          _likedOverride = result.liked;
+          _likesOverride = result.likes;
+        });
+        widget.onLikeChanged?.call(result.liked, result.likes);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _likedOverride = wasLiked;
+          _likesOverride = currentLikes < 0 ? 0 : currentLikes;
+        });
+      }
+      widget.onLikeChanged?.call(wasLiked, currentLikes < 0 ? 0 : currentLikes);
+    } finally {
+      if (mounted) setState(() => _likeBusy = false);
+    }
 
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) setState(() => _showHeart = false);
@@ -437,6 +556,7 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
       _likedOverride = liked;
       _likesOverride = likes;
     });
+    widget.onLikeChanged?.call(liked, likes);
   }
 
   @override
@@ -482,9 +602,10 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
                       child: Image.network(
                         widget.image!,
                         fit: BoxFit.cover,
-                        cacheWidth: (MediaQuery.sizeOf(context).width *
-                                MediaQuery.devicePixelRatioOf(context))
-                            .round(),
+                        cacheWidth:
+                            (MediaQuery.sizeOf(context).width *
+                                    MediaQuery.devicePixelRatioOf(context))
+                                .round(),
                         frameBuilder: (context, child, frame, wasSyncLoaded) {
                           final done = frame != null || wasSyncLoaded;
                           if (done && !_posterResolved) {
@@ -558,6 +679,7 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
               boomerangId: widget.id,
               data: widget.data,
               showTopBar: true,
+              onBackPressed: widget.onBackPressed,
               likedOverride: _likedOverride,
               likesOverride: _likesOverride,
               onToggleLike: _onOverlayToggleLike,

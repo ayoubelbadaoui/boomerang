@@ -66,26 +66,20 @@ class _PaginatedBoomerangListState
     const threshold = 300.0;
     if (_controller.position.maxScrollExtent - _controller.position.pixels <=
         threshold) {
-      ref
-          .read(feedControllerProvider(FeedSurface.home).notifier)
-          .fetchNext();
+      ref.read(feedControllerProvider(FeedSurface.home).notifier).fetchNext();
     }
   }
 
   Future<void> _refresh() async {
-    await ref
-        .read(feedControllerProvider(FeedSurface.home).notifier)
-        .refresh();
+    await ref.read(feedControllerProvider(FeedSurface.home).notifier).refresh();
   }
 
   @override
   Widget build(BuildContext context) {
-    final likedIds = ref.watch(likedPostIdsProvider).value ?? const <String>{};
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     final followingAsync = ref.watch(followingIdsProvider);
-    final feedAsync =
-        ref.watch(feedControllerProvider(FeedSurface.home));
+    final feedAsync = ref.watch(feedControllerProvider(FeedSurface.home));
 
     final hasFollowing = followingAsync.hasValue;
     final hasFeedValue = feedAsync.hasValue;
@@ -115,15 +109,17 @@ class _PaginatedBoomerangListState
 
     // Defense-in-depth: re-apply block + privacy filters in case the user
     // blocked someone mid-session. The repo already filters at fetch time.
-    final visibleItems = feedState!.items.where((p) {
-      if (blockedSet.contains(p.authorId)) return false;
-      if (p.ownerIsPrivate &&
-          !currentFollowingIds.contains(p.authorId) &&
-          p.authorId != meUid) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    final visibleItems = feedState!.items
+        .where((p) {
+          if (blockedSet.contains(p.authorId)) return false;
+          if (p.ownerIsPrivate &&
+              !currentFollowingIds.contains(p.authorId) &&
+              p.authorId != meUid) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
 
     final hasMore = feedState.hasMore;
     final isLoading = feedState.isLoading;
@@ -138,10 +134,11 @@ class _PaginatedBoomerangListState
         controller: _controller,
         addAutomaticKeepAlives: false,
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
-        itemCount: isLoadingInitial
-            ? 3
-            : (visibleItems.length +
-                (hasMore ? 1 : (visibleItems.isEmpty ? 1 : 0))),
+        itemCount:
+            isLoadingInitial
+                ? 3
+                : (visibleItems.length +
+                    (hasMore ? 1 : (visibleItems.isEmpty ? 1 : 0))),
         separatorBuilder: (_, __) => const SizedBox(),
         itemBuilder: (context, i) {
           if (isLoadingInitial) {
@@ -159,10 +156,7 @@ class _PaginatedBoomerangListState
                   SizedBox(height: 12.h),
                   Text(
                     'Follow people to see their boomerangs here',
-                    style: TextStyle(
-                      fontSize: 15.sp,
-                      color: Colors.black45,
-                    ),
+                    style: TextStyle(fontSize: 15.sp, color: Colors.black45),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -176,20 +170,37 @@ class _PaginatedBoomerangListState
             );
           }
           final RankedPost post = visibleItems[i];
+          final globalLike = resolveActivePostLikeUiState(
+            ref.watch(postLikeUiEntryProvider(post.id)),
+          );
           final overrideLiked = _localLiked[post.id];
           final likesOverride = _localLikeCounts[post.id];
-          final isLiked = overrideLiked ?? likedIds.contains(post.id);
+          final likedBy =
+              (post.raw['likedBy'] as List?)?.cast<String>() ??
+              const <String>[];
+          final isLiked =
+              overrideLiked ?? globalLike?.liked ?? likedBy.contains(meUid);
+          final rawLikes = (post.raw['likes'] ?? 0) as int;
+          final effectiveLikes = likesOverride ?? globalLike?.likes ?? rawLikes;
           return _BoomerangCard(
             key: ValueKey(post.id),
             id: post.id,
             data: post.raw,
             likedOverride: isLiked,
-            likesOverride: likesOverride,
+            likesOverride: effectiveLikes,
             onToggleLike: (liked, likes) {
+              final safeLikes = likes < 0 ? 0 : likes;
               setState(() {
                 _localLiked[post.id] = liked;
-                _localLikeCounts[post.id] = likes;
+                _localLikeCounts[post.id] = safeLikes;
               });
+              ref
+                  .read(postLikeUiControllerProvider.notifier)
+                  .setStateForPost(
+                    postId: post.id,
+                    liked: liked,
+                    likes: safeLikes,
+                  );
             },
           );
         },
@@ -258,9 +269,12 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                     postId: id,
                     data: data,
                     isLiked: isLiked,
-                    onToggleLike: (liked) {
-                      final nextLikes = liked ? likes + 1 : likes - 1;
-                      widget.onToggleLike?.call(liked, nextLikes);
+                    currentLikes: likes,
+                    onToggleLike: (liked, nextLikes) {
+                      widget.onToggleLike?.call(
+                        liked,
+                        nextLikes < 0 ? 0 : nextLikes,
+                      );
                     },
                     child: _BoomerangMedia(
                       videoUrl: video,
@@ -289,7 +303,11 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                               handle: handle,
                             ),
                         customBorder: const CircleBorder(),
-                        child: LiveAvatar(userId: userId, fallbackUrl: avatarFallback, size: 36.r),
+                        child: LiveAvatar(
+                          userId: userId,
+                          fallbackUrl: avatarFallback,
+                          size: 36.r,
+                        ),
                       ),
                       SizedBox(width: 10.w),
                       InkWell(
@@ -322,15 +340,13 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                   bottom: 20.h,
                   child: Row(
                     children: [
-                      _CommentButton(
-                        boomerangId: id,
-                        data: data,
-                      ),
+                      _CommentButton(boomerangId: id, data: data),
                       SizedBox(width: 8.w),
                       _SvgCircleBtn(
                         asset: 'assets/svgs/share.svg',
-                        onTap: () =>
-                            _showShareSheet(context, data, boomerangId: id),
+                        onTap:
+                            () =>
+                                _showShareSheet(context, data, boomerangId: id),
                       ),
                     ],
                   ),
@@ -342,19 +358,33 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                     isLiked: isLiked,
                     likes: likes,
                     onToggleLike: (nextLiked, nextLikes) async {
-                      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+                      final uid =
+                          ref.read(firebaseAuthProvider).currentUser?.uid;
                       if (uid == null) return;
                       final me = ref.read(currentUserProfileProvider).value;
-                      widget.onToggleLike?.call(nextLiked, nextLikes);
-                      final authUser = ref.read(firebaseAuthProvider).currentUser;
-                      await ref
-                          .read(boomerangRepoProvider)
-                          .toggleLike(
-                            boomerangId: id,
-                            userId: uid,
-                            actorName: me != null ? _bestName(me) : (authUser?.displayName ?? 'User'),
-                            actorAvatar: me?.avatarUrl ?? authUser?.photoURL,
-                          );
+                      final previousLiked = isLiked;
+                      final previousLikes = likes < 0 ? 0 : likes;
+                      final authUser =
+                          ref.read(firebaseAuthProvider).currentUser;
+                      try {
+                        final result = await ref
+                            .read(boomerangRepoProvider)
+                            .setLike(
+                              boomerangId: id,
+                              userId: uid,
+                              shouldLike: nextLiked,
+                              actorName:
+                                  me != null
+                                      ? _bestName(me)
+                                      : (authUser?.displayName ?? 'User'),
+                              actorAvatar: me?.avatarUrl ?? authUser?.photoURL,
+                            );
+                        if (result != null) {
+                          widget.onToggleLike?.call(result.liked, result.likes);
+                        }
+                      } catch (_) {
+                        widget.onToggleLike?.call(previousLiked, previousLikes);
+                      }
                     },
                   ),
                 ),
@@ -402,10 +432,7 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
         AnimatedOpacity(
           opacity: _mediaReady ? 1 : 0,
           duration: const Duration(milliseconds: 260),
-          child: IgnorePointer(
-            ignoring: !_mediaReady,
-            child: content,
-          ),
+          child: IgnorePointer(ignoring: !_mediaReady, child: content),
         ),
         Positioned.fill(
           child: IgnorePointer(
@@ -467,8 +494,7 @@ class _CommentButton extends ConsumerWidget {
           'assets/svgs/comment.svg',
           width: 24.r,
           height: 24.r,
-          colorFilter:
-              const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
       ),
     );
@@ -545,7 +571,8 @@ class _LikeCircleButtonState extends ConsumerState<_LikeCircleButton> {
   Future<void> _tap() async {
     if (_busy) return;
     final nextLiked = !widget.isLiked;
-    final nextLikes = widget.likes + (nextLiked ? 1 : -1);
+    final nextLikesRaw = widget.likes + (nextLiked ? 1 : -1);
+    final nextLikes = nextLikesRaw < 0 ? 0 : nextLikesRaw;
     setState(() => _busy = true);
     try {
       await widget.onToggleLike(nextLiked, nextLikes);
@@ -578,13 +605,15 @@ class _DoubleTapLikeArea extends ConsumerStatefulWidget {
     required this.data,
     required this.child,
     required this.isLiked,
+    required this.currentLikes,
     required this.onToggleLike,
   });
   final String postId;
   final Map<String, dynamic> data;
   final Widget child;
   final bool isLiked;
-  final void Function(bool liked) onToggleLike;
+  final int currentLikes;
+  final void Function(bool liked, int likes) onToggleLike;
   @override
   ConsumerState<_DoubleTapLikeArea> createState() => _DoubleTapLikeAreaState();
 }
@@ -598,6 +627,7 @@ String _bestName(UserProfile profile) {
 class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
     with SingleTickerProviderStateMixin {
   bool _showHeart = false;
+  bool _busy = false;
   late final AnimationController _controller;
 
   @override
@@ -616,17 +646,29 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
   }
 
   Future<void> _like() async {
+    if (_busy || widget.isLiked) return;
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) return;
-    widget.onToggleLike(!widget.isLiked);
-    await ref
-        .read(boomerangRepoProvider)
-        .toggleLike(
-          boomerangId: widget.postId,
-          userId: me.uid,
-          actorName: _bestName(me),
-          actorAvatar: me.avatarUrl,
-        );
+    setState(() => _busy = true);
+    widget.onToggleLike(true, widget.currentLikes + 1);
+    try {
+      final result = await ref
+          .read(boomerangRepoProvider)
+          .setLike(
+            boomerangId: widget.postId,
+            userId: me.uid,
+            shouldLike: true,
+            actorName: _bestName(me),
+            actorAvatar: me.avatarUrl,
+          );
+      if (result != null) {
+        widget.onToggleLike(result.liked, result.likes);
+      }
+    } catch (_) {
+      widget.onToggleLike(widget.isLiked, widget.currentLikes);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _onDoubleTap() async {
@@ -640,16 +682,35 @@ class _DoubleTapLikeAreaState extends ConsumerState<_DoubleTapLikeArea>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
+      onTap: () async {
+        final seededData = Map<String, dynamic>.from(widget.data);
+        final authUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+        seededData['likes'] = widget.currentLikes < 0 ? 0 : widget.currentLikes;
+        if (authUid != null) {
+          final likedBy =
+              ((seededData['likedBy'] as List?) ?? const <dynamic>[])
+                  .whereType<String>()
+                  .toSet();
+          if (widget.isLiked) {
+            likedBy.add(authUid);
+          } else {
+            likedBy.remove(authUid);
+          }
+          seededData['likedBy'] = likedBy.toList(growable: false);
+        }
+        final result = await Navigator.of(context).push<Map<String, dynamic>>(
           MaterialPageRoute(
             builder:
                 (_) => BoomerangPagerPage(
                   initialId: widget.postId,
-                  initialData: widget.data,
+                  initialData: seededData,
                 ),
           ),
         );
+        if (!mounted || result == null) return;
+        final liked = result['liked'] == true;
+        final likes = ((result['likes'] ?? widget.currentLikes) as num).toInt();
+        widget.onToggleLike(liked, likes < 0 ? 0 : likes);
       },
       onDoubleTap: _onDoubleTap,
       onLongPress: null,
@@ -883,6 +944,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   bool _visible = false;
   bool _initialized = false;
   bool _posterResolved = false;
+
   /// Once true, keep showing the card while video initializes (no shimmer flash).
   bool _mediaUnlocked = false;
   bool _lastEmittedReady = false;
@@ -890,8 +952,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   @override
   void initState() {
     super.initState();
-    _posterResolved =
-        widget.posterUrl == null || widget.posterUrl!.isEmpty;
+    _posterResolved = widget.posterUrl == null || widget.posterUrl!.isEmpty;
     WidgetsBinding.instance.addPostFrameCallback((_) => _emitReadyIfChanged());
   }
 
@@ -911,8 +972,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
       _emitReadyIfChanged();
     }
     if (widget.posterUrl != oldWidget.posterUrl) {
-      _posterResolved =
-          widget.posterUrl == null || widget.posterUrl!.isEmpty;
+      _posterResolved = widget.posterUrl == null || widget.posterUrl!.isEmpty;
       _emitReadyIfChanged();
     }
   }
@@ -1084,4 +1144,3 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     );
   }
 }
-

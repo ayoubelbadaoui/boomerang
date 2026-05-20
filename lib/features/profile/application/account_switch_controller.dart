@@ -33,16 +33,20 @@ class AccountSwitchController {
 
       final manager = _container.read(multiAccountManagerProvider);
       final accounts = await manager.getAccounts();
-      final profile = _container.read(currentUserProfileProvider).value;
+      final profileCandidate =
+          _container.read(currentUserProfileProvider).value;
+      final profile =
+          profileCandidate != null && profileCandidate.uid == user.uid
+              ? profileCandidate
+              : null;
 
       if (accounts.any((a) => a.uid == user.uid)) {
         if (profile != null) {
+          final displayName =
+              profile.fullName.isNotEmpty ? profile.fullName : profile.nickname;
           await manager.updateAccountProfile(
             user.uid,
-            displayName:
-                profile.fullName.isNotEmpty
-                    ? profile.fullName
-                    : profile.nickname,
+            displayName: displayName,
             photoUrl: profile.avatarUrl,
           );
           _container.invalidate(storedAccountsProvider);
@@ -55,7 +59,12 @@ class AccountSwitchController {
         UserSession(
           uid: user.uid,
           email: profile?.email ?? user.email ?? '',
-          displayName: profile?.fullName ?? user.displayName ?? '',
+          displayName:
+              profile != null
+                  ? (profile.fullName.isNotEmpty
+                      ? profile.fullName
+                      : profile.nickname)
+                  : (user.displayName ?? ''),
           photoUrl: profile?.avatarUrl ?? user.photoURL,
           lastLogin: DateTime.now(),
         ),
@@ -83,7 +92,9 @@ class AccountSwitchController {
       final currentProfile = _container.read(currentUserProfileProvider).value;
 
       // Snapshot outgoing user's profile so the switcher shows correct data
-      if (currentUid != null && currentProfile != null) {
+      if (currentUid != null &&
+          currentProfile != null &&
+          currentProfile.uid == currentUid) {
         await manager.updateAccountProfile(
           currentUid,
           displayName:

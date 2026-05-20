@@ -17,6 +17,7 @@ class BoomerangOverlay extends ConsumerWidget {
     required this.boomerangId,
     required this.data,
     this.showTopBar = true,
+    this.onBackPressed,
     this.likedOverride,
     this.likesOverride,
     this.onToggleLike,
@@ -25,6 +26,7 @@ class BoomerangOverlay extends ConsumerWidget {
   final String boomerangId;
   final Map<String, dynamic> data;
   final bool showTopBar;
+  final VoidCallback? onBackPressed;
   final bool? likedOverride;
   final int? likesOverride;
   final void Function(bool liked, int likes)? onToggleLike;
@@ -32,8 +34,7 @@ class BoomerangOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userName = (data['userName'] ?? 'user').toString();
-    final handle =
-        '@${userName.replaceAll(' ', '_').toLowerCase()}';
+    final handle = '@${userName.replaceAll(' ', '_').toLowerCase()}';
     final avatar = data['userAvatar'] as String?;
     final video = data['videoUrl'] as String?;
     final likes = likesOverride ?? (data['likes'] ?? 0) as int;
@@ -53,7 +54,7 @@ class BoomerangOverlay extends ConsumerWidget {
             child: Row(
               children: [
                 IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                 ),
                 const Spacer(),
@@ -82,6 +83,7 @@ class BoomerangOverlay extends ConsumerWidget {
                   postId: boomerangId,
                   data: data,
                   likedOverride: likedOverride,
+                  likesOverride: likesOverride,
                   onToggleLike: onToggleLike,
                 ),
               ),
@@ -97,14 +99,18 @@ class BoomerangOverlay extends ConsumerWidget {
               SizedBox(height: 18.h),
               _ActionBubble(
                 onTap: () => _showCommentsSheet(context, boomerangId, userId),
-                child: Icon(Icons.chat_bubble_outline_rounded,
-                    color: Colors.white, size: 34.r),
+                child: Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  color: Colors.white,
+                  size: 34.r,
+                ),
               ),
               SizedBox(height: 4.h),
               StreamBuilder(
                 stream: ref.watch(commentsRepoProvider).watch(boomerangId),
                 builder: (context, snapshot) {
-                  final count = snapshot.data?.docs.length ?? initialCommentsCount;
+                  final count =
+                      snapshot.data?.docs.length ?? initialCommentsCount;
                   return Text(
                     '$count',
                     style: TextStyle(
@@ -120,14 +126,15 @@ class BoomerangOverlay extends ConsumerWidget {
                 StreamBuilder<bool>(
                   stream: ref
                       .watch(savedRepoProvider)
-                      .watchIsSaved(
-                          userId: me.uid, boomerangId: boomerangId),
+                      .watchIsSaved(userId: me.uid, boomerangId: boomerangId),
                   initialData: false,
                   builder: (context, snapshot) {
                     final saved = snapshot.data ?? false;
                     return _ActionBubble(
                       onTap: () async {
-                        await ref.read(savedRepoProvider).toggleSave(
+                        await ref
+                            .read(savedRepoProvider)
+                            .toggleSave(
                               userId: me.uid,
                               boomerangId: boomerangId,
                               boomerangData: data,
@@ -135,17 +142,17 @@ class BoomerangOverlay extends ConsumerWidget {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(saved
-                                  ? 'Removed from saved'
-                                  : 'Saved to your profile'),
+                              content: Text(
+                                saved
+                                    ? 'Removed from saved'
+                                    : 'Saved to your profile',
+                              ),
                             ),
                           );
                         }
                       },
                       child: Icon(
-                        saved
-                            ? Icons.bookmark
-                            : Icons.bookmark_outline_rounded,
+                        saved ? Icons.bookmark : Icons.bookmark_outline_rounded,
                         color: Colors.white,
                         size: 34.r,
                       ),
@@ -154,29 +161,34 @@ class BoomerangOverlay extends ConsumerWidget {
                 ),
               SizedBox(height: 16.h),
               _ActionBubble(
-                onTap: () => _showShareSheet(
-                  context,
-                  video,
-                  handle,
-                  reportedUid: userId,
-                  boomerangId: boomerangId,
-                  imageUrl: data['imageUrl'] as String?,
-                  userName: (data['userName'] ?? '') as String,
-                  caption: data['caption'] as String?,
+                onTap:
+                    () => _showShareSheet(
+                      context,
+                      video,
+                      handle,
+                      reportedUid: userId,
+                      boomerangId: boomerangId,
+                      imageUrl: data['imageUrl'] as String?,
+                      userName: (data['userName'] ?? '') as String,
+                      caption: data['caption'] as String?,
+                    ),
+                child: Icon(
+                  Icons.send_outlined,
+                  color: Colors.white,
+                  size: 34.r,
                 ),
-                child: Icon(Icons.send_outlined,
-                    color: Colors.white, size: 34.r),
               ),
               if (me != null && me.uid == userId) ...[
                 SizedBox(height: 16.h),
                 _ActionBubble(
-                  onTap: () => _confirmDeleteFromOverlay(
-                    context,
-                    ref,
-                    boomerangId,
+                  onTap:
+                      () =>
+                          _confirmDeleteFromOverlay(context, ref, boomerangId),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.white,
+                    size: 34.r,
                   ),
-                  child: Icon(Icons.delete_outline_rounded,
-                      color: Colors.white, size: 34.r),
                 ),
               ],
             ],
@@ -201,11 +213,7 @@ class BoomerangOverlay extends ConsumerWidget {
                     ),
                 child: Row(
                   children: [
-                    LiveAvatar(
-                      userId: userId,
-                      fallbackUrl: avatar,
-                      size: 52.r,
-                    ),
+                    LiveAvatar(userId: userId, fallbackUrl: avatar, size: 52.r),
                     SizedBox(width: 10.w),
                     Text(
                       handle,
@@ -224,10 +232,7 @@ class BoomerangOverlay extends ConsumerWidget {
                   caption: caption,
                   maxLines: 2,
                   hashtagColor: Colors.white,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15.sp,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 15.sp),
                 ),
               ],
             ],
@@ -259,42 +264,98 @@ class _ActionBubble extends StatelessWidget {
   }
 }
 
-class _LikeIcon extends ConsumerWidget {
+class _LikeIcon extends ConsumerStatefulWidget {
   const _LikeIcon({
     required this.postId,
     required this.data,
     this.likedOverride,
+    this.likesOverride,
     this.onToggleLike,
   });
   final String postId;
   final Map<String, dynamic> data;
   final bool? likedOverride;
+  final int? likesOverride;
   final void Function(bool liked, int likes)? onToggleLike;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LikeIcon> createState() => _LikeIconState();
+}
+
+class _LikeIconState extends ConsumerState<_LikeIcon> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
     final me = ref.watch(currentUserProfileProvider).value;
+    final globalLike = resolveActivePostLikeUiState(
+      ref.watch(postLikeUiEntryProvider(widget.postId)),
+    );
     final likedBy =
-        (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
+        (widget.data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final isLiked =
-        likedOverride ?? (me != null && likedBy.contains(me.uid));
-    final currentLikes = (data['likes'] ?? 0) as int;
+        widget.likedOverride ??
+        globalLike?.liked ??
+        (me != null && likedBy.contains(me.uid));
+    final baseLikes =
+        (widget.likesOverride ?? globalLike?.likes ?? widget.data['likes'] ?? 0)
+            as int;
+    final currentLikes = baseLikes < 0 ? 0 : baseLikes;
     return GestureDetector(
-      onTap: me == null
-          ? null
-          : () {
-              final nextLiked = !isLiked;
-              final nextLikes =
-                  currentLikes + (nextLiked ? 1 : -1);
-              onToggleLike?.call(nextLiked, nextLikes < 0 ? 0 : nextLikes);
-              ref.read(boomerangRepoProvider).toggleLike(
-                    boomerangId: postId,
-                    userId: me.uid,
-                    actorName:
-                        me.nickname.isNotEmpty ? me.nickname : me.fullName,
-                    actorAvatar: me.avatarUrl,
-                  );
-            },
+      onTap:
+          me == null || _busy
+              ? null
+              : () async {
+                final previousLiked = isLiked;
+                final previousLikes = currentLikes;
+                final nextLiked = !previousLiked;
+                final optimisticLikes = previousLikes + (nextLiked ? 1 : -1);
+                final nextLikes = optimisticLikes < 0 ? 0 : optimisticLikes;
+                widget.onToggleLike?.call(nextLiked, nextLikes);
+                ref
+                    .read(postLikeUiControllerProvider.notifier)
+                    .setStateForPost(
+                      postId: widget.postId,
+                      liked: nextLiked,
+                      likes: nextLikes,
+                    );
+                setState(() => _busy = true);
+                try {
+                  final result = await ref
+                      .read(boomerangRepoProvider)
+                      .setLike(
+                        boomerangId: widget.postId,
+                        userId: me.uid,
+                        shouldLike: nextLiked,
+                        actorName:
+                            me.nickname.isNotEmpty ? me.nickname : me.fullName,
+                        actorAvatar: me.avatarUrl,
+                      );
+                  if (result != null) {
+                    widget.onToggleLike?.call(result.liked, result.likes);
+                    ref
+                        .read(postLikeUiControllerProvider.notifier)
+                        .setStateForPost(
+                          postId: widget.postId,
+                          liked: result.liked,
+                          likes: result.likes,
+                        );
+                  }
+                } catch (_) {
+                  widget.onToggleLike?.call(previousLiked, previousLikes);
+                  ref
+                      .read(postLikeUiControllerProvider.notifier)
+                      .setStateForPost(
+                        postId: widget.postId,
+                        liked: previousLiked,
+                        likes: previousLikes,
+                      );
+                } finally {
+                  if (mounted) {
+                    setState(() => _busy = false);
+                  }
+                }
+              },
       child: AnimatedScale(
         scale: isLiked ? 1.1 : 1.0,
         duration: const Duration(milliseconds: 120),
@@ -326,11 +387,12 @@ void _showCommentsSheet(
         initialChildSize: 0.9,
         maxChildSize: 0.98,
         minChildSize: 0.5,
-        builder: (context, controller) => CommentsSheet(
-          boomerangId: boomerangId,
-          scrollController: controller,
-          postOwnerId: postOwnerId,
-        ),
+        builder:
+            (context, controller) => CommentsSheet(
+              boomerangId: boomerangId,
+              scrollController: controller,
+              postOwnerId: postOwnerId,
+            ),
       );
     },
   );
@@ -374,8 +436,7 @@ void _showShareSheet(
               ),
               Text(
                 'Share',
-                style:
-                    TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w800),
+                style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w800),
               ),
               SizedBox(height: 16.h),
               Row(
@@ -443,23 +504,24 @@ void _confirmDeleteFromOverlay(
 ) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Delete Boomerang'),
-      content: const Text(
-        'Are you sure you want to delete this boomerang? This action cannot be undone.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancel'),
+    builder:
+        (ctx) => AlertDialog(
+          title: const Text('Delete Boomerang'),
+          content: const Text(
+            'Are you sure you want to delete this boomerang? This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
         ),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: TextButton.styleFrom(foregroundColor: Colors.red),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
   );
   if (confirmed != true || !context.mounted) return;
 
@@ -469,20 +531,23 @@ void _confirmDeleteFromOverlay(
         .deleteBoomerang(boomerangId);
     if (!context.mounted) return;
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Boomerang deleted')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Boomerang deleted')));
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Failed to delete: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
   }
 }
 
 class _ShareOption extends StatelessWidget {
-  const _ShareOption(
-      {required this.icon, required this.label, required this.onTap});
+  const _ShareOption({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;

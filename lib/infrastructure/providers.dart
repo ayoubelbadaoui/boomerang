@@ -114,11 +114,14 @@ final userHasNicknameProvider = FutureProvider<bool>((ref) async {
   if (data == null) return false;
   final nickname = (data['nickname'] ?? data['username'] ?? '') as String;
   final nicknameLower = (data['nicknameLower'] ?? '') as String;
-  final ok = nickname.trim().isNotEmpty &&
+  final ok =
+      nickname.trim().isNotEmpty &&
       nicknameLower.trim().isNotEmpty &&
       nicknameLower == nicknameLower.toLowerCase();
   if (!ok) {
-    debugPrint('userHasNicknameProvider: missing/invalid nickname for ${user.uid}');
+    debugPrint(
+      'userHasNicknameProvider: missing/invalid nickname for ${user.uid}',
+    );
   }
   return ok;
 });
@@ -134,6 +137,70 @@ final boomerangRepoProvider = Provider<BoomerangRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return BoomerangRepo(fs);
 });
+
+@immutable
+class PostLikeUiState {
+  const PostLikeUiState({
+    required this.liked,
+    required this.likes,
+    required this.updatedAtMs,
+  });
+
+  final bool liked;
+  final int likes;
+  final int updatedAtMs;
+}
+
+class PostLikeUiController extends Notifier<Map<String, PostLikeUiState>> {
+  @override
+  Map<String, PostLikeUiState> build() => const <String, PostLikeUiState>{};
+
+  void setStateForPost({
+    required String postId,
+    required bool liked,
+    required int likes,
+  }) {
+    final safeLikes = likes < 0 ? 0 : likes;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    state = <String, PostLikeUiState>{
+      ...state,
+      postId: PostLikeUiState(
+        liked: liked,
+        likes: safeLikes,
+        updatedAtMs: nowMs,
+      ),
+    };
+  }
+
+  void removePost(String postId) {
+    if (!state.containsKey(postId)) return;
+    final next = <String, PostLikeUiState>{...state};
+    next.remove(postId);
+    state = next;
+  }
+}
+
+final postLikeUiControllerProvider =
+    NotifierProvider<PostLikeUiController, Map<String, PostLikeUiState>>(
+      PostLikeUiController.new,
+    );
+
+final postLikeUiEntryProvider = Provider.family<PostLikeUiState?, String>((
+  ref,
+  postId,
+) {
+  return ref.watch(postLikeUiControllerProvider.select((all) => all[postId]));
+});
+
+PostLikeUiState? resolveActivePostLikeUiState(
+  PostLikeUiState? state, {
+  Duration maxAge = const Duration(seconds: 6),
+}) {
+  if (state == null) return null;
+  final ageMs = DateTime.now().millisecondsSinceEpoch - state.updatedAtMs;
+  if (ageMs > maxAge.inMilliseconds) return null;
+  return state;
+}
 
 /// Stream of post ids liked by the current user.
 /// Reads from users/{uid}/likes subcollection instead of scanning all boomerangs.
@@ -201,8 +268,10 @@ final notificationsRepoProvider = Provider<NotificationsRepo>((ref) {
 });
 
 /// Real-time stream of notification docs for the given user (stable per uid).
-final notificationsStreamProvider =
-    StreamProvider.family<QuerySnapshot<Map<String, dynamic>>, String>((ref, uid) {
+final notificationsStreamProvider = StreamProvider.family<
+  QuerySnapshot<Map<String, dynamic>>,
+  String
+>((ref, uid) {
   if (uid.isEmpty) return const Stream.empty();
   return ref.watch(notificationsRepoProvider).watch(uid).handleError((e, st) {
     debugPrint('notificationsStreamProvider error: $e');
@@ -211,35 +280,38 @@ final notificationsStreamProvider =
 
 final outgoingFollowRequestProvider =
     StreamProvider.family<FollowRequest?, String>((ref, targetId) {
-  final me = ref.watch(currentUserProfileProvider).value;
-  if (me == null) return const Stream.empty();
-  return ref
-      .watch(followRepoProvider)
-      .watchRequest(receiverId: targetId, senderId: me.uid)
-      .handleError((e, st) {});
-});
+      final me = ref.watch(currentUserProfileProvider).value;
+      if (me == null) return const Stream.empty();
+      return ref
+          .watch(followRepoProvider)
+          .watchRequest(receiverId: targetId, senderId: me.uid)
+          .handleError((e, st) {});
+    });
 
 final incomingFollowRequestProvider =
     StreamProvider.family<FollowRequest?, String>((ref, senderId) {
-  final me = ref.watch(currentUserProfileProvider).value;
-  if (me == null) return const Stream.empty();
-  return ref
-      .watch(followRepoProvider)
-      .watchRequest(receiverId: me.uid, senderId: senderId)
-      .handleError((e, st) {});
-});
+      final me = ref.watch(currentUserProfileProvider).value;
+      if (me == null) return const Stream.empty();
+      return ref
+          .watch(followRepoProvider)
+          .watchRequest(receiverId: me.uid, senderId: senderId)
+          .handleError((e, st) {});
+    });
 
-final isFollowingStreamProvider =
-    StreamProvider.family<bool, String>((ref, targetId) {
+final isFollowingStreamProvider = StreamProvider.family<bool, String>((
+  ref,
+  targetId,
+) {
   final me = ref.watch(currentUserProfileProvider).value;
   if (me == null || me.uid == targetId) return const Stream.empty();
-  return ref.watch(followRepoProvider).watchIsFollowing(targetId)
+  return ref
+      .watch(followRepoProvider)
+      .watchIsFollowing(targetId)
       .handleError((e, st) {});
 });
 
 /// Whether [userId] follows the current user.
-final isFollowedByProvider =
-    StreamProvider.family<bool, String>((ref, userId) {
+final isFollowedByProvider = StreamProvider.family<bool, String>((ref, userId) {
   final me = ref.watch(currentUserProfileProvider).value;
   if (me == null || me.uid == userId) return Stream.value(false);
   final fs = ref.watch(firestoreProvider);
@@ -254,8 +326,10 @@ final isFollowedByProvider =
 });
 
 /// Unread notifications count for current user.
-final unreadCountProvider =
-    StreamProvider.family<int, String>((ref, uid) async* {
+final unreadCountProvider = StreamProvider.family<int, String>((
+  ref,
+  uid,
+) async* {
   try {
     yield* ref.watch(notificationsRepoProvider).watchUnreadCount(uid);
   } catch (_) {
@@ -300,25 +374,37 @@ final followingIdsProvider = StreamProvider<Set<String>>((ref) {
 
 /// Counts fetched once per tab-open / pull-to-refresh.
 /// Call ref.invalidate(…) to re-fetch.
-final followersCountProvider = FutureProvider.family<int, String>((ref, uid) async {
+final followersCountProvider = FutureProvider.family<int, String>((
+  ref,
+  uid,
+) async {
   final fs = ref.read(firestoreProvider);
   final snap = await fs.collection('users').doc(uid).get();
   return (snap.data()?['followersCount'] ?? 0) as int;
 });
 
-final followingCountProvider = FutureProvider.family<int, String>((ref, uid) async {
+final followingCountProvider = FutureProvider.family<int, String>((
+  ref,
+  uid,
+) async {
   final fs = ref.read(firestoreProvider);
   final snap = await fs.collection('users').doc(uid).get();
   return (snap.data()?['followingCount'] ?? 0) as int;
 });
 
-final userBoomerangsCountProvider = FutureProvider.family<int, String>((ref, uid) async {
+final userBoomerangsCountProvider = FutureProvider.family<int, String>((
+  ref,
+  uid,
+) async {
   final fs = ref.read(firestoreProvider);
   final snap = await fs.collection('users').doc(uid).get();
   return (snap.data()?['boomerangsCount'] ?? 0) as int;
 });
 
-final userTotalLikesProvider = FutureProvider.family<int, String>((ref, uid) async {
+final userTotalLikesProvider = FutureProvider.family<int, String>((
+  ref,
+  uid,
+) async {
   final fs = ref.read(firestoreProvider);
   final snap = await fs.collection('users').doc(uid).get();
   return (snap.data()?['totalLikes'] ?? 0) as int;
@@ -357,8 +443,10 @@ final profileGuardProvider = Provider<void>((ref) {
 /// only writes documents whose flag actually drifted.
 final privacyBackfillGuardProvider = Provider<void>((ref) {
   final lastSynced = <String, bool>{};
-  ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider,
-      (prev, next) {
+  ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider, (
+    prev,
+    next,
+  ) {
     final profile = next.asData?.value;
     if (profile == null) return;
     if (lastSynced[profile.uid] == profile.isPrivate) return;
@@ -379,6 +467,7 @@ void invalidateUserScopedProviders(ProviderContainer container) {
   container.invalidate(userProfileCompleteProvider);
   container.invalidate(currentUserProfileProvider);
   container.invalidate(likedPostIdsProvider);
+  container.invalidate(postLikeUiControllerProvider);
   container.invalidate(outgoingFollowRequestProvider);
   container.invalidate(incomingFollowRequestProvider);
   container.invalidate(isFollowingStreamProvider);

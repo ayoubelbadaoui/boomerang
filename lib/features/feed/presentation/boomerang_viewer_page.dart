@@ -28,10 +28,16 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
 
   bool? _likedOverride;
   int? _likesOverride;
+  bool _likeBusy = false;
 
   @override
   void initState() {
     super.initState();
+    final seeded = resolveActivePostLikeUiState(
+      ref.read(postLikeUiEntryProvider(widget.id)),
+    );
+    _likedOverride = seeded?.liked;
+    _likesOverride = seeded?.likes;
     final videoUrl = widget.data['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
       _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
@@ -108,42 +114,94 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
 
   void _onDoubleTap() async {
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
-    if (uid == null) return;
-    final likedBy = (widget.data['likedBy'] as List?)?.cast<String>() ??
-        const <String>[];
+    if (uid == null || _likeBusy) return;
+    final likedBy =
+        (widget.data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final wasLiked = _likedOverride ?? likedBy.contains(uid);
-    final currentLikes =
-        _likesOverride ?? (widget.data['likes'] ?? 0) as int;
+    final currentLikes = _likesOverride ?? (widget.data['likes'] ?? 0) as int;
 
     if (!wasLiked) {
       setState(() {
         _likedOverride = true;
         _likesOverride = currentLikes + 1;
       });
+      ref
+          .read(postLikeUiControllerProvider.notifier)
+          .setStateForPost(
+            postId: widget.id,
+            liked: true,
+            likes: currentLikes + 1,
+          );
     }
 
     setState(() => _showHeart = true);
     _anim.forward(from: 0);
 
+    if (wasLiked) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) setState(() => _showHeart = false);
+      return;
+    }
+
     final me = ref.read(currentUserProfileProvider).value;
-    await ref.read(boomerangRepoProvider).toggleLike(
-          boomerangId: widget.id,
-          userId: uid,
-          actorName: me != null
-              ? (me.nickname.isNotEmpty ? me.nickname : me.fullName)
-              : 'User',
-          actorAvatar: me?.avatarUrl,
-        );
+    setState(() => _likeBusy = true);
+    try {
+      final result = await ref
+          .read(boomerangRepoProvider)
+          .setLike(
+            boomerangId: widget.id,
+            userId: uid,
+            shouldLike: true,
+            actorName:
+                me != null
+                    ? (me.nickname.isNotEmpty ? me.nickname : me.fullName)
+                    : 'User',
+            actorAvatar: me?.avatarUrl,
+          );
+      if (result != null && mounted) {
+        setState(() {
+          _likedOverride = result.liked;
+          _likesOverride = result.likes;
+        });
+        ref
+            .read(postLikeUiControllerProvider.notifier)
+            .setStateForPost(
+              postId: widget.id,
+              liked: result.liked,
+              likes: result.likes,
+            );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _likedOverride = wasLiked;
+          _likesOverride = currentLikes < 0 ? 0 : currentLikes;
+        });
+      }
+      ref
+          .read(postLikeUiControllerProvider.notifier)
+          .setStateForPost(
+            postId: widget.id,
+            liked: wasLiked,
+            likes: currentLikes < 0 ? 0 : currentLikes,
+          );
+    } finally {
+      if (mounted) setState(() => _likeBusy = false);
+    }
 
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) setState(() => _showHeart = false);
   }
 
   void _onOverlayToggleLike(bool liked, int likes) {
+    final safeLikes = likes < 0 ? 0 : likes;
     setState(() {
       _likedOverride = liked;
-      _likesOverride = likes;
+      _likesOverride = safeLikes;
     });
+    ref
+        .read(postLikeUiControllerProvider.notifier)
+        .setStateForPost(postId: widget.id, liked: liked, likes: safeLikes);
   }
 
   @override
@@ -175,18 +233,17 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                     )
                   else
                     Container(color: Colors.black),
-                  if (image != null &&
-                      image.isNotEmpty &&
-                      _showPosterOverlay)
+                  if (image != null && image.isNotEmpty && _showPosterOverlay)
                     AnimatedOpacity(
                       opacity: _showPosterOverlay ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 180),
                       child: Image.network(
                         image,
                         fit: BoxFit.cover,
-                        cacheWidth: (MediaQuery.sizeOf(context).width *
-                                MediaQuery.devicePixelRatioOf(context))
-                            .round(),
+                        cacheWidth:
+                            (MediaQuery.sizeOf(context).width *
+                                    MediaQuery.devicePixelRatioOf(context))
+                                .round(),
                       ),
                     ),
                 ],
@@ -218,7 +275,9 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    _userPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                    _userPaused
+                        ? Icons.play_arrow_rounded
+                        : Icons.pause_rounded,
                     color: Colors.white,
                     size: 48.r,
                   ),

@@ -1,4 +1,5 @@
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 import 'package:boomerang/core/widgets/avatar.dart';
 import 'package:boomerang/features/auth/presentation/login_page.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
@@ -75,6 +76,7 @@ Future<void> showAccountSwitcher(BuildContext context, WidgetRef ref) async {
   messenger.hideCurrentSnackBar();
 
   if (success) {
+    container.read(homeTabIndexProvider.notifier).state = 0;
     goRouter.go(HomeShell.routeName);
   } else if (context.mounted) {
     messenger.showSnackBar(

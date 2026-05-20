@@ -12,6 +12,29 @@ class MultiAccountManager {
   final SessionStorage storage;
   final FirebaseAuth firebaseAuth;
 
+  String _normalizedEmail(String email) => email.trim().toLowerCase();
+
+  List<UserSession> _dedupeSessions(List<UserSession> sessions) {
+    final seenUids = <String>{};
+    final seenEmails = <String>{};
+    final deduped = <UserSession>[];
+
+    // Keep most recent entries first when de-duplicating.
+    final ordered = [...sessions]
+      ..sort((a, b) => b.lastLogin.compareTo(a.lastLogin));
+
+    for (final session in ordered) {
+      final normalizedEmail = _normalizedEmail(session.email);
+      final hasEmail = normalizedEmail.isNotEmpty;
+      if (seenUids.contains(session.uid)) continue;
+      if (hasEmail && seenEmails.contains(normalizedEmail)) continue;
+      seenUids.add(session.uid);
+      if (hasEmail) seenEmails.add(normalizedEmail);
+      deduped.add(session);
+    }
+    return deduped;
+  }
+
   // ── Add / update ──────────────────────────────────────────────────────
 
   Future<void> addAccount(UserSession session, {String? password}) async {
@@ -26,15 +49,22 @@ class MultiAccountManager {
     );
 
     final hadBefore = sessions.length;
-    sessions.removeWhere((s) => s.uid == session.uid);
+    final normalizedIncomingEmail = _normalizedEmail(session.email);
+    sessions.removeWhere((s) {
+      if (s.uid == session.uid) return true;
+      final existingEmail = _normalizedEmail(s.email);
+      return normalizedIncomingEmail.isNotEmpty &&
+          existingEmail == normalizedIncomingEmail;
+    });
     sessions.add(session);
+    final merged = _dedupeSessions(sessions);
 
     dev.log(
-      '[multi-account] addAccount: after merge count=${sessions.length} '
-      '(was $hadBefore) uids=${sessions.map((s) => s.uid.substring(0, 6)).join(",")}',
+      '[multi-account] addAccount: after merge count=${merged.length} '
+      '(was $hadBefore) uids=${merged.map((s) => s.uid.substring(0, 6)).join(",")}',
     );
 
-    final sessionsSaved = await storage.saveSessions(sessions);
+    final sessionsSaved = await storage.saveSessions(merged);
     if (!sessionsSaved) {
       throw StateError('Failed to persist accounts');
     }
@@ -74,11 +104,15 @@ class MultiAccountManager {
 
   Future<List<UserSession>> getAccounts() async {
     final accounts = await storage.getSessions();
+    final deduped = _dedupeSessions(accounts);
+    if (deduped.length != accounts.length) {
+      await storage.saveSessions(deduped);
+    }
     dev.log(
-      '[multi-account] getAccounts: ${accounts.length} accounts '
-      '${accounts.map((s) => "${s.uid.substring(0, 6)}...(${s.email})").join(", ")}',
+      '[multi-account] getAccounts: ${deduped.length} accounts '
+      '${deduped.map((s) => "${s.uid.substring(0, 6)}...(${s.email})").join(", ")}',
     );
-    return accounts;
+    return deduped;
   }
 
   Future<UserSession?> getActiveAccount() async {
