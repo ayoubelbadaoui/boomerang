@@ -35,11 +35,16 @@ class BoomerangProcessor {
     Future<bool> tryPoster(String vf, {String seekTo = '0.1'}) async {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
-        '-ss', seekTo,
-        '-i', inputPath,
-        '-vf', vf,
-        '-frames:v', '1',
-        '-q:v', '2',
+        '-ss',
+        seekTo,
+        '-i',
+        inputPath,
+        '-vf',
+        vf,
+        '-frames:v',
+        '1',
+        '-q:v',
+        '2',
         outPath,
       ]);
       return ReturnCode.isSuccess(await session.getReturnCode()) &&
@@ -82,11 +87,14 @@ class BoomerangProcessor {
     for (final enc in _encoderCandidates) {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
-        '-i', inputPath,
-        '-t', maxSeconds.toStringAsFixed(2),
+        '-i',
+        inputPath,
+        '-t',
+        maxSeconds.toStringAsFixed(2),
         '-an',
         ...enc,
-        '-movflags', '+faststart',
+        '-movflags',
+        '+faststart',
         outPath,
       ]);
       if (ReturnCode.isSuccess(await session.getReturnCode()) &&
@@ -95,6 +103,49 @@ class BoomerangProcessor {
       }
     }
     return inputPath;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Normalize source media into an app-safe MP4 (H.264 + AAC).
+  // Used for gallery/shared videos so downstream trim/processing receives a
+  // stable local file regardless of source URI/container/codec.
+  // ---------------------------------------------------------------------------
+
+  Future<String> transcodeToSafeMp4(String inputPath) async {
+    _assertExists(inputPath);
+    final outPath = await _tmpPath('normalized', 'mp4');
+
+    String? lastLogs;
+    for (final enc in _encoderCandidates) {
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        '-i',
+        inputPath,
+        '-map',
+        '0:v:0',
+        '-map',
+        '0:a:0?',
+        ...enc,
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        '-ac',
+        '2',
+        '-ar',
+        '44100',
+        '-movflags',
+        '+faststart',
+        outPath,
+      ]);
+      if (ReturnCode.isSuccess(await session.getReturnCode()) &&
+          await _hasVideoContent(outPath)) {
+        return outPath;
+      }
+      lastLogs = await session.getAllLogsAsString();
+    }
+
+    throw Exception('Safe transcode failed.\n$lastLogs');
   }
 
   // ---------------------------------------------------------------------------
@@ -156,17 +207,23 @@ class BoomerangProcessor {
     final tempDir = await getTemporaryDirectory();
     final ts = DateTime.now().millisecondsSinceEpoch;
     final prefix = 'ttb${ts}_';
-    final pattern = '${tempDir.path}/$prefix' '%03d.jpg';
+    final pattern =
+        '${tempDir.path}/$prefix'
+        '%03d.jpg';
 
     // One frame every (duration / count) seconds → `count` frames total.
     final fps = count / durationSeconds;
 
     final session = await FFmpegKit.executeWithArguments([
       '-y',
-      '-i', inputPath,
-      '-vf', 'fps=${fps.toStringAsFixed(4)},scale=-2:$heightPx',
-      '-frames:v', '$count',
-      '-q:v', '5',
+      '-i',
+      inputPath,
+      '-vf',
+      'fps=${fps.toStringAsFixed(4)},scale=-2:$heightPx',
+      '-frames:v',
+      '$count',
+      '-q:v',
+      '5',
       pattern,
     ]);
     if (!ReturnCode.isSuccess(await session.getReturnCode())) {
@@ -195,12 +252,15 @@ class BoomerangProcessor {
         final session = await FFmpegKit.executeWithArguments([
           '-y',
           if (noAutoRotate) '-noautorotate',
-          '-i', inputPath,
-          '-vf', 'hflip',
+          '-i',
+          inputPath,
+          '-vf',
+          'hflip',
           if (noAutoRotate) ...['-metadata:s:v', 'rotate=0'],
           '-an',
           ...enc,
-          '-movflags', '+faststart',
+          '-movflags',
+          '+faststart',
           outPath,
         ]);
         if (ReturnCode.isSuccess(await session.getReturnCode()) &&
@@ -259,17 +319,24 @@ class BoomerangProcessor {
     final outPath = await _tmpPath('boomerang', 'mp4');
     final loopSession = await FFmpegKit.executeWithArguments([
       '-y',
-      '-stream_loop', '${cycles - 1}',
-      '-i', cyclePath,
-      '-c', 'copy',
-      '-fflags', '+genpts',
-      '-movflags', '+faststart',
+      '-stream_loop',
+      '${cycles - 1}',
+      '-i',
+      cyclePath,
+      '-c',
+      'copy',
+      '-fflags',
+      '+genpts',
+      '-movflags',
+      '+faststart',
       outPath,
     ]);
     if (!ReturnCode.isSuccess(await loopSession.getReturnCode())) {
       return cyclePath;
     }
-    try { await File(cyclePath).delete(); } catch (_) {}
+    try {
+      await File(cyclePath).delete();
+    } catch (_) {}
     return outPath;
   }
 
@@ -303,12 +370,17 @@ class BoomerangProcessor {
 
       List<String> buildExtractArgs(String? vf) => <String>[
         '-y',
-        '-ss', '0',
-        '-i', inputPath,
-        '-frames:v', '$maxFrames',
-        '-vsync', '0',
+        '-ss',
+        '0',
+        '-i',
+        inputPath,
+        '-frames:v',
+        '$maxFrames',
+        '-vsync',
+        '0',
         if (vf != null && vf.isNotEmpty) ...['-vf', vf],
-        '-q:v', '2',
+        '-q:v',
+        '2',
         framePattern,
       ];
 
@@ -324,7 +396,9 @@ class BoomerangProcessor {
       var extractRc = await extractSession.getReturnCode();
 
       // If filter-based extraction fails, retry without color filter
-      if (!ReturnCode.isSuccess(extractRc) && videoFilter != null && videoFilter.isNotEmpty) {
+      if (!ReturnCode.isSuccess(extractRc) &&
+          videoFilter != null &&
+          videoFilter.isNotEmpty) {
         _cleanupByPrefix(tempDir, framePrefix);
         final fallbackVf = scaleWidth != null ? 'scale=$scaleWidth:-2' : null;
         extractSession = await FFmpegKit.executeWithArguments(
@@ -335,19 +409,18 @@ class BoomerangProcessor {
 
       if (!ReturnCode.isSuccess(extractRc)) {
         final logs = await extractSession.getAllLogsAsString();
-        throw Exception('Frame extraction failed (${extractRc?.getValue()})\n$logs');
+        throw Exception(
+          'Frame extraction failed (${extractRc?.getValue()})\n$logs',
+        );
       }
 
       // Collect extracted frames.
-      final frames = tempDir
-          .listSync()
-          .whereType<File>()
-          .where((f) {
-            final name = f.path.split('/').last;
-            return name.startsWith(framePrefix) && name.endsWith('.jpg');
-          })
-          .toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
+      final frames =
+          tempDir.listSync().whereType<File>().where((f) {
+              final name = f.path.split('/').last;
+              return name.startsWith(framePrefix) && name.endsWith('.jpg');
+            }).toList()
+            ..sort((a, b) => a.path.compareTo(b.path));
 
       if (frames.isEmpty) {
         final logs = await extractSession.getAllLogsAsString() ?? '';
@@ -360,8 +433,7 @@ class BoomerangProcessor {
 
       // Step 2: build forward + reverse sequence.
       int seqIndex = 1;
-      String seqName(int i) =>
-          '$seqPrefix${i.toString().padLeft(5, '0')}.jpg';
+      String seqName(int i) => '$seqPrefix${i.toString().padLeft(5, '0')}.jpg';
 
       for (final f in frames) {
         await f.copy('${tempDir.path}/${seqName(seqIndex++)}');
@@ -373,8 +445,10 @@ class BoomerangProcessor {
       // Step 3: encode image sequence → video.
       final outPath = await _tmpPath('cycle', 'mp4');
       final nativeFps = frames.length / segmentSeconds;
-      final effectiveFps = (speed == 1.0 ? nativeFps : nativeFps * speed)
-          .clamp(10.0, 120.0);
+      final effectiveFps = (speed == 1.0 ? nativeFps : nativeFps * speed).clamp(
+        10.0,
+        120.0,
+      );
       final fpsStr = effectiveFps.toStringAsFixed(2);
       final seqPattern = '${tempDir.path}/$seqPrefix%05d.jpg';
 
@@ -382,13 +456,18 @@ class BoomerangProcessor {
       for (final enc in _encoderCandidates) {
         final encSession = await FFmpegKit.executeWithArguments([
           '-y',
-          '-framerate', fpsStr,
-          '-i', seqPattern,
-          '-pix_fmt', 'yuv420p',
-          '-r', fpsStr,
+          '-framerate',
+          fpsStr,
+          '-i',
+          seqPattern,
+          '-pix_fmt',
+          'yuv420p',
+          '-r',
+          fpsStr,
           '-an',
           ...enc,
-          '-movflags', '+faststart',
+          '-movflags',
+          '+faststart',
           outPath,
         ]);
         if (ReturnCode.isSuccess(await encSession.getReturnCode()) &&

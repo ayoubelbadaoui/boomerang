@@ -131,8 +131,8 @@ class UploadController extends Notifier<UploadState> {
   static String _friendlyError(Object error) {
     if (error is FirebaseException) {
       return switch (error.code) {
-        'storage/retry-limit-exceeded' ||
-        'storage/server-file-wrong-size' => 'Upload interrupted. Please try again.',
+        'storage/retry-limit-exceeded' || 'storage/server-file-wrong-size' =>
+          'Upload interrupted. Please try again.',
         'storage/unauthenticated' => 'Please log in and try again.',
         'storage/unauthorized' => 'Permission denied. Please log in again.',
         'storage/quota-exceeded' => 'Storage full. Please try again later.',
@@ -146,7 +146,9 @@ class UploadController extends Notifier<UploadState> {
     if (error is SocketException || msg.contains('socketexception')) {
       return 'No internet connection. Please try again.';
     }
-    if (msg.contains('permission') || msg.contains('unauthorized') || msg.contains('403')) {
+    if (msg.contains('permission') ||
+        msg.contains('unauthorized') ||
+        msg.contains('403')) {
       return 'Permission denied. Please log in again.';
     }
     if (msg.contains('not found') || msg.contains('404')) {
@@ -163,6 +165,21 @@ class UploadController extends Notifier<UploadState> {
     }
     if (msg.contains('frame extraction') || msg.contains('poster generation')) {
       return 'Could not process video. Try a different clip.';
+    }
+    if (msg.contains('unsupported or corrupted video format')) {
+      return 'Unsupported video format. Please pick a different file.';
+    }
+    if (msg.contains('safe transcode failed')) {
+      return 'This video format is not supported yet. Please try another clip.';
+    }
+    if (msg.contains('could not access the selected video')) {
+      return 'Could not access the selected video. Please re-pick it.';
+    }
+    if (msg.contains('too large to process')) {
+      return 'Video is too large to process. Please choose a smaller clip.';
+    }
+    if (msg.contains('too short')) {
+      return 'Video is too short. Please choose one at least 0.3 seconds long.';
     }
     if (msg.contains('encoding failed') || msg.contains('ffmpeg')) {
       return 'Video processing failed. Try a different clip.';
@@ -181,6 +198,11 @@ class UploadController extends Notifier<UploadState> {
 
     // --- Phase 1: Processing (FFmpeg) ---
     state = const UploadState(phase: UploadPhase.processing);
+
+    final exists = await args.inputFile.exists();
+    if (!exists || await args.inputFile.length() <= 0) {
+      throw Exception('Input file does not exist: ${args.inputFile.path}');
+    }
 
     String inputPath = args.inputFile.path;
     if (args.mirrorVideo) {
@@ -214,7 +236,10 @@ class UploadController extends Notifier<UploadState> {
 
     final videoFuture = _uploadVideo(storage, outPath);
     final posterFuture = _uploadPoster(
-      storage, processor, inputPath, args.colorFilter,
+      storage,
+      processor,
+      inputPath,
+      args.colorFilter,
       fallbackVideoPath: outPath,
     );
 
@@ -223,10 +248,7 @@ class UploadController extends Notifier<UploadState> {
     final posterUrl = results[1];
 
     // --- Phase 3: Finalizing (Firestore write) ---
-    state = state.copyWith(
-      phase: UploadPhase.finalizing,
-      progress: () => null,
-    );
+    state = state.copyWith(phase: UploadPhase.finalizing, progress: () => null);
 
     final tags = _parseHashtags(args.caption);
 
@@ -261,9 +283,7 @@ class UploadController extends Notifier<UploadState> {
       if (state.phase != UploadPhase.uploading) return;
       final total = snap.totalBytes;
       if (total > 0) {
-        state = state.copyWith(
-          progress: () => snap.bytesTransferred / total,
-        );
+        state = state.copyWith(progress: () => snap.bytesTransferred / total);
       }
     });
 

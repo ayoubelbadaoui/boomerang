@@ -3,13 +3,13 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
+import 'package:boomerang/features/feed/infrastructure/gallery_video_ingestor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
 import 'package:boomerang/features/feed/presentation/editor/video_trim_page.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:video_player/video_player.dart';
 
 // ---------------------------------------------------------------------------
 // Filter definitions
@@ -26,30 +26,110 @@ class _CameraFilter {
 const _filters = <_CameraFilter>[
   _CameraFilter('Original', Icons.auto_awesome, null, null),
   _CameraFilter(
-    'Warm', Icons.wb_sunny_outlined,
+    'Warm',
+    Icons.wb_sunny_outlined,
     ColorFilter.matrix(<double>[
-      1.2, 0.1, 0, 0, 15, 0, 1.08, 0, 0, 8, 0, 0, 0.9, 0, 0, 0, 0, 0, 1, 0,
+      1.2,
+      0.1,
+      0,
+      0,
+      15,
+      0,
+      1.08,
+      0,
+      0,
+      8,
+      0,
+      0,
+      0.9,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ]),
     'colorbalance=rs=0.15:gs=0.05:bs=-0.15,eq=brightness=0.04',
   ),
   _CameraFilter(
-    'Cool', Icons.ac_unit,
+    'Cool',
+    Icons.ac_unit,
     ColorFilter.matrix(<double>[
-      0.9, 0, 0.08, 0, 0, 0, 0.95, 0.12, 0, 0, 0, 0.08, 1.15, 0, 15, 0, 0, 0, 1, 0,
+      0.9,
+      0,
+      0.08,
+      0,
+      0,
+      0,
+      0.95,
+      0.12,
+      0,
+      0,
+      0,
+      0.08,
+      1.15,
+      0,
+      15,
+      0,
+      0,
+      0,
+      1,
+      0,
     ]),
     'colorbalance=rs=-0.1:gs=0:bs=0.2,eq=brightness=0.02',
   ),
   _CameraFilter(
-    'B&W', Icons.gradient,
+    'B&W',
+    Icons.gradient,
     ColorFilter.matrix(<double>[
-      0.33, 0.33, 0.33, 0, 0, 0.33, 0.33, 0.33, 0, 0, 0.33, 0.33, 0.33, 0, 0, 0, 0, 0, 1, 0,
+      0.33,
+      0.33,
+      0.33,
+      0,
+      0,
+      0.33,
+      0.33,
+      0.33,
+      0,
+      0,
+      0.33,
+      0.33,
+      0.33,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ]),
     'hue=s=0',
   ),
   _CameraFilter(
-    'Vivid', Icons.color_lens_outlined,
+    'Vivid',
+    Icons.color_lens_outlined,
     ColorFilter.matrix(<double>[
-      1.3, -0.1, 0, 0, 8, 0, 1.3, -0.1, 0, 8, -0.1, 0, 1.3, 0, 8, 0, 0, 0, 1, 0,
+      1.3,
+      -0.1,
+      0,
+      0,
+      8,
+      0,
+      1.3,
+      -0.1,
+      0,
+      8,
+      -0.1,
+      0,
+      1.3,
+      0,
+      8,
+      0,
+      0,
+      0,
+      1,
+      0,
     ]),
     'eq=saturation=1.5:contrast=1.15:brightness=0.02',
   ),
@@ -91,7 +171,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   late final AnimationController _progressAnim;
   late final AnimationController _flipAnim;
   late final AnimationController _focusAnim;
-  
+
   late final AnimationController _pulseAnim;
   late final AnimationController _zoomBadgeAnim;
 
@@ -206,7 +286,9 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   String get _flashLabel => _flash == FlashMode.torch ? 'On' : 'Off';
 
   IconData get _flashIcon =>
-      _flash == FlashMode.torch ? Icons.flash_on_rounded : Icons.flash_off_rounded;
+      _flash == FlashMode.torch
+          ? Icons.flash_on_rounded
+          : Icons.flash_off_rounded;
 
   // -- Flip ----------------------------------------------------------------
 
@@ -291,13 +373,16 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     try {
       await c.startVideoRecording();
       setState(() => _recording = true);
-      _progressAnim.duration =
-          Duration(milliseconds: (_duration * 1000).round());
+      _progressAnim.duration = Duration(
+        milliseconds: (_duration * 1000).round(),
+      );
       _progressAnim.forward(from: 0);
       _pulseAnim.repeat(reverse: true);
       _burstTimer = Timer(
         Duration(milliseconds: (_duration * 1000).round()),
-        () { if (_recording) _stopRecording(); },
+        () {
+          if (_recording) _stopRecording();
+        },
       );
     } catch (e) {
       debugPrint('Record start error: $e');
@@ -324,7 +409,8 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       _navigating = true;
       if (!mounted) return;
       final selectedFilter = _filters[_filterIdx];
-      final isFront = _cameras[_camIdx].lensDirection == CameraLensDirection.front;
+      final isFront =
+          _cameras[_camIdx].lensDirection == CameraLensDirection.front;
       // Selfie mirroring is platform-dependent:
       //  - iOS (camera_avfoundation) saves the front-camera file already
       //    mirrored, matching the live preview. Applying our own hflip on
@@ -336,13 +422,14 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       final needsManualMirror = isFront && Platform.isAndroid;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BoomerangEditorPage(
-            inputFile: File(xfile.path),
-            initialSpeed: _speed,
-            videoFilter: selectedFilter.ffmpeg,
-            previewFilter: selectedFilter.matrix,
-            mirrorVideo: needsManualMirror,
-          ),
+          builder:
+              (_) => BoomerangEditorPage(
+                inputFile: File(xfile.path),
+                initialSpeed: _speed,
+                videoFilter: selectedFilter.ffmpeg,
+                previewFilter: selectedFilter.matrix,
+                mirrorVideo: needsManualMirror,
+              ),
         ),
       );
       _navigating = false;
@@ -399,11 +486,11 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
         children: [
           // Camera preview (no gesture detector here — platform views absorb touches)
           if (ready)
-            Positioned.fill(
-              child: _filteredPreview(c),
-            )
+            Positioned.fill(child: _filteredPreview(c))
           else
-            const Center(child: CircularProgressIndicator(color: Colors.white38)),
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white38),
+            ),
 
           // Raw pointer layer — bypasses gesture arena entirely for reliable
           // pinch-to-zoom on top of native platform views.
@@ -433,7 +520,9 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
 
           // Top gradient for readability
           Positioned(
-            top: 0, left: 0, right: 0,
+            top: 0,
+            left: 0,
+            right: 0,
             child: IgnorePointer(
               child: Container(
                 height: pad.top + 80,
@@ -450,7 +539,9 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
 
           // Bottom gradient
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: IgnorePointer(
               child: Container(
                 height: screenH * 0.35,
@@ -497,34 +588,41 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
           if (_zoom > _minZoom + 0.1)
             Positioned(
               top: pad.top + 70,
-              left: 0, right: 0,
-              child: IgnorePointer(child: Center(
-                child: AnimatedOpacity(
-                  opacity: 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_zoom.toStringAsFixed(1)}x',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: AnimatedOpacity(
+                    opacity: 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${_zoom.toStringAsFixed(1)}x',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              )),
+              ),
             ),
 
           // Top bar
           Positioned(
             top: pad.top + 12,
-            left: 20, right: 20,
+            left: 20,
+            right: 20,
             child: AnimatedOpacity(
               opacity: _recording ? 0.0 : 1.0,
               duration: const Duration(milliseconds: 200),
@@ -549,43 +647,53 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
           if (_recording)
             Positioned(
               top: pad.top + 18,
-              left: 0, right: 0,
+              left: 0,
+              right: 0,
               child: Center(
                 child: AnimatedBuilder(
                   animation: _pulseAnim,
-                  builder: (_, __) => Opacity(
-                    opacity: 0.6 + 0.4 * _pulseAnim.value,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.fiber_manual_record, color: Colors.white, size: 10),
-                          SizedBox(width: 6),
-                          Text(
-                            'BOOMERANG',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                            ),
+                  builder:
+                      (_, __) => Opacity(
+                        opacity: 0.6 + 0.4 * _pulseAnim.value,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
                           ),
-                        ],
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.fiber_manual_record,
+                                color: Colors.white,
+                                size: 10,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'BOOMERANG',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
                 ),
               ),
             ),
 
           // Bottom controls
           Positioned(
-            left: 0, right: 0,
+            left: 0,
+            right: 0,
             bottom: pad.bottom + 12,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -629,8 +737,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                                 min: 0.3,
                                 max: 1.5,
                                 divisions: 12,
-                                onChanged: (v) =>
-                                    setState(() => _duration = v),
+                                onChanged: (v) => setState(() => _duration = v),
                               ),
                             ),
                           ),
@@ -673,13 +780,15 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                     children: [
                       AnimatedBuilder(
                         animation: _flipAnim,
-                        builder: (_, child) => Transform(
-                          alignment: Alignment.center,
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.001)
-                            ..rotateY(math.pi * _flipAnim.value),
-                          child: child,
-                        ),
+                        builder:
+                            (_, child) => Transform(
+                              alignment: Alignment.center,
+                              transform:
+                                  Matrix4.identity()
+                                    ..setEntry(3, 2, 0.001)
+                                    ..rotateY(math.pi * _flipAnim.value),
+                              child: child,
+                            ),
                         child: _GlassButton(
                           icon: Icons.flip_camera_ios_rounded,
                           size: 52,
@@ -945,11 +1054,16 @@ class _RecordButtonState extends State<_RecordButton>
       onPointerUp: (_) => widget.onEnd(),
       onPointerCancel: (_) => widget.onEnd(),
       child: AnimatedBuilder(
-        animation: Listenable.merge([widget.progress, widget.pulse, _scaleAnim]),
+        animation: Listenable.merge([
+          widget.progress,
+          widget.pulse,
+          _scaleAnim,
+        ]),
         builder: (_, __) {
           final t = Curves.easeOutBack.transform(_scaleAnim.value);
           final outerSize = _idleSize + (_pressedSize - _idleSize) * t;
-          final pulseScale = widget.recording ? 1.0 + 0.02 * widget.pulse.value : 1.0;
+          final pulseScale =
+              widget.recording ? 1.0 + 0.02 * widget.pulse.value : 1.0;
 
           return SizedBox(
             width: _pressedSize,
@@ -973,7 +1087,10 @@ class _RecordButtonState extends State<_RecordButton>
                         width: widget.recording ? _innerRec : _innerIdle,
                         height: widget.recording ? _innerRec : _innerIdle,
                         decoration: BoxDecoration(
-                          color: widget.recording ? Colors.redAccent : Colors.white,
+                          color:
+                              widget.recording
+                                  ? Colors.redAccent
+                                  : Colors.white,
                           borderRadius: BorderRadius.circular(
                             widget.recording ? 10 : _innerIdle / 2,
                           ),
@@ -1006,22 +1123,28 @@ class _RingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - thickness / 2 - 1;
 
-    final bgPaint = Paint()
-      ..color = recording ? Colors.white24 : Colors.white38
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = thickness;
+    final bgPaint =
+        Paint()
+          ..color = recording ? Colors.white24 : Colors.white38
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = thickness;
     canvas.drawCircle(center, radius, bgPaint);
 
     if (recording && progress > 0) {
-      final arcPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = thickness + 1
-        ..strokeCap = StrokeCap.round
-        ..shader = SweepGradient(
-          startAngle: -math.pi / 2,
-          endAngle: 3 * math.pi / 2,
-          colors: const [Colors.redAccent, Colors.orangeAccent, Colors.redAccent],
-        ).createShader(Rect.fromCircle(center: center, radius: radius));
+      final arcPaint =
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = thickness + 1
+            ..strokeCap = StrokeCap.round
+            ..shader = SweepGradient(
+              startAngle: -math.pi / 2,
+              endAngle: 3 * math.pi / 2,
+              colors: const [
+                Colors.redAccent,
+                Colors.orangeAccent,
+                Colors.redAccent,
+              ],
+            ).createShader(Rect.fromCircle(center: center, radius: radius));
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         -math.pi / 2,
@@ -1034,7 +1157,9 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.progress != progress || old.recording != recording || old.thickness != thickness;
+      old.progress != progress ||
+      old.recording != recording ||
+      old.thickness != thickness;
 }
 
 // ---------------------------------------------------------------------------
@@ -1050,6 +1175,7 @@ class _GalleryImportSheet extends StatefulWidget {
 
 class _GalleryImportSheetState extends State<_GalleryImportSheet> {
   bool _picking = false;
+  final _ingestor = GalleryVideoIngestor();
 
   // The user-selectable window budget. Anything longer goes through the
   // trim page; anything shorter is hard-trimmed from t=0 and sent straight
@@ -1068,14 +1194,17 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
         return;
       }
 
-      final sourceDuration = await _probeDuration(xfile.path);
+      final ingested = await _ingestor.ingest(xfile);
       if (!mounted) return;
 
+      final sourceDuration = ingested.duration;
       if (sourceDuration <= _maxWindow) {
         // Short clip → pre-trim to 1.5s from the start and hand straight to
         // the editor so the user doesn't sit through a pointless trim step.
-        final trimmed = await const BoomerangProcessor()
-            .trimToMaxDuration(xfile.path, maxSeconds: 1.5);
+        final trimmed = await const BoomerangProcessor().trimToMaxDuration(
+          ingested.file.path,
+          maxSeconds: 1.5,
+        );
         if (!mounted) return;
         Navigator.pop(
           context,
@@ -1084,29 +1213,23 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
       } else {
         Navigator.pop(
           context,
-          _GalleryPickResult(File(xfile.path), needsTrim: true),
+          _GalleryPickResult(ingested.file, needsTrim: true),
         );
       }
+    } on GalleryVideoIngestException catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not import video: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not import video: $e')));
     } finally {
       if (mounted) setState(() => _picking = false);
-    }
-  }
-
-  Future<Duration> _probeDuration(String path) async {
-    final c = VideoPlayerController.file(File(path));
-    try {
-      await c.initialize();
-      return c.value.duration;
-    } catch (_) {
-      return Duration.zero;
-    } finally {
-      await c.dispose();
     }
   }
 
@@ -1162,16 +1285,17 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              icon: _picking
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.black54,
-                      ),
-                    )
-                  : const Icon(Icons.video_library_rounded),
+              icon:
+                  _picking
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black54,
+                        ),
+                      )
+                      : const Icon(Icons.video_library_rounded),
               label: Text(_picking ? 'Opening…' : 'Choose Video'),
             ),
           ),

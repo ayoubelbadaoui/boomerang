@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:video_player/video_player.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
+import 'package:boomerang/features/feed/infrastructure/gallery_video_ingestor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
 import 'package:boomerang/features/feed/presentation/editor/video_trim_page.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
@@ -21,9 +21,9 @@ class _CreateTabState extends ConsumerState<CreateTab> {
   bool _isProcessing = false;
 
   Future<void> _openCamera() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BoomerangCameraPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const BoomerangCameraPage()));
   }
 
   // Max window the user can pick from a gallery clip — matches the existing
@@ -39,13 +39,16 @@ class _CreateTabState extends ConsumerState<CreateTab> {
       final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
       if (file == null) return;
 
-      final sourceDuration = await _probeDuration(file.path);
+      final ingested = await GalleryVideoIngestor().ingest(file);
       if (!mounted) return;
 
       // Videos already within the allowed window skip the trim page.
+      final sourceDuration = ingested.duration;
       if (sourceDuration <= _maxWindow) {
-        final trimmed = await const BoomerangProcessor()
-            .trimToMaxDuration(file.path, maxSeconds: 1.5);
+        final trimmed = await const BoomerangProcessor().trimToMaxDuration(
+          ingested.file.path,
+          maxSeconds: 1.5,
+        );
         if (!mounted) return;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -58,12 +61,18 @@ class _CreateTabState extends ConsumerState<CreateTab> {
       // Long clip → let the user pick which slice to use.
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => VideoTrimPage(
-            inputFile: File(file.path),
-            maxWindow: _maxWindow,
-          ),
+          builder:
+              (_) => VideoTrimPage(
+                inputFile: ingested.file,
+                maxWindow: _maxWindow,
+              ),
         ),
       );
+    } on GalleryVideoIngestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -71,21 +80,6 @@ class _CreateTabState extends ConsumerState<CreateTab> {
       ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  /// Returns the duration of [path], or [Duration.zero] if it can't be read.
-  /// We use the existing video_player dependency instead of pulling in
-  /// another plugin — it's slightly heavy but this only runs once per pick.
-  Future<Duration> _probeDuration(String path) async {
-    final c = VideoPlayerController.file(File(path));
-    try {
-      await c.initialize();
-      return c.value.duration;
-    } catch (_) {
-      return Duration.zero;
-    } finally {
-      await c.dispose();
     }
   }
 
