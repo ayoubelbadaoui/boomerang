@@ -69,6 +69,7 @@ final uploadControllerProvider =
 
 class UploadController extends Notifier<UploadState> {
   _PublishArgs? _lastArgs;
+  static const _logName = 'BoomerangRepo';
 
   @override
   UploadState build() => UploadState.idle;
@@ -78,6 +79,10 @@ class UploadController extends Notifier<UploadState> {
   Future<void> retry() async {
     if (_lastArgs == null) return;
     final args = _lastArgs!;
+    log(
+      'Retrying failed upload for file: ${args.inputFile.path}',
+      name: _logName,
+    );
     await publish(
       inputFile: args.inputFile,
       mirrorVideo: args.mirrorVideo,
@@ -96,7 +101,13 @@ class UploadController extends Notifier<UploadState> {
     required String? colorFilter,
     required String caption,
   }) async {
-    if (state.isActive) return;
+    if (state.isActive) {
+      log(
+        'publish() ignored because upload is already active. phase=${state.phase}',
+        name: _logName,
+      );
+      return;
+    }
 
     final args = _PublishArgs(
       inputFile: inputFile,
@@ -107,9 +118,15 @@ class UploadController extends Notifier<UploadState> {
       caption: caption,
     );
     _lastArgs = args;
+    log(
+      'Starting publish. file=${inputFile.path}, mirror=$mirrorVideo, '
+      'segmentSeconds=$segmentSeconds, speed=$speed, hasFilter=${colorFilter != null}',
+      name: _logName,
+    );
 
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) {
+      log('publish() aborted: current user profile is null', name: _logName);
       state = const UploadState(
         phase: UploadPhase.failed,
         errorMessage: 'Please log in first.',
@@ -120,7 +137,7 @@ class UploadController extends Notifier<UploadState> {
     try {
       await _run(args, me);
     } catch (e, st) {
-      log('Upload failed', name: 'UploadController', error: e, stackTrace: st);
+      log('Upload failed', name: _logName, error: e, stackTrace: st);
       state = UploadState(
         phase: UploadPhase.failed,
         errorMessage: _friendlyError(e),
@@ -197,18 +214,25 @@ class UploadController extends Notifier<UploadState> {
     final repo = ref.read(boomerangRepoProvider);
 
     // --- Phase 1: Processing (FFmpeg) ---
+    log('Phase=processing start', name: _logName);
     state = const UploadState(phase: UploadPhase.processing);
 
     final exists = await args.inputFile.exists();
     if (!exists || await args.inputFile.length() <= 0) {
+      log(
+        'Input file missing or empty: ${args.inputFile.path}',
+        name: _logName,
+      );
       throw Exception('Input file does not exist: ${args.inputFile.path}');
     }
 
     String inputPath = args.inputFile.path;
     if (args.mirrorVideo) {
+      log('Mirroring input video before processing', name: _logName);
       inputPath = await processor.mirrorInput(inputPath);
     }
 
+    log('Building boomerang with FFmpeg. input=$inputPath', name: _logName);
     final outPath = await processor.makeBoomerang(
       inputPath,
       segmentSeconds: args.segmentSeconds,
@@ -225,9 +249,17 @@ class UploadController extends Notifier<UploadState> {
         targetWidth: 480,
         videoFilter: args.colorFilter,
       );
-    } catch (_) {}
+    } catch (e, st) {
+      log(
+        'Non-fatal: failed to generate local poster preview',
+        name: _logName,
+        error: e,
+        stackTrace: st,
+      );
+    }
 
     // --- Phase 2: Uploading (video + poster in parallel) ---
+    log('Phase=uploading start. output=$outPath', name: _logName);
     state = UploadState(
       phase: UploadPhase.uploading,
       progress: 0.0,
@@ -246,8 +278,14 @@ class UploadController extends Notifier<UploadState> {
     final results = await Future.wait([videoFuture, posterFuture]);
     final videoUrl = results[0]!;
     final posterUrl = results[1];
+    log(
+      'Upload complete. videoUrlReady=${videoUrl.isNotEmpty}, '
+      'posterUrlReady=${posterUrl != null && posterUrl.isNotEmpty}',
+      name: _logName,
+    );
 
     // --- Phase 3: Finalizing (Firestore write) ---
+    log('Phase=finalizing start. writing Firestore post', name: _logName);
     state = state.copyWith(phase: UploadPhase.finalizing, progress: () => null);
 
     final tags = _parseHashtags(args.caption);
@@ -262,14 +300,23 @@ class UploadController extends Notifier<UploadState> {
       hashtags: tags.isEmpty ? null : tags.toList(),
       ownerIsPrivate: me.isPrivate,
     );
+    log('Firestore boomerang post created successfully', name: _logName);
 
     // --- Phase 4: Done ---
     state = state.copyWith(phase: UploadPhase.done);
+    log('Phase=done', name: _logName);
 
     // Auto-refresh profile grid so the new post appears immediately
     try {
       await ref.read(userBoomerangsControllerProvider.notifier).refresh();
-    } catch (_) {}
+    } catch (e, st) {
+      log(
+        'Non-fatal: failed to refresh user boomerangs after upload',
+        name: _logName,
+        error: e,
+        stackTrace: st,
+      );
+    }
 
     _lastArgs = null;
   }
@@ -277,18 +324,34 @@ class UploadController extends Notifier<UploadState> {
   Future<String?> _uploadVideo(FirebaseStorage storage, String filePath) async {
     final storagePath =
         'boomerangs/${DateTime.now().millisecondsSinceEpoch}.mp4';
+    log(
+      'Uploading video to Firebase Storage path=$storagePath',
+      name: _logName,
+    );
     final task = storage.ref(storagePath).putFile(File(filePath));
 
-    task.snapshotEvents.listen((snap) {
-      if (state.phase != UploadPhase.uploading) return;
-      final total = snap.totalBytes;
-      if (total > 0) {
-        state = state.copyWith(progress: () => snap.bytesTransferred / total);
-      }
-    });
+    task.snapshotEvents.listen(
+      (snap) {
+        if (state.phase != UploadPhase.uploading) return;
+        final total = snap.totalBytes;
+        if (total > 0) {
+          state = state.copyWith(progress: () => snap.bytesTransferred / total);
+        }
+      },
+      onError: (Object e, StackTrace st) {
+        log(
+          'Video snapshot stream error',
+          name: _logName,
+          error: e,
+          stackTrace: st,
+        );
+      },
+    );
 
     final snapshot = await task;
-    return snapshot.ref.getDownloadURL();
+    final url = await snapshot.ref.getDownloadURL();
+    log('Video upload finished for path=$storagePath', name: _logName);
+    return url;
   }
 
   Future<String?> _uploadPoster(
@@ -301,22 +364,41 @@ class UploadController extends Notifier<UploadState> {
     try {
       String? posterPath;
       try {
+        log('Generating poster from input video for upload', name: _logName);
         posterPath = await processor.generatePoster(
           inputPath,
           videoFilter: colorFilter,
         );
-      } catch (_) {
+      } catch (e, st) {
+        log(
+          'Primary poster generation failed; trying fallback video',
+          name: _logName,
+          error: e,
+          stackTrace: st,
+        );
         if (fallbackVideoPath != null) {
           posterPath = await processor.generatePoster(fallbackVideoPath);
         }
       }
-      if (posterPath == null) return null;
+      if (posterPath == null) {
+        log('Skipping poster upload: no poster path available', name: _logName);
+        return null;
+      }
       final posterRef = storage.ref(
         'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
+      log('Uploading poster to Firebase Storage', name: _logName);
       final posterTask = await posterRef.putFile(File(posterPath));
-      return posterTask.ref.getDownloadURL();
-    } catch (_) {
+      final url = await posterTask.ref.getDownloadURL();
+      log('Poster upload finished', name: _logName);
+      return url;
+    } catch (e, st) {
+      log(
+        'Non-fatal: poster upload failed',
+        name: _logName,
+        error: e,
+        stackTrace: st,
+      );
       return null;
     }
   }

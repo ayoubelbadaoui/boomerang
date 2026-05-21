@@ -1,10 +1,13 @@
 import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
+import 'package:boomerang/features/feed/application/feed_controller.dart';
+import 'package:boomerang/features/feed/domain/ranking/feed_surface.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 import 'package:boomerang/features/chat/presentation/widgets/send_post_sheet.dart';
 import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
+import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -288,6 +291,21 @@ class _LikeIcon extends ConsumerStatefulWidget {
 class _LikeIconState extends ConsumerState<_LikeIcon> {
   bool _busy = false;
 
+  void _patchHomeFeedLike({
+    required UserProfile me,
+    required bool liked,
+    required int likes,
+  }) {
+    ref
+        .read(feedControllerProvider(FeedSurface.home).notifier)
+        .updatePostLikeOptimistic(
+          postId: widget.postId,
+          userId: me.uid,
+          liked: liked,
+          likes: likes < 0 ? 0 : likes,
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(currentUserProfileProvider).value;
@@ -315,6 +333,7 @@ class _LikeIconState extends ConsumerState<_LikeIcon> {
                 final optimisticLikes = previousLikes + (nextLiked ? 1 : -1);
                 final nextLikes = optimisticLikes < 0 ? 0 : optimisticLikes;
                 widget.onToggleLike?.call(nextLiked, nextLikes);
+                _patchHomeFeedLike(me: me, liked: nextLiked, likes: nextLikes);
                 ref
                     .read(postLikeUiControllerProvider.notifier)
                     .setStateForPost(
@@ -336,6 +355,11 @@ class _LikeIconState extends ConsumerState<_LikeIcon> {
                       );
                   if (result != null) {
                     widget.onToggleLike?.call(result.liked, result.likes);
+                    _patchHomeFeedLike(
+                      me: me,
+                      liked: result.liked,
+                      likes: result.likes,
+                    );
                     ref
                         .read(postLikeUiControllerProvider.notifier)
                         .setStateForPost(
@@ -346,6 +370,11 @@ class _LikeIconState extends ConsumerState<_LikeIcon> {
                   }
                 } catch (_) {
                   widget.onToggleLike?.call(previousLiked, previousLikes);
+                  _patchHomeFeedLike(
+                    me: me,
+                    liked: previousLiked,
+                    likes: previousLikes,
+                  );
                   ref
                       .read(postLikeUiControllerProvider.notifier)
                       .setStateForPost(

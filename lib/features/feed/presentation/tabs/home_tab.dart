@@ -63,6 +63,10 @@ class _PaginatedBoomerangListState
 
   void _onScroll() {
     if (!_controller.hasClients) return;
+    final atTopBoundary = _controller.position.pixels <= 16;
+    ref
+        .read(feedControllerProvider(FeedSurface.home).notifier)
+        .maybeApplyDeferredReorder(atTopBoundary: atTopBoundary);
     const threshold = 300.0;
     if (_controller.position.maxScrollExtent - _controller.position.pixels <=
         threshold) {
@@ -194,6 +198,16 @@ class _PaginatedBoomerangListState
                 _localLiked[post.id] = liked;
                 _localLikeCounts[post.id] = safeLikes;
               });
+              if (meUid.isNotEmpty) {
+                ref
+                    .read(feedControllerProvider(FeedSurface.home).notifier)
+                    .updatePostLikeOptimistic(
+                      postId: post.id,
+                      userId: meUid,
+                      liked: liked,
+                      likes: safeLikes,
+                    );
+              }
               ref
                   .read(postLikeUiControllerProvider.notifier)
                   .setStateForPost(

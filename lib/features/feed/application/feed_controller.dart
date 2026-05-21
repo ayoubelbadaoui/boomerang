@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' show log;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,6 +27,8 @@ class FeedState {
     required this.seenIds,
     required this.pageIndex,
     required this.rankingVersion,
+    required this.rankingDirty,
+    required this.pendingReorder,
   });
 
   final List<RankedPost> items;
@@ -36,6 +39,8 @@ class FeedState {
   final Set<String> seenIds;
   final int pageIndex;
   final String rankingVersion;
+  final bool rankingDirty;
+  final bool pendingReorder;
 
   FeedState copyWith({
     List<RankedPost>? items,
@@ -47,6 +52,8 @@ class FeedState {
     Set<String>? seenIds,
     int? pageIndex,
     String? rankingVersion,
+    bool? rankingDirty,
+    bool? pendingReorder,
   }) {
     return FeedState(
       items: items ?? this.items,
@@ -57,6 +64,8 @@ class FeedState {
       seenIds: seenIds ?? this.seenIds,
       pageIndex: pageIndex ?? this.pageIndex,
       rankingVersion: rankingVersion ?? this.rankingVersion,
+      rankingDirty: rankingDirty ?? this.rankingDirty,
+      pendingReorder: pendingReorder ?? this.pendingReorder,
     );
   }
 
@@ -69,6 +78,8 @@ class FeedState {
     seenIds: <String>{},
     pageIndex: 0,
     rankingVersion: FeedMetrics.rankingVersionV2,
+    rankingDirty: false,
+    pendingReorder: false,
   );
 }
 
@@ -78,15 +89,25 @@ class FeedState {
 class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
   static const int _pageSize = 20;
   static const FeedMetrics _metrics = FeedMetrics();
+  static const Duration _rankReconcileDebounce = Duration(milliseconds: 1000);
+  static const double _localLikeRankDelta = 0.015;
 
   late FeedSurface _surface;
+  Timer? _rankReconcileTimer;
+  bool _rankReconcileInFlight = false;
+  bool _bootFetchScheduled = false;
 
   @override
   Future<FeedState> build(FeedSurface arg) async {
     _surface = arg;
-    final me = await ref.watch(currentUserProfileProvider.future);
+    ref.onDispose(() {
+      _rankReconcileTimer?.cancel();
+    });
+    final authUid = ref.watch(
+      authStateProvider.select((auth) => auth.asData?.value?.uid),
+    );
     final seed = SessionSeed.bootstrap(
-      uid: me?.uid ?? 'anon',
+      uid: authUid ?? 'anon',
       surface: arg.name,
     );
     final initial = FeedState.empty.copyWith(
@@ -96,13 +117,24 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       hasMore: true,
       clearCursor: true,
     );
-    // Kick off the first page so the UI never sees a permanently-empty state.
-    Future.microtask(fetchNext);
+    // Kick off first page after the initial AsyncData is committed.
+    // Microtask can fire too early (state.value == null) and drop startup load.
+    _scheduleInitialFetch();
     return initial;
   }
 
+  void _scheduleInitialFetch() {
+    if (_bootFetchScheduled) return;
+    _bootFetchScheduled = true;
+    Future<void>(() async {
+      _bootFetchScheduled = false;
+      await fetchNext();
+    });
+  }
+
   Future<void> refresh() async {
-    final me = await ref.read(currentUserProfileProvider.future);
+    final auth = ref.read(firebaseAuthProvider);
+    final me = auth.currentUser ?? await ref.read(authStateProvider.future);
     final rotated =
         SessionSeed.bootstrap(
           uid: me?.uid ?? 'anon',
@@ -132,15 +164,21 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
 
   Future<void> fetchNext() async {
     final current = state.value;
-    if (current == null) return;
+    if (current == null) {
+      _scheduleInitialFetch();
+      return;
+    }
     if (current.isLoading || !current.hasMore) return;
 
     state = AsyncData(current.copyWith(isLoading: true));
 
     try {
-      final me = await ref.read(currentUserProfileProvider.future);
+      final auth = ref.read(firebaseAuthProvider);
+      final me = auth.currentUser ?? await ref.read(authStateProvider.future);
       if (me == null) {
-        state = AsyncData(current.copyWith(isLoading: false, hasMore: false));
+        // Startup race: auth stream may not have emitted yet. Keep pagination
+        // open so first load can succeed automatically once auth resolves.
+        state = AsyncData(current.copyWith(isLoading: false));
         return;
       }
       final requestUid = me.uid;
@@ -207,7 +245,7 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         rankingVersion: rankingVersion,
       );
 
-      final liveUid = ref.read(currentUserProfileProvider).value?.uid;
+      final liveUid = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (liveUid != requestUid) {
         // Keep UI interactive; a new account session is already in progress.
         state = AsyncData(current.copyWith(isLoading: false));
@@ -233,6 +271,168 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         stackTrace: st,
       );
       state = AsyncError(e, st);
+    }
+  }
+
+  void updatePostLikeOptimistic({
+    required String postId,
+    required String userId,
+    required bool liked,
+    required int likes,
+    bool nudgeLocalRank = true,
+  }) {
+    final current = state.value;
+    if (current == null) return;
+    final index = current.items.indexWhere((p) => p.id == postId);
+    if (index < 0) return;
+
+    final nextItems = [...current.items];
+    final target = current.items[index];
+    final nextRaw = Map<String, dynamic>.from(target.raw);
+    final likedBySet =
+        ((nextRaw['likedBy'] as List?) ?? const <dynamic>[])
+            .whereType<String>()
+            .toSet();
+
+    if (liked) {
+      likedBySet.add(userId);
+    } else {
+      likedBySet.remove(userId);
+    }
+
+    final safeLikes = likes < 0 ? 0 : likes;
+    nextRaw['likedBy'] = likedBySet.toList(growable: false);
+    nextRaw['likes'] = safeLikes;
+
+    final baseRank =
+        target.serverRankScore ?? (nextRaw['rankScore'] as num?)?.toDouble();
+    final rankDelta =
+        nudgeLocalRank
+            ? (liked ? _localLikeRankDelta : -_localLikeRankDelta)
+            : 0.0;
+    final nextRank = baseRank == null ? null : (baseRank + rankDelta);
+    if (nextRank != null) {
+      nextRaw['rankScore'] = nextRank;
+    }
+
+    nextItems[index] = RankedPost(
+      id: target.id,
+      authorId: target.authorId,
+      createdAt: target.createdAt,
+      likes: safeLikes,
+      commentsCount: target.commentsCount,
+      hashtags: target.hashtags,
+      ownerIsPrivate: target.ownerIsPrivate,
+      serverRankScore: nextRank ?? target.serverRankScore,
+      raw: nextRaw,
+    );
+
+    state = AsyncData(current.copyWith(items: nextItems, rankingDirty: true));
+    _scheduleSilentRankReconcile();
+  }
+
+  void maybeApplyDeferredReorder({required bool atTopBoundary}) {
+    if (_surface != FeedSurface.home || !atTopBoundary) return;
+    final current = state.value;
+    if (current == null ||
+        !current.pendingReorder ||
+        current.items.length < 2) {
+      return;
+    }
+    _rerankCurrentSession(current);
+  }
+
+  Future<void> _rerankCurrentSession(FeedState current) async {
+    final meUid = ref.read(authStateProvider).asData?.value?.uid;
+    if (meUid == null) return;
+    final followingIds = await ref.read(followingIdsProvider.future);
+    final policy = ref.read(rankingPolicyProvider);
+    final flag = ref.read(rankingFeatureFlagProvider);
+    final weights =
+        flag == RankingFlag.disabled
+            ? RankingWeights.legacy
+            : RankingWeights.forSurface(_surface);
+    final reranked = policy.rerank(
+      current.items,
+      RankingContext(
+        surface: _surface,
+        weights: weights,
+        followingIds: followingIds,
+        now: DateTime.now(),
+        sessionSeed: current.sessionSeed,
+      ),
+    );
+    state = AsyncData(current.copyWith(items: reranked, pendingReorder: false));
+  }
+
+  void _scheduleSilentRankReconcile() {
+    if (_surface != FeedSurface.home) return;
+    _rankReconcileTimer?.cancel();
+    _rankReconcileTimer = Timer(_rankReconcileDebounce, () async {
+      await _runSilentRankReconcile();
+    });
+  }
+
+  Future<void> _runSilentRankReconcile() async {
+    if (_rankReconcileInFlight) return;
+    final snapshot = state.value;
+    if (snapshot == null || snapshot.items.isEmpty) return;
+    _rankReconcileInFlight = true;
+    try {
+      final ids = snapshot.items.map((e) => e.id).toList(growable: false);
+      final freshById = await ref
+          .read(boomerangRepoProvider)
+          .fetchBoomerangFieldsByIds(ids);
+      if (freshById.isEmpty) return;
+      final live = state.value;
+      if (live == null || live.items.isEmpty) return;
+
+      final nextItems = <RankedPost>[];
+      for (final post in live.items) {
+        final fresh = freshById[post.id];
+        if (fresh == null) {
+          nextItems.add(post);
+          continue;
+        }
+        final nextRaw = Map<String, dynamic>.from(post.raw);
+        if (fresh.containsKey('likedBy')) {
+          nextRaw['likedBy'] = ((fresh['likedBy'] as List?) ??
+                  const <dynamic>[])
+              .whereType<String>()
+              .toList(growable: false);
+        }
+        if (fresh.containsKey('likes')) {
+          final likes = (fresh['likes'] as num?)?.toInt() ?? post.likes;
+          nextRaw['likes'] = likes < 0 ? 0 : likes;
+        }
+        final score = (fresh['rankScore'] as num?)?.toDouble();
+        if (score != null) {
+          nextRaw['rankScore'] = score;
+        }
+        nextItems.add(
+          RankedPost(
+            id: post.id,
+            authorId: post.authorId,
+            createdAt: post.createdAt,
+            likes: ((nextRaw['likes'] ?? post.likes) as num).toInt(),
+            commentsCount: post.commentsCount,
+            hashtags: post.hashtags,
+            ownerIsPrivate: post.ownerIsPrivate,
+            serverRankScore: score ?? post.serverRankScore,
+            raw: nextRaw,
+          ),
+        );
+      }
+
+      state = AsyncData(
+        live.copyWith(
+          items: nextItems,
+          rankingDirty: false,
+          pendingReorder: true,
+        ),
+      );
+    } finally {
+      _rankReconcileInFlight = false;
     }
   }
 

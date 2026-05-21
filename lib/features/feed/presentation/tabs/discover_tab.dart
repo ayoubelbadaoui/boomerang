@@ -350,7 +350,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
           itemCount: visible.length + (state.hasMore ? 1 : 0),
           itemBuilder: (context, i) {
             if (i >= visible.length) {
-              return const DiscoverExploreGridShimmer();
+              return const _DiscoverGridLoadingTile();
             }
             final post = visible[i];
             final d = post.raw;
@@ -429,6 +429,43 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
           },
         ),
       ),
+    );
+  }
+}
+
+class _DiscoverGridLoadingTile extends StatelessWidget {
+  const _DiscoverGridLoadingTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AspectRatio(
+          aspectRatio: 9 / 14,
+          child: ShimmerBone(
+            width: double.infinity,
+            height: double.infinity,
+            borderRadius: BorderRadius.circular(18.r),
+            phaseShift: 0.15,
+          ),
+        ),
+        SizedBox(height: 8.h),
+        Row(
+          children: [
+            ShimmerCircle(size: 24.r, phaseShift: 0.2),
+            SizedBox(width: 8.w),
+            Expanded(
+              child: ShimmerBone(
+                height: 14.h,
+                borderRadius: BorderRadius.circular(8.r),
+                phaseShift: 0.25,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

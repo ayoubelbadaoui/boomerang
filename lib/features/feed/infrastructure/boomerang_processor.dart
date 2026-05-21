@@ -6,16 +6,58 @@ import 'package:path_provider/path_provider.dart';
 class BoomerangProcessor {
   const BoomerangProcessor();
 
-  static List<List<String>> get _encoderCandidates {
+  static List<List<String>> _encoderCandidates({
+    required _EncodeTuning tuning,
+    required bool favorQuality,
+  }) {
+    final common = <String>[
+      '-pix_fmt',
+      'yuv420p',
+      '-r',
+      tuning.fpsString,
+      '-g',
+      '${tuning.gop}',
+      '-keyint_min',
+      '${tuning.minKeyint}',
+      '-sc_threshold',
+      '0',
+    ];
+
     if (Platform.isIOS || Platform.isMacOS) {
       return [
-        ['-c:v', 'h264_videotoolbox', '-b:v', '6M'],
-        ['-c:v', 'mpeg4', '-q:v', '2'],
+        [
+          '-c:v',
+          'h264_videotoolbox',
+          '-profile:v',
+          'high',
+          '-b:v',
+          tuning.targetBitrate,
+          '-maxrate',
+          tuning.maxBitrate,
+          '-bufsize',
+          tuning.bufferSize,
+          ...common,
+        ],
+        ['-c:v', 'mpeg4', '-q:v', favorQuality ? '2' : '3', ...common],
       ];
     }
     return [
-      ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18'],
-      ['-c:v', 'mpeg4', '-q:v', '2'],
+      [
+        '-c:v',
+        'libx264',
+        '-preset',
+        favorQuality ? 'medium' : 'fast',
+        '-crf',
+        '${tuning.crf}',
+        '-maxrate',
+        tuning.maxBitrate,
+        '-bufsize',
+        tuning.bufferSize,
+        '-profile:v',
+        'high',
+        ...common,
+      ],
+      ['-c:v', 'mpeg4', '-q:v', favorQuality ? '2' : '3', ...common],
     ];
   }
 
@@ -84,7 +126,32 @@ class BoomerangProcessor {
     _assertExists(inputPath);
     final outPath = await _tmpPath('trimmed', 'mp4');
 
-    for (final enc in _encoderCandidates) {
+    // Fast path: for t=0 trims this avoids a quality-loss re-encode.
+    final copySession = await FFmpegKit.executeWithArguments([
+      '-y',
+      '-i',
+      inputPath,
+      '-t',
+      maxSeconds.toStringAsFixed(2),
+      '-c',
+      'copy',
+      '-movflags',
+      '+faststart',
+      outPath,
+    ]);
+    if (ReturnCode.isSuccess(await copySession.getReturnCode()) &&
+        await _hasVideoContent(outPath)) {
+      return outPath;
+    }
+
+    final sourceStats = await _probeVideoStats(inputPath);
+    final tuning = _tuningFor(
+      width: sourceStats.width,
+      height: sourceStats.height,
+      fps: sourceStats.fps,
+      favorQuality: true,
+    );
+    for (final enc in _encoderCandidates(tuning: tuning, favorQuality: true)) {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
         '-i',
@@ -114,9 +181,16 @@ class BoomerangProcessor {
   Future<String> transcodeToSafeMp4(String inputPath) async {
     _assertExists(inputPath);
     final outPath = await _tmpPath('normalized', 'mp4');
+    final sourceStats = await _probeVideoStats(inputPath);
+    final tuning = _tuningFor(
+      width: sourceStats.width,
+      height: sourceStats.height,
+      fps: sourceStats.fps,
+      favorQuality: true,
+    );
 
     String? lastLogs;
-    for (final enc in _encoderCandidates) {
+    for (final enc in _encoderCandidates(tuning: tuning, favorQuality: true)) {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
         '-i',
@@ -167,8 +241,15 @@ class BoomerangProcessor {
 
     final start = startSeconds < 0 ? 0.0 : startSeconds;
     final duration = durationSeconds <= 0 ? 0.1 : durationSeconds;
+    final sourceStats = await _probeVideoStats(inputPath);
+    final tuning = _tuningFor(
+      width: sourceStats.width,
+      height: sourceStats.height,
+      fps: sourceStats.fps,
+      favorQuality: true,
+    );
 
-    for (final enc in _encoderCandidates) {
+    for (final enc in _encoderCandidates(tuning: tuning, favorQuality: true)) {
       final session = await FFmpegKit.executeWithArguments([
         '-y',
         // -ss before -i enables input-seek (fast, keyframe-accurate enough
@@ -245,10 +326,20 @@ class BoomerangProcessor {
   Future<String> mirrorInput(String inputPath) async {
     _assertExists(inputPath);
     final outPath = await _tmpPath('mirrored', 'mp4');
+    final sourceStats = await _probeVideoStats(inputPath);
+    final tuning = _tuningFor(
+      width: sourceStats.width,
+      height: sourceStats.height,
+      fps: sourceStats.fps,
+      favorQuality: true,
+    );
 
     // Try with -noautorotate first, then without, for each encoder
     for (final noAutoRotate in [true, false]) {
-      for (final enc in _encoderCandidates) {
+      for (final enc in _encoderCandidates(
+        tuning: tuning,
+        favorQuality: true,
+      )) {
         final session = await FFmpegKit.executeWithArguments([
           '-y',
           if (noAutoRotate) '-noautorotate',
@@ -288,6 +379,8 @@ class BoomerangProcessor {
       segmentSeconds: segmentSeconds,
       speed: speed,
       scaleWidth: previewWidth,
+      targetFps: 24,
+      favorQuality: false,
     );
   }
 
@@ -310,6 +403,8 @@ class BoomerangProcessor {
       segmentSeconds: segmentSeconds,
       speed: speed,
       videoFilter: videoFilter,
+      targetFps: fps,
+      favorQuality: true,
     );
 
     final cycleDuration = (2 * segmentSeconds) / (speed <= 0 ? 1.0 : speed);
@@ -354,6 +449,8 @@ class BoomerangProcessor {
     required double speed,
     int? scaleWidth,
     String? videoFilter,
+    required int targetFps,
+    required bool favorQuality,
   }) async {
     final tempDir = await getTemporaryDirectory();
     final ts = DateTime.now().millisecondsSinceEpoch;
@@ -365,7 +462,8 @@ class BoomerangProcessor {
       // (needed for Android VFR cameras with wall-clock DTS). -vsync 0 prevents
       // frame dropping. -frames:v limits by count instead of duration (which
       // fails with VFR timestamps).
-      final maxFrames = (segmentSeconds * 60).ceil();
+      final cappedFps = targetFps.clamp(12, 60);
+      final maxFrames = (segmentSeconds * cappedFps).ceil().clamp(12, 180);
       final framePattern = '${tempDir.path}/$framePrefix%05d.jpg';
 
       List<String> buildExtractArgs(String? vf) => <String>[
@@ -444,26 +542,39 @@ class BoomerangProcessor {
 
       // Step 3: encode image sequence → video.
       final outPath = await _tmpPath('cycle', 'mp4');
-      final nativeFps = frames.length / segmentSeconds;
-      final effectiveFps = (speed == 1.0 ? nativeFps : nativeFps * speed).clamp(
-        10.0,
-        120.0,
+      final tunedBaseFps = frames.length / segmentSeconds;
+      final effectiveFps = (tunedBaseFps * (speed <= 0 ? 1.0 : speed)).clamp(
+        12.0,
+        60.0,
+      );
+      final sourceStats = await _probeVideoStats(inputPath);
+      final inferredWidth = scaleWidth ?? sourceStats.width;
+      final inferredHeight =
+          scaleWidth != null
+              ? (sourceStats.height * scaleWidth / sourceStats.width).round()
+              : sourceStats.height;
+      final tuning = _tuningFor(
+        width: inferredWidth,
+        height: inferredHeight,
+        fps: effectiveFps,
+        favorQuality: favorQuality,
       );
       final fpsStr = effectiveFps.toStringAsFixed(2);
       final seqPattern = '${tempDir.path}/$seqPrefix%05d.jpg';
 
       String? lastLogs;
-      for (final enc in _encoderCandidates) {
+      for (final enc in _encoderCandidates(
+        tuning: tuning.copyWith(fps: effectiveFps),
+        favorQuality: favorQuality,
+      )) {
         final encSession = await FFmpegKit.executeWithArguments([
           '-y',
           '-framerate',
           fpsStr,
           '-i',
           seqPattern,
-          '-pix_fmt',
-          'yuv420p',
-          '-r',
-          fpsStr,
+          '-vf',
+          'scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p',
           '-an',
           ...enc,
           '-movflags',
@@ -477,11 +588,94 @@ class BoomerangProcessor {
         lastLogs = await encSession.getAllLogsAsString();
       }
 
+      final fallback = await _buildBoomerangViaFilterGraph(
+        inputPath,
+        segmentSeconds: segmentSeconds,
+        speed: speed,
+        scaleWidth: scaleWidth,
+        targetFps: targetFps,
+        videoFilter: videoFilter,
+        favorQuality: favorQuality,
+      );
+      if (fallback != null) return fallback;
+
       throw Exception('Image sequence encoding failed.\n$lastLogs');
     } finally {
       _cleanupByPrefix(tempDir, framePrefix);
       _cleanupByPrefix(tempDir, seqPrefix);
     }
+  }
+
+  Future<String?> _buildBoomerangViaFilterGraph(
+    String inputPath, {
+    required double segmentSeconds,
+    required double speed,
+    required int? scaleWidth,
+    required int targetFps,
+    required String? videoFilter,
+    required bool favorQuality,
+  }) async {
+    final outPath = await _tmpPath('cycle_fallback', 'mp4');
+    final sourceStats = await _probeVideoStats(inputPath);
+    final inferredWidth = scaleWidth ?? sourceStats.width;
+    final inferredHeight =
+        scaleWidth != null
+            ? (sourceStats.height * scaleWidth / sourceStats.width).round()
+            : sourceStats.height;
+    final tunedFps = targetFps.clamp(12, 60).toDouble();
+    final tuning = _tuningFor(
+      width: inferredWidth,
+      height: inferredHeight,
+      fps: tunedFps,
+      favorQuality: favorQuality,
+    );
+
+    final trimSeconds = segmentSeconds <= 0 ? 0.3 : segmentSeconds;
+    final playbackRate = speed <= 0 ? 1.0 : speed;
+    final speedExpr = (1.0 / playbackRate).toStringAsFixed(6);
+
+    final vfParts = <String>[
+      'trim=0:${trimSeconds.toStringAsFixed(3)}',
+      'setpts=PTS-STARTPTS',
+      if ((playbackRate - 1.0).abs() > 0.001) 'setpts=$speedExpr*PTS',
+      if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
+      if (scaleWidth != null) 'scale=$scaleWidth:-2',
+      'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      'fps=${tunedFps.toStringAsFixed(2)}',
+      'format=yuv420p',
+    ];
+    final base = vfParts.join(',');
+    final filterGraph =
+        '[0:v]$base[vbase];'
+        '[vbase]split[vf][vb];'
+        '[vb]reverse[vr];'
+        '[vf][vr]concat=n=2:v=1:a=0[vout]';
+
+    for (final enc in _encoderCandidates(
+      tuning: tuning.copyWith(fps: tunedFps),
+      favorQuality: favorQuality,
+    )) {
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        '-i',
+        inputPath,
+        '-filter_complex',
+        filterGraph,
+        '-map',
+        '[vout]',
+        '-an',
+        ...enc,
+        '-movflags',
+        '+faststart',
+        outPath,
+      ]);
+      if (ReturnCode.isSuccess(await session.getReturnCode()) &&
+          await _hasVideoContent(outPath)) {
+        return outPath;
+      }
+    }
+
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -514,4 +708,134 @@ class BoomerangProcessor {
       }
     } catch (_) {}
   }
+}
+
+class _VideoStats {
+  const _VideoStats({
+    required this.width,
+    required this.height,
+    required this.fps,
+  });
+
+  final int width;
+  final int height;
+  final double fps;
+}
+
+class _EncodeTuning {
+  const _EncodeTuning({
+    required this.targetBitrate,
+    required this.maxBitrate,
+    required this.bufferSize,
+    required this.crf,
+    required this.gop,
+    required this.minKeyint,
+    required this.fps,
+  });
+
+  final String targetBitrate;
+  final String maxBitrate;
+  final String bufferSize;
+  final int crf;
+  final int gop;
+  final int minKeyint;
+  final double fps;
+
+  String get fpsString => fps.toStringAsFixed(2);
+
+  _EncodeTuning copyWith({double? fps}) {
+    return _EncodeTuning(
+      targetBitrate: targetBitrate,
+      maxBitrate: maxBitrate,
+      bufferSize: bufferSize,
+      crf: crf,
+      gop: gop,
+      minKeyint: minKeyint,
+      fps: fps ?? this.fps,
+    );
+  }
+}
+
+Future<_VideoStats> _probeVideoStats(String inputPath) async {
+  final session = await FFmpegKit.executeWithArguments([
+    '-hide_banner',
+    '-i',
+    inputPath,
+    '-f',
+    'null',
+    '-',
+  ]);
+  final logs = (await session.getAllLogsAsString()) ?? '';
+
+  final dims = RegExp(r'(\d{2,5})x(\d{2,5})').firstMatch(logs);
+  final fpsMatch = RegExp(r'(\d+(?:\.\d+)?)\s*fps').firstMatch(logs);
+
+  final width = int.tryParse(dims?.group(1) ?? '') ?? 1280;
+  final height = int.tryParse(dims?.group(2) ?? '') ?? 720;
+  final fps = double.tryParse(fpsMatch?.group(1) ?? '') ?? 30.0;
+
+  return _VideoStats(
+    width: width <= 0 ? 1280 : width,
+    height: height <= 0 ? 720 : height,
+    fps: fps <= 0 ? 30.0 : fps,
+  );
+}
+
+_EncodeTuning _tuningFor({
+  required int width,
+  required int height,
+  required double fps,
+  required bool favorQuality,
+}) {
+  final safeW = width <= 0 ? 1280 : width;
+  final safeH = height <= 0 ? 720 : height;
+  final safeFps = fps <= 0 ? 30.0 : fps;
+  final pixels = safeW * safeH;
+  final fpsFactor = (safeFps / 30.0).clamp(0.85, 2.0);
+
+  double baseMbps;
+  if (pixels <= 640 * 360) {
+    baseMbps = 1.6;
+  } else if (pixels <= 854 * 480) {
+    baseMbps = 2.4;
+  } else if (pixels <= 1280 * 720) {
+    baseMbps = 4.5;
+  } else if (pixels <= 1920 * 1080) {
+    baseMbps = 7.5;
+  } else if (pixels <= 2560 * 1440) {
+    baseMbps = 11.5;
+  } else {
+    baseMbps = 15.0;
+  }
+
+  var targetMbps = baseMbps * fpsFactor;
+  if (favorQuality) {
+    targetMbps = targetMbps.clamp(2.2, 20.0);
+  } else {
+    targetMbps = targetMbps.clamp(1.4, 8.0);
+  }
+  final maxMbps = (targetMbps * 1.35).clamp(2.8, 24.0);
+  final bufMbps = (maxMbps * 2).clamp(6.0, 40.0);
+
+  final crf =
+      pixels <= 854 * 480
+          ? 20
+          : pixels <= 1280 * 720
+          ? 19
+          : pixels <= 1920 * 1080
+          ? 18
+          : 17;
+  final gop = (safeFps * 2).round().clamp(24, 180);
+
+  String fmt(double mbps) => '${mbps.toStringAsFixed(1)}M';
+
+  return _EncodeTuning(
+    targetBitrate: fmt(targetMbps),
+    maxBitrate: fmt(maxMbps),
+    bufferSize: fmt(bufMbps),
+    crf: favorQuality ? crf - 1 : crf,
+    gop: gop,
+    minKeyint: (gop / 2).round().clamp(12, 90),
+    fps: safeFps,
+  );
 }

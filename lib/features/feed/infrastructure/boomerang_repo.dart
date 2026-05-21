@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer show log;
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -13,6 +14,7 @@ class BoomerangRepo {
   BoomerangRepo(this._fs);
   final FirebaseFirestore _fs;
   static final Set<String> _inFlightLikeWrites = <String>{};
+  static const _logName = 'BoomerangRepo';
 
   Future<void> addRandomBoomerang() async {
     // pick a random user
@@ -388,6 +390,11 @@ class BoomerangRepo {
     List<String>? hashtags,
     bool ownerIsPrivate = false,
   }) async {
+    developer.log(
+      'createBoomerangPost() start for user=$userId, hasCaption=${caption != null && caption.trim().isNotEmpty}, '
+      'hashtags=${hashtags?.length ?? 0}',
+      name: _logName,
+    );
     // Normalize hashtags: lowercase, strip leading '#', drop empties
     final normalizedTags =
         (hashtags ?? const <String>[])
@@ -407,11 +414,18 @@ class BoomerangRepo {
       }
       try {
         await preBatch.commit();
-      } catch (_) {
+      } catch (e, st) {
+        developer.log(
+          'Non-fatal: hashtag pre-create batch failed',
+          name: _logName,
+          error: e,
+          stackTrace: st,
+        );
         // best effort; continue
       }
     }
 
+    developer.log('Writing boomerang document to Firestore', name: _logName);
     final ref = await _fs.collection('boomerangs').add({
       'userId': userId,
       'userName': userName,
@@ -426,9 +440,14 @@ class BoomerangRepo {
       'commentsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    developer.log('Boomerang document created: ${ref.id}', name: _logName);
     await _fs.collection('users').doc(userId).update({
       'boomerangsCount': FieldValue.increment(1),
     });
+    developer.log(
+      'User boomerangsCount incremented for user=$userId',
+      name: _logName,
+    );
     // Increment hashtags usage counters (best-effort)
     if (normalizedTags.isNotEmpty) {
       final batch = _fs.batch();
@@ -441,10 +460,17 @@ class BoomerangRepo {
       }
       try {
         await batch.commit();
-      } catch (_) {
+      } catch (e, st) {
+        developer.log(
+          'Non-fatal: hashtag counter increment batch failed',
+          name: _logName,
+          error: e,
+          stackTrace: st,
+        );
         // ignore counter failure
       }
     }
+    developer.log('createBoomerangPost() done: ${ref.id}', name: _logName);
     return ref.id;
   }
 
@@ -700,5 +726,36 @@ class BoomerangRepo {
     final data = snap.data();
     if (!snap.exists || data == null) return null;
     return (snap.id, data);
+  }
+
+  /// Fetches a shallow field snapshot for many boomerangs.
+  /// Used by silent feed reconciliation to refresh likes/rank metadata
+  /// without forcing a full feed reload.
+  Future<Map<String, Map<String, dynamic>>> fetchBoomerangFieldsByIds(
+    List<String> boomerangIds,
+  ) async {
+    final ids =
+        boomerangIds.where((id) => id.trim().isNotEmpty).toSet().toList();
+    if (ids.isEmpty) return const <String, Map<String, dynamic>>{};
+
+    final out = <String, Map<String, dynamic>>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final end = i + 30 > ids.length ? ids.length : i + 30;
+      final chunk = ids.sublist(i, end);
+      final snap =
+          await _fs
+              .collection('boomerangs')
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        out[doc.id] = <String, dynamic>{
+          'likes': data['likes'],
+          'likedBy': data['likedBy'],
+          'rankScore': data['rankScore'],
+        };
+      }
+    }
+    return out;
   }
 }
