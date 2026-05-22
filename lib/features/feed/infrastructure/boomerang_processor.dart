@@ -407,8 +407,14 @@ class BoomerangProcessor {
       favorQuality: true,
     );
 
-    final cycleDuration = (2 * segmentSeconds) / (speed <= 0 ? 1.0 : speed);
-    final cycles = (totalDurationSeconds / cycleDuration).ceil().clamp(1, 12);
+    final estimatedCycleDuration =
+        (2 * segmentSeconds) / (speed <= 0 ? 1.0 : speed);
+    final probedCycleDuration = await _probeDurationSeconds(cyclePath);
+    final cycleDuration =
+        (probedCycleDuration != null && probedCycleDuration > 0.02)
+            ? probedCycleDuration
+            : estimatedCycleDuration;
+    final cycles = (totalDurationSeconds / cycleDuration).ceil().clamp(1, 120);
     if (cycles <= 1) return cyclePath;
 
     final outPath = await _tmpPath('boomerang', 'mp4');
@@ -527,6 +533,14 @@ class BoomerangProcessor {
           'rc: ${extractRc?.getValue()}, pattern: $framePattern\n'
           '${logs.length > 500 ? logs.substring(logs.length - 500) : logs}',
         );
+      }
+
+      // Extremely short sources can decode to a single frame. Duplicate it so
+      // the encoded cycle has a valid temporal span across devices.
+      if (frames.length == 1) {
+        final dup = File('${tempDir.path}/$framePrefix${'00002'}.jpg');
+        await frames.first.copy(dup.path);
+        frames.add(dup);
       }
 
       // Step 2: build forward + reverse sequence.
@@ -779,6 +793,28 @@ Future<_VideoStats> _probeVideoStats(String inputPath) async {
     height: height <= 0 ? 720 : height,
     fps: fps <= 0 ? 30.0 : fps,
   );
+}
+
+Future<double?> _probeDurationSeconds(String inputPath) async {
+  final session = await FFmpegKit.executeWithArguments([
+    '-hide_banner',
+    '-i',
+    inputPath,
+    '-f',
+    'null',
+    '-',
+  ]);
+  final logs = (await session.getAllLogsAsString()) ?? '';
+  final match = RegExp(
+    r'Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)',
+  ).firstMatch(logs);
+  if (match == null) return null;
+
+  final hours = int.tryParse(match.group(1) ?? '') ?? 0;
+  final minutes = int.tryParse(match.group(2) ?? '') ?? 0;
+  final seconds = double.tryParse(match.group(3) ?? '');
+  if (seconds == null) return null;
+  return (hours * 3600) + (minutes * 60) + seconds;
 }
 
 _EncodeTuning _tuningFor({

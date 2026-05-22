@@ -349,15 +349,29 @@ class _PostPageState extends ConsumerState<_PostPage> {
     if (c == null) return;
     final v = c.value;
     if (!v.isInitialized) return;
-    if (!v.isBuffering && (v.isPlaying || v.position > Duration.zero)) {
+    if (_canDismissPoster(v)) {
       _dismissPoster();
     }
+  }
+
+  bool _canDismissPoster(VideoPlayerValue v) {
+    if (!v.isInitialized) return false;
+    if (v.hasError) return true;
+    final hasValidSize = v.size.width > 0 && v.size.height > 0;
+    final hasProgress = v.position > Duration.zero;
+    final hasDuration = v.duration > Duration.zero;
+    return hasValidSize &&
+        !v.isBuffering &&
+        (hasProgress || v.isPlaying || !hasDuration);
   }
 
   void _schedulePosterFallback() {
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;
-      if (_controller?.value.isInitialized == true) _dismissPoster();
+      final value = _controller?.value;
+      if (value != null && _canDismissPoster(value)) {
+        _dismissPoster();
+      }
     });
   }
 
