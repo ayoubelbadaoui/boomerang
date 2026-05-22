@@ -34,6 +34,20 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   bool _obscureConfirmPassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    final authUser = ref.read(firebaseAuthProvider).currentUser;
+    final email = authUser?.email?.trim() ?? '';
+    if (email.isNotEmpty) {
+      _email.text = email;
+    }
+    final displayName = authUser?.displayName?.trim() ?? '';
+    if (displayName.isNotEmpty) {
+      _name.text = displayName;
+    }
+  }
+
+  @override
   void dispose() {
     _email.dispose();
     _name.dispose();
@@ -45,11 +59,20 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
+    final addAccountMode =
+        GoRouterState.of(context).uri.queryParameters['addAccount'] == '1';
+    final credentialsLocked = ref.watch(
+      signupCredentialsLockedProvider(addAccountMode),
+    );
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed:
+              credentialsLocked
+                  ? () => context.go(SetupFlowPage.routeName)
+                  : () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -80,8 +103,12 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   controller: _email,
                   hint: 'Email',
                   icon: Icons.email_rounded,
+                  enabled: !credentialsLocked,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  validator:
+                      credentialsLocked
+                          ? null
+                          : (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: 16.h),
                 InputFilled(
@@ -95,44 +122,71 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   controller: _password,
                   hint: 'Password',
                   icon: Icons.lock_rounded,
+                  enabled: !credentialsLocked,
                   obscure: _obscurePassword,
                   suffix: IconButton(
-                    onPressed: () {
-                      setState(() => _obscurePassword = !_obscurePassword);
-                    },
+                    onPressed:
+                        credentialsLocked
+                            ? null
+                            : () {
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
+                            },
                     icon: Icon(
                       _obscurePassword
                           ? Icons.visibility_off
                           : Icons.visibility,
                     ),
                   ),
-                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  validator:
+                      credentialsLocked
+                          ? null
+                          : (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
                 SizedBox(height: 16.h),
                 InputFilled(
                   controller: _confirmPassword,
                   hint: 'Confirm Password',
                   icon: Icons.lock_rounded,
+                  enabled: !credentialsLocked,
                   obscure: _obscureConfirmPassword,
                   suffix: IconButton(
-                    onPressed: () {
-                      setState(
-                        () =>
-                            _obscureConfirmPassword = !_obscureConfirmPassword,
-                      );
-                    },
+                    onPressed:
+                        credentialsLocked
+                            ? null
+                            : () {
+                              setState(
+                                () =>
+                                    _obscureConfirmPassword =
+                                        !_obscureConfirmPassword,
+                              );
+                            },
                     icon: Icon(
                       _obscureConfirmPassword
                           ? Icons.visibility_off
                           : Icons.visibility,
                     ),
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Required';
-                    if (v != _password.text) return 'Passwords do not match';
-                    return null;
-                  },
+                  validator:
+                      credentialsLocked
+                          ? null
+                          : (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (v != _password.text) {
+                              return 'Passwords do not match';
+                            }
+                            return null;
+                          },
                 ),
+                if (credentialsLocked)
+                  Padding(
+                    padding: EdgeInsets.only(top: 10.h, bottom: 6.h),
+                    child: Text(
+                      'Account already created. Email and password are locked until setup is completed.',
+                      style: TextStyle(fontSize: 12.sp, color: Colors.black54),
+                    ),
+                  ),
                 SizedBox(height: 16.h),
                 _ConsentCheckbox(
                   value: _acceptedTerms,
@@ -150,7 +204,8 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   linkText: 'Privacy Policy',
                   onLinkTap: () => showPrivacyPolicy(context),
                 ),
-                if (!_acceptedTerms || !_acceptedPrivacy)
+                if (!credentialsLocked &&
+                    (!_acceptedTerms || !_acceptedPrivacy))
                   Padding(
                     padding: EdgeInsets.only(top: 4.h, left: 12.w),
                     child: Text(
@@ -162,6 +217,10 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                 PrimaryButton(
                   loading: state.loading,
                   onPressed: () async {
+                    if (credentialsLocked) {
+                      context.go(SetupFlowPage.routeName);
+                      return;
+                    }
                     if (!_formKey.currentState!.validate()) return;
                     if (!_acceptedTerms || !_acceptedPrivacy) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -226,11 +285,6 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                       container.invalidate(storedAccountsProvider);
                       ref.read(homeTabIndexProvider.notifier).state = 0;
                       _storeConsent(ref);
-                      final addAccountMode =
-                          GoRouterState.of(
-                            context,
-                          ).uri.queryParameters['addAccount'] ==
-                          '1';
                       context.go(
                         addAccountMode
                             ? HomeShell.routeName
@@ -239,7 +293,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     }
                   },
                   child: Text(
-                    'Sign up',
+                    credentialsLocked ? 'Continue setup' : 'Sign up',
                     style: TextStyle(
                       fontSize: 18.sp,
                       fontWeight: FontWeight.w700,

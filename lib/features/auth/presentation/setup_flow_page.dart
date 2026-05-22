@@ -28,6 +28,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   final _profileFormKey = GlobalKey<FormState>();
   int _index = 0;
   String _gender = 'male';
+
   /// Firestore `isPrivate`: default public; only explicit `true` in the doc means private.
   bool _isPrivate = false;
   DateTime _birthday = DateTime(1995, 12, 27);
@@ -91,11 +92,12 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     final container = ProviderScope.containerOf(context, listen: false);
     final uid = container.read(firebaseAuthProvider).currentUser?.uid ?? '';
     try {
-      final doc = await container
-          .read(firestoreProvider)
-          .collection('login_usernames')
-          .doc(nickname)
-          .get();
+      final doc =
+          await container
+              .read(firestoreProvider)
+              .collection('login_usernames')
+              .doc(nickname)
+              .get();
       if (!mounted || version != _nicknameCheckVersion) return;
       final owner = doc.data()?['uid']?.toString().trim() ?? '';
       final taken = doc.exists && owner.isNotEmpty && owner != uid;
@@ -247,6 +249,18 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     }
   }
 
+  void _onBackPressed() {
+    if (_saving) return;
+    if (_index > 0) {
+      _controller.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    context.go('/signup?resumeSignup=1');
+  }
+
   Future<void> _saveProfile() async {
     if (_saving) return;
     if (!mounted) return;
@@ -279,10 +293,13 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
       // Privacy screen matches (same path as SettingsRepo).
       final uid = container.read(firebaseAuthProvider).currentUser?.uid;
       if (uid != null) {
-        await container.read(firestoreProvider).collection('users').doc(uid).collection('meta').doc('settings').set(
-              {'privateAccount': _isPrivate},
-              SetOptions(merge: true),
-            );
+        await container
+            .read(firestoreProvider)
+            .collection('users')
+            .doc(uid)
+            .collection('meta')
+            .doc('settings')
+            .set({'privateAccount': _isPrivate}, SetOptions(merge: true));
       }
 
       // Invalidate ALL relevant providers and wait for them to confirm
@@ -349,7 +366,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: _onBackPressed,
         ),
         centerTitle: false,
         title: Text(

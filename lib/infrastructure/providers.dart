@@ -75,6 +75,30 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   },
 );
 
+/// `true` when a user is authenticated but profile setup is still incomplete.
+/// Signup uses this to lock credentials and avoid duplicate Firebase user
+/// creation while allowing the flow to resume.
+final signupCredentialsLockedProvider = Provider.family<bool, bool>((
+  ref,
+  addAccountMode,
+) {
+  if (addAccountMode) return false;
+  final auth = ref.watch(authStateProvider);
+  final user = auth.asData?.value;
+  if (user == null) return false;
+
+  final hasNickname = ref.watch(userHasNicknameProvider).asData?.value;
+  final profileExists = ref.watch(userProfileExistsProvider).asData?.value;
+  final profileComplete = ref.watch(userProfileCompleteProvider).asData?.value;
+
+  // Be conservative while profile checks are still resolving:
+  // if the user is already authenticated, keep credentials locked.
+  if (hasNickname == null || profileExists == null || profileComplete == null) {
+    return true;
+  }
+  return !hasNickname || !profileExists || !profileComplete;
+});
+
 /// Checks whether the current authenticated user has a profile document
 /// at `users/{uid}` in Firestore. Returns false if no user is authenticated.
 final userProfileExistsProvider = FutureProvider<bool>((ref) async {

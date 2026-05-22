@@ -11,6 +11,7 @@ class InputFilled extends StatefulWidget {
     this.suffix,
     this.keyboardType,
     this.validator,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -20,6 +21,7 @@ class InputFilled extends StatefulWidget {
   final Widget? suffix;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final bool enabled;
 
   @override
   State<InputFilled> createState() => _InputFilledState();
@@ -35,6 +37,7 @@ class _InputFilledState extends State<InputFilled> {
 
     return TextFormField(
       controller: widget.controller,
+      enabled: widget.enabled,
       keyboardType: widget.keyboardType,
       obscureText: effectiveObscure,
       validator: widget.validator,
@@ -44,16 +47,19 @@ class _InputFilledState extends State<InputFilled> {
         fillColor: const Color(0xFFF4F4F4),
         contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
         prefixIcon: Icon(widget.icon),
-        suffixIcon: showToggle
-            ? IconButton(
-                icon: Icon(
-                  _hidden ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                  color: Colors.black45,
-                ),
-                splashRadius: 20,
-                onPressed: () => setState(() => _hidden = !_hidden),
-              )
-            : widget.suffix,
+        suffixIcon:
+            showToggle
+                ? IconButton(
+                  icon: Icon(
+                    _hidden
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    color: Colors.black45,
+                  ),
+                  splashRadius: 20,
+                  onPressed: () => setState(() => _hidden = !_hidden),
+                )
+                : widget.suffix,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(20.r),
           borderSide: BorderSide.none,
