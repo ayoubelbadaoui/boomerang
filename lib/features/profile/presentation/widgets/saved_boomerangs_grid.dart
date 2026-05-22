@@ -47,18 +47,22 @@ class SavedBoomerangsGrid extends ConsumerWidget {
               final videoUrl = (data['videoUrl'] as String?) ?? '';
               return GestureDetector(
                 onTap: () {
-                  final items = docs
-                      .map((d) => (
-                            id: ((d.data()['boomerangId'] ?? d.id) as String),
-                            data: d.data(),
-                          ))
-                      .toList();
+                  final items =
+                      docs
+                          .map(
+                            (d) => (
+                              id: ((d.data()['boomerangId'] ?? d.id) as String),
+                              data: d.data(),
+                            ),
+                          )
+                          .toList();
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => ProfileReelsPage(
-                        initialItems: items,
-                        initialIndex: index,
-                      ),
+                      builder:
+                          (_) => ProfileReelsPage(
+                            initialItems: items,
+                            initialIndex: index,
+                          ),
                     ),
                   );
                 },
@@ -71,21 +75,30 @@ class SavedBoomerangsGrid extends ConsumerWidget {
                     const SnackBar(content: Text('Removed from saved')),
                   );
                 },
-                child: BoomerangGridThumbnail(
-                  imageUrl: imageUrl.isNotEmpty ? imageUrl : null,
-                  borderRadius: BorderRadius.circular(12.r),
-                  cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
-                  phaseShift: index * 0.03,
-                  overlays: [
-                    if (videoUrl.isNotEmpty && imageUrl.isEmpty)
-                      const Center(
-                        child: Icon(
-                          Icons.play_circle_filled,
-                          size: 24,
-                          color: Colors.white70,
-                        ),
-                      ),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cacheWidth = computeCacheWidthForLogicalWidth(
+                      constraints.maxWidth,
+                      MediaQuery.devicePixelRatioOf(context),
+                      maxPx: 1100,
+                    );
+                    return BoomerangGridThumbnail(
+                      imageUrl: imageUrl.isNotEmpty ? imageUrl : null,
+                      borderRadius: BorderRadius.circular(12.r),
+                      cacheWidth: cacheWidth,
+                      phaseShift: index * 0.03,
+                      overlays: [
+                        if (videoUrl.isNotEmpty && imageUrl.isEmpty)
+                          const Center(
+                            child: Icon(
+                              Icons.play_circle_filled,
+                              size: 24,
+                              color: Colors.white70,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               );
             },

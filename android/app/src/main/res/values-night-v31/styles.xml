@@ -2,8 +2,12 @@
 <resources>
     <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is on -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <!-- Keep v31 resources compatible with lower compileSdk setups.
-             We rely on the regular launch background instead of Android 12 attrs. -->
+        <!-- Android 12+ system splash -->
+        <item name="android:windowSplashScreenBackground">@android:color/black</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/black</item>
+        <item name="android:postSplashScreenTheme">@style/NormalTheme</item>
+        <!-- Fallback for devices that still read windowBackground -->
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowFullscreen">false</item>

@@ -1,9 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:boomerang/features/chat/presentation/widgets/chat_image_renderer.dart';
 
-class FullscreenImageViewer extends StatefulWidget {
+class FullscreenImageViewer extends StatelessWidget {
   const FullscreenImageViewer({
     super.key,
     required this.imageUrl,
@@ -13,182 +12,44 @@ class FullscreenImageViewer extends StatefulWidget {
   final String imageUrl;
   final String heroTag;
 
-  static void open(BuildContext context,
-      {required String imageUrl, required String heroTag}) {
+  static void open(
+    BuildContext context, {
+    required String imageUrl,
+    required String heroTag,
+  }) {
     Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierDismissible: false,
-        barrierColor: Colors.transparent,
-        transitionDuration: const Duration(milliseconds: 300),
-        reverseTransitionDuration: const Duration(milliseconds: 250),
-        pageBuilder: (_, animation, __) => FullscreenImageViewer(
-          imageUrl: imageUrl,
-          heroTag: heroTag,
-        ),
-        transitionsBuilder: (_, animation, __, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+      MaterialPageRoute(
+        builder:
+            (_) => FullscreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
       ),
     );
   }
 
   @override
-  State<FullscreenImageViewer> createState() => _FullscreenImageViewerState();
-}
-
-class _FullscreenImageViewerState extends State<FullscreenImageViewer>
-    with TickerProviderStateMixin {
-  final _transformationController = TransformationController();
-  TapDownDetails? _doubleTapDetails;
-
-  Offset _dragOffset = Offset.zero;
-  bool _isDragging = false;
-
-  late final AnimationController _snapBackController;
-  late Animation<Offset> _snapBackAnimation;
-
-  static const _dismissThreshold = 100.0;
-  static const _velocityThreshold = 800.0;
-
-  bool get _isZoomed =>
-      _transformationController.value.getMaxScaleOnAxis() > 1.05;
-
-  double get _dragProgress =>
-      (_dragOffset.dy.abs() / (MediaQuery.of(context).size.height * 0.4))
-          .clamp(0.0, 1.0);
-
-  double get _backgroundOpacity => 1.0 - _dragProgress * 0.8;
-
-  double get _imageScale => 1.0 - _dragProgress * 0.25;
-
-  @override
-  void initState() {
-    super.initState();
-    _snapBackController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _snapBackAnimation =
-        Tween<Offset>(begin: Offset.zero, end: Offset.zero).animate(
-      CurvedAnimation(parent: _snapBackController, curve: Curves.easeOutCubic),
-    );
-    _snapBackController.addListener(() {
-      setState(() => _dragOffset = _snapBackAnimation.value);
-    });
-  }
-
-  @override
-  void dispose() {
-    _transformationController.dispose();
-    _snapBackController.dispose();
-    super.dispose();
-  }
-
-  void _handleDoubleTap() {
-    final position = _doubleTapDetails?.localPosition ?? Offset.zero;
-    const scaleFactor = 3.0;
-
-    if (_isZoomed) {
-      _transformationController.value = Matrix4.identity();
-    } else {
-      _transformationController.value = Matrix4.identity()
-        ..translateByDouble(
-          -position.dx * (scaleFactor - 1),
-          -position.dy * (scaleFactor - 1),
-          0,
-          0,
-        )
-        ..scaleByDouble(scaleFactor, scaleFactor, scaleFactor, 1);
-    }
-  }
-
-  void _onPanStart(DragStartDetails details) {
-    if (_isZoomed) return;
-    _snapBackController.stop();
-    setState(() => _isDragging = true);
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (_isZoomed) return;
-    setState(() => _dragOffset += details.delta);
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (_isZoomed) return;
-    setState(() => _isDragging = false);
-
-    final velocity = details.velocity.pixelsPerSecond.dy.abs();
-    final distance = _dragOffset.dy.abs();
-
-    if (distance > _dismissThreshold || velocity > _velocityThreshold) {
-      Navigator.of(context).pop();
-    } else {
-      _snapBackAnimation =
-          Tween<Offset>(begin: _dragOffset, end: Offset.zero).animate(
-        CurvedAnimation(
-            parent: _snapBackController, curve: Curves.easeOutCubic),
-      );
-      _snapBackController.forward(from: 0);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
-    final scale = _isDragging || _snapBackController.isAnimating
-        ? _imageScale
-        : 1.0;
-    final bgOpacity = _isDragging || _snapBackController.isAnimating
-        ? _backgroundOpacity
-        : 1.0;
-    final cornerRadius = _isDragging
-        ? 16.0 * _dragProgress * 2
-        : 0.0;
+    final imageProvider = resolveChatImageProvider(imageUrl);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.black,
         body: Stack(
           fit: StackFit.expand,
           children: [
-            // Animated background
-            AnimatedContainer(
-              duration: _isDragging
-                  ? Duration.zero
-                  : const Duration(milliseconds: 200),
-              color: Colors.black.withValues(alpha: bgOpacity),
-            ),
-
-            // Image layer with drag transform
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(context).pop(),
-              onDoubleTapDown: (d) => _doubleTapDetails = d,
-              onDoubleTap: _handleDoubleTap,
-              onPanStart: _onPanStart,
-              onPanUpdate: _onPanUpdate,
-              onPanEnd: _onPanEnd,
-              child: Center(
-                child: Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.identity()
-                    ..translateByDouble(_dragOffset.dx, _dragOffset.dy, 0, 0)
-                    ..scaleByDouble(scale, scale, scale, 1),
-                  child: ClipRRect(
-                    borderRadius:
-                        BorderRadius.circular(math.min(cornerRadius, 20)),
-                    child: InteractiveViewer(
-                      transformationController: _transformationController,
-                      panEnabled: _isZoomed,
-                      scaleEnabled: true,
-                      minScale: 1,
-                      maxScale: 5,
-                      child: Hero(
-                        tag: widget.heroTag,
-                        child: Image.network(
-                          widget.imageUrl,
+            Center(
+              child:
+                  imageProvider == null
+                      ? const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white54,
+                        size: 48,
+                      )
+                      : InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 5,
+                        child: Image(
+                          image: imageProvider,
                           fit: BoxFit.contain,
                           loadingBuilder: (_, child, progress) {
                             if (progress == null) return child;
@@ -198,35 +59,29 @@ class _FullscreenImageViewerState extends State<FullscreenImageViewer>
                               ),
                             );
                           },
-                          errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              color: Colors.white54,
-                              size: 48,
-                            ),
-                          ),
+                          errorBuilder:
+                              (_, __, ___) => const Icon(
+                                Icons.broken_image_outlined,
+                                color: Colors.white54,
+                                size: 48,
+                              ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
+            ),
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => Navigator.of(context).pop(),
+                child: const SizedBox.expand(),
               ),
             ),
-
-            // Close button fades out during drag
             Positioned(
               top: padding.top + 8,
               right: 16,
-              child: AnimatedOpacity(
-                opacity: _isDragging ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 150),
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black45,
-                  ),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: IconButton.styleFrom(backgroundColor: Colors.black45),
+                icon: const Icon(Icons.close, color: Colors.white),
               ),
             ),
           ],

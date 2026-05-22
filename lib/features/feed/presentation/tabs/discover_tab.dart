@@ -367,8 +367,11 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
             final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
             final tileWidth =
                 (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
-            final cacheW =
-                (tileWidth * MediaQuery.of(context).devicePixelRatio).round();
+            final cacheW = computeCacheWidthForLogicalWidth(
+              tileWidth,
+              MediaQuery.of(context).devicePixelRatio,
+              maxPx: 1200,
+            );
             return GestureDetector(
               onTap: () {
                 Navigator.of(context).push(
@@ -549,8 +552,11 @@ class _BmgGridContent extends ConsumerWidget {
               final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
               final tileWidth =
                   (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
-              final cacheW =
-                  (tileWidth * MediaQuery.of(context).devicePixelRatio).round();
+              final cacheW = computeCacheWidthForLogicalWidth(
+                tileWidth,
+                MediaQuery.of(context).devicePixelRatio,
+                maxPx: 1200,
+              );
 
               return GestureDetector(
                 onTap: () {

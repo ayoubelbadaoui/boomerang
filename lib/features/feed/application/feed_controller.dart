@@ -91,6 +91,7 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
   static const FeedMetrics _metrics = FeedMetrics();
   static const Duration _rankReconcileDebounce = Duration(milliseconds: 1000);
   static const double _localLikeRankDelta = 0.015;
+  static const int _refreshFreshnessWindowSize = 6;
 
   late FeedSurface _surface;
   Timer? _rankReconcileTimer;
@@ -154,6 +155,7 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       ),
     );
     await fetchNext();
+    _applyRefreshFreshnessPin();
     final next = state.value?.items ?? const <RankedPost>[];
     _metrics.recordRefresh(
       surface: _surface,
@@ -182,9 +184,13 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         return;
       }
       final requestUid = me.uid;
-      final followingIds = await ref.read(followingIdsProvider.future);
-      final blockedList = await ref.read(blockedUsersProvider.future);
-      final blockedIds = blockedList.toSet();
+      final followingIds = await _resolveFollowingIds(requestUid: requestUid);
+      final blockedIds = await _resolveBlockedIds(requestUid: requestUid);
+      final liveUidAfterDeps = ref.read(firebaseAuthProvider).currentUser?.uid;
+      if (liveUidAfterDeps != requestUid) {
+        state = AsyncData(current.copyWith(isLoading: false));
+        return;
+      }
       final policy = ref.read(rankingPolicyProvider);
       final flag = ref.read(rankingFeatureFlagProvider);
 
@@ -272,6 +278,82 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       );
       state = AsyncError(e, st);
     }
+  }
+
+  Future<Set<String>> _resolveFollowingIds({required String requestUid}) async {
+    final cached = ref.read(followingIdsProvider).value;
+    if (cached != null) return cached;
+    try {
+      final wait = ref.read(feedDependencyMaxWaitProvider);
+      final resolved = await ref
+          .read(followingIdsProvider.future)
+          .timeout(wait);
+      final liveUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+      if (liveUid != requestUid) return const <String>{};
+      return resolved;
+    } on TimeoutException {
+      log(
+        'followingIdsProvider timed out during feed fetch; using empty fallback',
+        name: 'FeedController',
+      );
+      return const <String>{};
+    } catch (e, st) {
+      log(
+        'followingIdsProvider unavailable during feed fetch; using empty fallback',
+        name: 'FeedController',
+        error: e,
+        stackTrace: st,
+      );
+      return const <String>{};
+    }
+  }
+
+  Future<Set<String>> _resolveBlockedIds({required String requestUid}) async {
+    final cached = ref.read(blockedUsersProvider).value;
+    if (cached != null) return cached.toSet();
+    try {
+      final wait = ref.read(feedDependencyMaxWaitProvider);
+      final resolved = await ref
+          .read(blockedUsersProvider.future)
+          .timeout(wait);
+      final liveUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+      if (liveUid != requestUid) return const <String>{};
+      return resolved.toSet();
+    } on TimeoutException {
+      log(
+        'blockedUsersProvider timed out during feed fetch; using empty fallback',
+        name: 'FeedController',
+      );
+      return const <String>{};
+    } catch (e, st) {
+      log(
+        'blockedUsersProvider unavailable during feed fetch; using empty fallback',
+        name: 'FeedController',
+        error: e,
+        stackTrace: st,
+      );
+      return const <String>{};
+    }
+  }
+
+  void _applyRefreshFreshnessPin() {
+    if (_surface != FeedSurface.home) return;
+    final current = state.value;
+    if (current == null || current.items.length < 2) return;
+    final windowEnd =
+        current.items.length < _refreshFreshnessWindowSize
+            ? current.items.length
+            : _refreshFreshnessWindowSize;
+    final head = [...current.items.take(windowEnd)];
+    head.sort((a, b) {
+      final aMs = a.createdAt?.millisecondsSinceEpoch ?? 0;
+      final bMs = b.createdAt?.millisecondsSinceEpoch ?? 0;
+      final byTime = bMs.compareTo(aMs);
+      if (byTime != 0) return byTime;
+      return a.id.compareTo(b.id);
+    });
+    final nextItems = <RankedPost>[...head, ...current.items.skip(windowEnd)];
+    state = AsyncData(current.copyWith(items: nextItems));
   }
 
   void updatePostLikeOptimistic({

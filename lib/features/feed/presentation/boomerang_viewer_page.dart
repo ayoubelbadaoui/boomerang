@@ -1,5 +1,6 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -254,10 +255,11 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
                       child: Image.network(
                         image,
                         fit: BoxFit.cover,
-                        cacheWidth:
-                            (MediaQuery.sizeOf(context).width *
-                                    MediaQuery.devicePixelRatioOf(context))
-                                .round(),
+                        cacheWidth: computeCacheWidthForLogicalWidth(
+                          MediaQuery.sizeOf(context).width,
+                          MediaQuery.devicePixelRatioOf(context),
+                          maxPx: 2200,
+                        ),
                       ),
                     ),
                 ],

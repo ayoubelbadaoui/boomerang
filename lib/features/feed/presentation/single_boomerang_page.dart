@@ -23,6 +23,9 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
   String? _error;
   VideoPlayerController? _videoController;
   bool _videoInitStarted = false;
+  bool? _likedOverride;
+  int? _likesOverride;
+  bool _isClosing = false;
 
   @override
   void initState() {
@@ -43,9 +46,22 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
         return;
       }
       final (_, data) = result;
+      final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
+      final likedBy =
+          (data['likedBy'] as List?)?.whereType<String>().toSet() ?? <String>{};
+      final seededUi = resolveActivePostLikeUiState(
+        ref.read(postLikeUiEntryProvider(widget.boomerangId)),
+      );
+      final seededLiked =
+          seededUi?.liked ?? (uid != null && likedBy.contains(uid));
+      final serverLikes = ((data['likes'] ?? 0) as num).toInt();
+      final seededLikes =
+          seededUi?.likes ?? (serverLikes < 0 ? 0 : serverLikes);
       setState(() {
         _data = data;
         _ownerId = (data['userId'] ?? '') as String;
+        _likedOverride = seededLiked;
+        _likesOverride = seededLikes;
         _loading = false;
       });
     } catch (e) {
@@ -74,6 +90,25 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
       ..setVolume(0);
   }
 
+  void _closePage() {
+    if (_isClosing || !mounted) return;
+    _isClosing = true;
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+    Navigator.of(context).pop();
+  }
+
+  void _onToggleLike(bool liked, int likes) {
+    final safeLikes = likes < 0 ? 0 : likes;
+    if (!mounted) return;
+    setState(() {
+      _likedOverride = liked;
+      _likesOverride = safeLikes;
+    });
+  }
+
   @override
   void dispose() {
     _videoController?.dispose();
@@ -82,12 +117,20 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.light,
-        child: _buildBody(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _closePage();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        extendBodyBehindAppBar: true,
+        body: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light,
+          child: _buildBody(),
+        ),
       ),
     );
   }
@@ -110,16 +153,18 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
     // owner profile, never the cached `ownerIsPrivate` flag, to avoid
     // serving stale data after a privacy toggle.
     final me = ref.watch(currentUserProfileProvider).value;
-    final ownerProfile = ownerId.isEmpty
-        ? null
-        : ref.watch(userProfileByIdProvider(ownerId)).value;
+    final ownerProfile =
+        ownerId.isEmpty
+            ? null
+            : ref.watch(userProfileByIdProvider(ownerId)).value;
     final cachedFlag = data['ownerIsPrivate'] == true;
     final ownerIsPrivate =
         (ownerProfile?.isPrivate ?? cachedFlag) || cachedFlag;
     final isOwner = me != null && me.uid == ownerId;
-    final iFollow = ownerId.isEmpty
-        ? false
-        : (ref.watch(isFollowingStreamProvider(ownerId)).value ?? false);
+    final iFollow =
+        ownerId.isEmpty
+            ? false
+            : (ref.watch(isFollowingStreamProvider(ownerId)).value ?? false);
 
     if (ownerIsPrivate && !isOwner && !iFollow) {
       return _buildPrivateNotice();
@@ -148,6 +193,10 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
         BoomerangOverlay(
           boomerangId: widget.boomerangId,
           data: data,
+          onBackPressed: () => _closePage(),
+          likedOverride: _likedOverride,
+          likesOverride: _likesOverride,
+          onToggleLike: _onToggleLike,
         ),
       ],
     );
@@ -177,15 +226,12 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
                 SizedBox(height: 8.h),
                 Text(
                   'Follow this account to see their boomerangs.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14.sp,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 14.sp),
                   textAlign: TextAlign.center,
                 ),
                 SizedBox(height: 24.h),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => _closePage(),
                   child: const Text(
                     'Go back',
                     style: TextStyle(color: Colors.white),
@@ -199,7 +245,7 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
           left: 8.w,
           top: MediaQuery.viewPaddingOf(context).top + 8.h,
           child: IconButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => _closePage(),
             icon: const Icon(Icons.arrow_back, color: Colors.white),
           ),
         ),
@@ -223,7 +269,7 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
             ),
             SizedBox(height: 24.h),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => _closePage(),
               child: const Text(
                 'Go back',
                 style: TextStyle(color: Colors.white),

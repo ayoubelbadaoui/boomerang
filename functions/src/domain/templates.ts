@@ -3,7 +3,7 @@ import { APP_NAME } from '../config/constants';
 
 type TemplateBuilder = (payload: NotificationPayload, actor?: UserProfile) => TemplateResult;
 
-const fallbackActor = (actor?: UserProfile): string => actor?.username ?? actor?.id ?? 'Someone';
+const fallbackActor = (actor?: UserProfile): string => actor?.username ?? 'Someone';
 
 const templates: Record<NotificationType, TemplateBuilder> = {
   follow: (_payload, actor) => ({

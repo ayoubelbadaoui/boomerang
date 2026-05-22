@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:developer' show log;
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 
 class BoomerangProcessor {
   const BoomerangProcessor();
+  static const _logName = 'BoomerangProcessor';
 
   static List<List<String>> _encoderCandidates({
     required _EncodeTuning tuning,
@@ -23,8 +25,25 @@ class BoomerangProcessor {
       '0',
     ];
 
+    final x264Path = <String>[
+      '-c:v',
+      'libx264',
+      '-preset',
+      favorQuality ? 'slow' : 'medium',
+      '-crf',
+      '${tuning.crf}',
+      '-maxrate',
+      tuning.maxBitrate,
+      '-bufsize',
+      tuning.bufferSize,
+      '-profile:v',
+      'high',
+      ...common,
+    ];
+
     if (Platform.isIOS || Platform.isMacOS) {
       return [
+        x264Path,
         [
           '-c:v',
           'h264_videotoolbox',
@@ -42,23 +61,52 @@ class BoomerangProcessor {
       ];
     }
     return [
-      [
-        '-c:v',
-        'libx264',
-        '-preset',
-        favorQuality ? 'medium' : 'fast',
-        '-crf',
-        '${tuning.crf}',
-        '-maxrate',
-        tuning.maxBitrate,
-        '-bufsize',
-        tuning.bufferSize,
-        '-profile:v',
-        'high',
-        ...common,
-      ],
+      x264Path,
       ['-c:v', 'mpeg4', '-q:v', favorQuality ? '2' : '3', ...common],
     ];
+  }
+
+  static int debugPosterTargetWidth({
+    required int sourceWidth,
+    int maxWidth = 1600,
+  }) => _adaptivePosterWidth(sourceWidth, maxWidth: maxWidth);
+
+  static List<List<String>> debugEncoderArgsFor({
+    required int width,
+    required int height,
+    required double fps,
+    required bool favorQuality,
+  }) {
+    final tuning = _tuningFor(
+      width: width,
+      height: height,
+      fps: fps,
+      favorQuality: favorQuality,
+    );
+    return _encoderCandidates(tuning: tuning, favorQuality: favorQuality);
+  }
+
+  static Map<String, Object> debugTuning({
+    required int width,
+    required int height,
+    required double fps,
+    required bool favorQuality,
+  }) {
+    final tuning = _tuningFor(
+      width: width,
+      height: height,
+      fps: fps,
+      favorQuality: favorQuality,
+    );
+    return <String, Object>{
+      'targetBitrate': tuning.targetBitrate,
+      'maxBitrate': tuning.maxBitrate,
+      'bufferSize': tuning.bufferSize,
+      'crf': tuning.crf,
+      'gop': tuning.gop,
+      'minKeyint': tuning.minKeyint,
+      'fps': tuning.fps,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -68,11 +116,18 @@ class BoomerangProcessor {
 
   Future<String> generatePoster(
     String inputPath, {
-    int targetWidth = 720,
+    int? targetWidth,
+    int maxWidth = 1600,
+    int jpegQuality = 2,
     String? videoFilter,
   }) async {
     _assertExists(inputPath);
     final outPath = await _tmpPath('poster', 'jpg');
+    final sourceStats = await _probeVideoStats(inputPath);
+    final resolvedTargetWidth =
+        targetWidth ??
+        _adaptivePosterWidth(sourceStats.width, maxWidth: maxWidth);
+    final scaleFilter = 'scale=$resolvedTargetWidth:-2:flags=lanczos';
 
     Future<bool> tryPoster(String vf, {String seekTo = '0.1'}) async {
       final session = await FFmpegKit.executeWithArguments([
@@ -86,7 +141,7 @@ class BoomerangProcessor {
         '-frames:v',
         '1',
         '-q:v',
-        '2',
+        '$jpegQuality',
         outPath,
       ]);
       return ReturnCode.isSuccess(await session.getReturnCode()) &&
@@ -95,16 +150,20 @@ class BoomerangProcessor {
     }
 
     final fullVf = [
-      'scale=$targetWidth:-1',
+      scaleFilter,
       if (videoFilter != null && videoFilter.isNotEmpty) videoFilter,
     ].join(',');
 
     // Try seeking to 0.1 s first; fall back to frame 0 for very short videos.
     for (final seek in ['0.1', '0']) {
-      if (await tryPoster(fullVf, seekTo: seek)) return outPath;
+      if (await tryPoster(fullVf, seekTo: seek)) {
+        await _logOutputStats(label: 'poster', path: outPath);
+        return outPath;
+      }
 
       if (videoFilter != null && videoFilter.isNotEmpty) {
-        if (await tryPoster('scale=$targetWidth:-1', seekTo: seek)) {
+        if (await tryPoster(scaleFilter, seekTo: seek)) {
+          await _logOutputStats(label: 'poster', path: outPath);
           return outPath;
         }
       }
@@ -415,7 +474,10 @@ class BoomerangProcessor {
             ? probedCycleDuration
             : estimatedCycleDuration;
     final cycles = (totalDurationSeconds / cycleDuration).ceil().clamp(1, 120);
-    if (cycles <= 1) return cyclePath;
+    if (cycles <= 1) {
+      await _logOutputStats(label: 'boomerang', path: cyclePath);
+      return cyclePath;
+    }
 
     final outPath = await _tmpPath('boomerang', 'mp4');
     final loopSession = await FFmpegKit.executeWithArguments([
@@ -435,6 +497,7 @@ class BoomerangProcessor {
     if (!ReturnCode.isSuccess(await loopSession.getReturnCode())) {
       return cyclePath;
     }
+    await _logOutputStats(label: 'boomerang', path: outPath);
     try {
       await File(cyclePath).delete();
     } catch (_) {}
@@ -444,7 +507,7 @@ class BoomerangProcessor {
   // ---------------------------------------------------------------------------
   // Core: frame-extraction approach.
   //
-  //  1. Extract raw frames as JPEGs (no fps filter — Android VFR breaks it)
+  //  1. Extract raw frames as PNGs (no fps filter — Android VFR breaks it)
   //  2. Build boomerang sequence in Dart (forward + reverse file copies)
   //  3. Encode image sequence to video
   // ---------------------------------------------------------------------------
@@ -470,7 +533,7 @@ class BoomerangProcessor {
       // fails with VFR timestamps).
       final cappedFps = targetFps.clamp(12, 60);
       final maxFrames = (segmentSeconds * cappedFps).ceil().clamp(12, 180);
-      final framePattern = '${tempDir.path}/$framePrefix%05d.jpg';
+      final framePattern = '${tempDir.path}/$framePrefix%05d.png';
 
       List<String> buildExtractArgs(String? vf) => <String>[
         '-y',
@@ -483,7 +546,7 @@ class BoomerangProcessor {
         '-vsync',
         '0',
         if (vf != null && vf.isNotEmpty) ...['-vf', vf],
-        '-q:v',
+        '-compression_level',
         '2',
         framePattern,
       ];
@@ -522,7 +585,7 @@ class BoomerangProcessor {
       final frames =
           tempDir.listSync().whereType<File>().where((f) {
               final name = f.path.split('/').last;
-              return name.startsWith(framePrefix) && name.endsWith('.jpg');
+              return name.startsWith(framePrefix) && name.endsWith('.png');
             }).toList()
             ..sort((a, b) => a.path.compareTo(b.path));
 
@@ -538,14 +601,14 @@ class BoomerangProcessor {
       // Extremely short sources can decode to a single frame. Duplicate it so
       // the encoded cycle has a valid temporal span across devices.
       if (frames.length == 1) {
-        final dup = File('${tempDir.path}/$framePrefix${'00002'}.jpg');
+        final dup = File('${tempDir.path}/$framePrefix${'00002'}.png');
         await frames.first.copy(dup.path);
         frames.add(dup);
       }
 
       // Step 2: build forward + reverse sequence.
       int seqIndex = 1;
-      String seqName(int i) => '$seqPrefix${i.toString().padLeft(5, '0')}.jpg';
+      String seqName(int i) => '$seqPrefix${i.toString().padLeft(5, '0')}.png';
 
       for (final f in frames) {
         await f.copy('${tempDir.path}/${seqName(seqIndex++)}');
@@ -574,7 +637,7 @@ class BoomerangProcessor {
         favorQuality: favorQuality,
       );
       final fpsStr = effectiveFps.toStringAsFixed(2);
-      final seqPattern = '${tempDir.path}/$seqPrefix%05d.jpg';
+      final seqPattern = '${tempDir.path}/$seqPrefix%05d.png';
 
       String? lastLogs;
       for (final enc in _encoderCandidates(
@@ -597,6 +660,7 @@ class BoomerangProcessor {
         ]);
         if (ReturnCode.isSuccess(await encSession.getReturnCode()) &&
             await _hasVideoContent(outPath)) {
+          await _logOutputStats(label: 'boomerang_cycle', path: outPath);
           return outPath;
         }
         lastLogs = await encSession.getAllLogsAsString();
@@ -722,6 +786,27 @@ class BoomerangProcessor {
       }
     } catch (_) {}
   }
+
+  static Future<void> _logOutputStats({
+    required String label,
+    required String path,
+  }) async {
+    try {
+      final stats = await _probeVideoStats(path);
+      final duration = await _probeDurationSeconds(path);
+      final bitrate = await _probeBitrateKbps(path);
+      final sizeBytes = await File(path).length();
+      log(
+        '$label => ${stats.width}x${stats.height} @ ${stats.fps.toStringAsFixed(2)}fps, '
+        'duration=${duration?.toStringAsFixed(2) ?? 'n/a'}s, '
+        'bitrate=${bitrate?.toStringAsFixed(0) ?? 'n/a'}kb/s, '
+        'size=${(sizeBytes / (1024 * 1024)).toStringAsFixed(2)}MB, path=$path',
+        name: _logName,
+      );
+    } catch (_) {
+      // Diagnostics only.
+    }
+  }
 }
 
 class _VideoStats {
@@ -817,6 +902,27 @@ Future<double?> _probeDurationSeconds(String inputPath) async {
   return (hours * 3600) + (minutes * 60) + seconds;
 }
 
+Future<double?> _probeBitrateKbps(String inputPath) async {
+  final session = await FFmpegKit.executeWithArguments([
+    '-hide_banner',
+    '-i',
+    inputPath,
+    '-f',
+    'null',
+    '-',
+  ]);
+  final logs = (await session.getAllLogsAsString()) ?? '';
+  final match = RegExp(r'bitrate:\s*(\d+(?:\.\d+)?)\s*kb/s').firstMatch(logs);
+  return double.tryParse(match?.group(1) ?? '');
+}
+
+int _adaptivePosterWidth(int sourceWidth, {int maxWidth = 1600}) {
+  final safeSource = sourceWidth <= 0 ? 1280 : sourceWidth;
+  final clampedMax = maxWidth.clamp(720, 2160);
+  final upscaled = (safeSource * 0.9).round();
+  return upscaled.clamp(720, clampedMax);
+}
+
 _EncodeTuning _tuningFor({
   required int width,
   required int height,
@@ -831,36 +937,36 @@ _EncodeTuning _tuningFor({
 
   double baseMbps;
   if (pixels <= 640 * 360) {
-    baseMbps = 1.6;
+    baseMbps = 2.0;
   } else if (pixels <= 854 * 480) {
-    baseMbps = 2.4;
+    baseMbps = 3.0;
   } else if (pixels <= 1280 * 720) {
-    baseMbps = 4.5;
+    baseMbps = 5.8;
   } else if (pixels <= 1920 * 1080) {
-    baseMbps = 7.5;
+    baseMbps = 9.0;
   } else if (pixels <= 2560 * 1440) {
-    baseMbps = 11.5;
+    baseMbps = 13.5;
   } else {
-    baseMbps = 15.0;
+    baseMbps = 18.0;
   }
 
   var targetMbps = baseMbps * fpsFactor;
   if (favorQuality) {
-    targetMbps = targetMbps.clamp(2.2, 20.0);
+    targetMbps = targetMbps.clamp(2.8, 24.0);
   } else {
-    targetMbps = targetMbps.clamp(1.4, 8.0);
+    targetMbps = targetMbps.clamp(1.6, 9.0);
   }
-  final maxMbps = (targetMbps * 1.35).clamp(2.8, 24.0);
-  final bufMbps = (maxMbps * 2).clamp(6.0, 40.0);
+  final maxMbps = (targetMbps * 1.45).clamp(3.4, 28.0);
+  final bufMbps = (maxMbps * 2).clamp(7.0, 48.0);
 
   final crf =
       pixels <= 854 * 480
-          ? 20
-          : pixels <= 1280 * 720
           ? 19
-          : pixels <= 1920 * 1080
+          : pixels <= 1280 * 720
           ? 18
-          : 17;
+          : pixels <= 1920 * 1080
+          ? 17
+          : 16;
   final gop = (safeFps * 2).round().clamp(24, 180);
 
   String fmt(double mbps) => '${mbps.toStringAsFixed(1)}M';

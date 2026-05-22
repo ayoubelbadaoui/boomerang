@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderTemplate = renderTemplate;
 const constants_1 = require("../config/constants");
-const fallbackActor = (actor) => actor?.username ?? actor?.id ?? 'Someone';
+const fallbackActor = (actor) => actor?.username ?? 'Someone';
 const templates = {
     follow: (_payload, actor) => ({
         title: 'New follower',

@@ -265,7 +265,7 @@ class ChatController extends StateNotifier<ChatState> {
       await _repo.sendMessage(
         conversationId,
         senderId: currentUserId,
-        text: boomerangId,
+        text: '📫 Shared a post',
         type: MessageType.sharedPost,
         replyToMessageId: reply?.id,
         replyToText: _replyPreviewText(reply),

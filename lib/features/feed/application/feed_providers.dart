@@ -13,8 +13,9 @@ enum RankingFlag { enabled, disabled }
 
 /// Compile-time default. Set to [RankingFlag.disabled] for a global rollback
 /// without touching Firestore.
-final rankingFeatureFlagProvider =
-    Provider<RankingFlag>((_) => RankingFlag.enabled);
+final rankingFeatureFlagProvider = Provider<RankingFlag>(
+  (_) => RankingFlag.enabled,
+);
 
 final rankingPolicyProvider = Provider<RankingPolicy>(
   (_) => const DefaultRankingPolicy(),
@@ -24,3 +25,9 @@ final feedRepoProvider = Provider<FeedRepo>((ref) {
   final repo = ref.watch(boomerangRepoProvider);
   return FirestoreFeedRepo(repo);
 });
+
+/// Max time feed fetch waits for auth-scoped stream dependencies (following /
+/// blocked) during account/session transitions before using a safe fallback.
+final feedDependencyMaxWaitProvider = Provider<Duration>(
+  (_) => const Duration(milliseconds: 1200),
+);

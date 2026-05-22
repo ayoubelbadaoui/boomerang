@@ -1,6 +1,8 @@
 import 'dart:developer' as dev;
 
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/features/feed/application/feed_controller.dart';
+import 'package:boomerang/features/feed/domain/ranking/feed_surface.dart';
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
@@ -138,6 +140,8 @@ class AccountSwitchController {
 
       if (success) {
         invalidateUserScopedProviders(_container);
+        _container.invalidate(feedControllerProvider(FeedSurface.home));
+        _container.invalidate(feedControllerProvider(FeedSurface.discovery));
         _container.invalidate(profileControllerProvider);
         _container.invalidate(userBoomerangsControllerProvider);
         _container.invalidate(storedAccountsProvider);

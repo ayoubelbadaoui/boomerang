@@ -240,6 +240,13 @@ class UploadController extends Notifier<UploadState> {
       speed: args.speed,
       videoFilter: args.colorFilter,
     );
+    try {
+      final outBytes = await File(outPath).length();
+      log(
+        'Processed boomerang ready. path=$outPath, sizeMB=${(outBytes / (1024 * 1024)).toStringAsFixed(2)}',
+        name: _logName,
+      );
+    } catch (_) {}
 
     // Generate a local poster early for the progress bar thumbnail
     String? localPoster;
@@ -247,6 +254,7 @@ class UploadController extends Notifier<UploadState> {
       localPoster = await processor.generatePoster(
         inputPath,
         targetWidth: 480,
+        jpegQuality: 4,
         videoFilter: args.colorFilter,
       );
     } catch (e, st) {
@@ -367,6 +375,8 @@ class UploadController extends Notifier<UploadState> {
         log('Generating poster from input video for upload', name: _logName);
         posterPath = await processor.generatePoster(
           inputPath,
+          maxWidth: 1800,
+          jpegQuality: 2,
           videoFilter: colorFilter,
         );
       } catch (e, st) {
@@ -377,13 +387,24 @@ class UploadController extends Notifier<UploadState> {
           stackTrace: st,
         );
         if (fallbackVideoPath != null) {
-          posterPath = await processor.generatePoster(fallbackVideoPath);
+          posterPath = await processor.generatePoster(
+            fallbackVideoPath,
+            maxWidth: 1800,
+            jpegQuality: 2,
+          );
         }
       }
       if (posterPath == null) {
         log('Skipping poster upload: no poster path available', name: _logName);
         return null;
       }
+      try {
+        final posterBytes = await File(posterPath).length();
+        log(
+          'Poster ready for upload. path=$posterPath, sizeKB=${(posterBytes / 1024).toStringAsFixed(1)}',
+          name: _logName,
+        );
+      } catch (_) {}
       final posterRef = storage.ref(
         'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );

@@ -22,6 +22,7 @@ import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/features/feed/presentation/widgets/comments_sheet.dart';
 import 'package:boomerang/features/chat/presentation/widgets/send_post_sheet.dart';
 import 'package:boomerang/core/widgets/boomerang_feed_post_shimmer.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 
 class HomeTab extends ConsumerWidget {
@@ -78,6 +79,10 @@ class _PaginatedBoomerangListState
     await ref.read(feedControllerProvider(FeedSurface.home).notifier).refresh();
   }
 
+  void _retryLoad() {
+    ref.invalidate(feedControllerProvider(FeedSurface.home));
+  }
+
   @override
   Widget build(BuildContext context) {
     final blockedSet =
@@ -85,12 +90,43 @@ class _PaginatedBoomerangListState
     final followingAsync = ref.watch(followingIdsProvider);
     final feedAsync = ref.watch(feedControllerProvider(FeedSurface.home));
 
-    final hasFollowing = followingAsync.hasValue;
-    final hasFeedValue = feedAsync.hasValue;
-    final feedState = feedAsync.value;
+    if (feedAsync.hasError) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(24.w, 24.h, 24.w, 120.h),
+        children: [
+          SizedBox(height: 40.h),
+          Icon(
+            Icons.wifi_tethering_error_rounded,
+            size: 42.r,
+            color: Colors.black38,
+          ),
+          SizedBox(height: 12.h),
+          Text(
+            'Could not load your home feed right now.',
+            style: TextStyle(fontSize: 15.sp, color: Colors.black87),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Tap retry to fetch fresh posts.',
+            style: TextStyle(fontSize: 13.sp, color: Colors.black45),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 16.h),
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: _retryLoad,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ),
+        ],
+      );
+    }
 
-    // Render shimmer until both the follow set and the first page resolve.
-    if (!hasFollowing || !hasFeedValue) {
+    final feedState = feedAsync.value;
+    if (feedState == null) {
       return ColoredBox(
         color: InstagramShimmerColors.lightCanvas,
         child: ListView(
@@ -113,7 +149,7 @@ class _PaginatedBoomerangListState
 
     // Defense-in-depth: re-apply block + privacy filters in case the user
     // blocked someone mid-session. The repo already filters at fetch time.
-    final visibleItems = feedState!.items
+    final visibleItems = feedState.items
         .where((p) {
           if (blockedSet.contains(p.authorId)) return false;
           if (p.ownerIsPrivate &&
@@ -253,7 +289,9 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
     final liveName = ref.watch(userDisplayNameByIdProvider(userId));
     final fallbackName = (data['userName'] ?? 'user').toString();
     final displayName =
-        liveName?.trim().isNotEmpty == true ? liveName!.trim() : fallbackName;
+        (liveName != null && liveName.trim().isNotEmpty)
+            ? liveName.trim()
+            : fallbackName;
     final handle = '@${displayName.replaceAll(' ', '_').toLowerCase()}';
     final avatarFallback = data['userAvatar'] as String?;
     final image = data['imageUrl'] as String?; // optional poster
@@ -1085,10 +1123,11 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
     Widget posterLayer() {
       if (hasPoster) {
-        final cacheW =
-            (MediaQuery.sizeOf(context).width *
-                    MediaQuery.devicePixelRatioOf(context))
-                .round();
+        final cacheW = computeCacheWidthForLogicalWidth(
+          MediaQuery.sizeOf(context).width,
+          MediaQuery.devicePixelRatioOf(context),
+          maxPx: 2000,
+        );
         return Image.network(
           widget.posterUrl!,
           fit: BoxFit.cover,

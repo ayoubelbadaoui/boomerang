@@ -1,5 +1,6 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
+import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:boomerang/core/widgets/boomerang_pager_shimmer.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -616,10 +617,11 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
                       child: Image.network(
                         widget.image!,
                         fit: BoxFit.cover,
-                        cacheWidth:
-                            (MediaQuery.sizeOf(context).width *
-                                    MediaQuery.devicePixelRatioOf(context))
-                                .round(),
+                        cacheWidth: computeCacheWidthForLogicalWidth(
+                          MediaQuery.sizeOf(context).width,
+                          MediaQuery.devicePixelRatioOf(context),
+                          maxPx: 2200,
+                        ),
                         frameBuilder: (context, child, frame, wasSyncLoaded) {
                           final done = frame != null || wasSyncLoaded;
                           if (done && !_posterResolved) {

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processNotification = processNotification;
+exports.normalizePayload = normalizePayload;
 const firebase_1 = require("../infrastructure/firebase");
 const deviceTokenRepository_1 = require("../infrastructure/repositories/deviceTokenRepository");
 const userRepository_1 = require("../infrastructure/repositories/userRepository");
@@ -56,7 +57,7 @@ function normalizePayload(targetUserId, raw) {
         actorName: raw.actorName,
         actorAvatar: raw.actorAvatar,
         targetUserId,
-        resourceId: raw.resourceId,
+        resourceId: (raw.resourceId ?? raw.boomerangId),
         resourceType: raw.resourceType,
         text: raw.text,
         createdAt: raw.createdAt,

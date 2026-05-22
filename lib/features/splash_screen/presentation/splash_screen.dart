@@ -53,15 +53,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final targetLogicalSize = (shortestSide * 0.45).clamp(180.0, 248.0);
+    // Snap to physical pixels so the logo avoids subpixel interpolation.
+    final snappedLogicalSize =
+        (targetLogicalSize * devicePixelRatio).round() / devicePixelRatio;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
         child: Image.asset(
           Assets.logoLight,
-          width: 248,
-          height: 248,
+          width: snappedLogicalSize,
+          height: snappedLogicalSize,
           fit: BoxFit.contain,
-          cacheWidth: 496,
         ),
       ),
     );

@@ -1,6 +1,19 @@
 import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 import 'package:flutter/material.dart';
 
+int computeCacheWidthForLogicalWidth(
+  double logicalWidth,
+  double dpr, {
+  int minPx = 120,
+  int maxPx = 2000,
+  double scale = 1.0,
+}) {
+  final safeLogical = logicalWidth <= 0 ? 120.0 : logicalWidth;
+  final safeDpr = dpr <= 0 ? 1.0 : dpr;
+  final raw = (safeLogical * safeDpr * scale).round();
+  return raw.clamp(minPx, maxPx);
+}
+
 /// Poster cell for profile / discover / hashtag grids: IG shimmer until the image
 /// decodes (or errors). Intended under a parent [ShimmerScope] (e.g. wrapping the
 /// whole grid). If no scope is found, wraps itself in [ShimmerScope].
@@ -12,6 +25,7 @@ class BoomerangGridThumbnail extends StatefulWidget {
     this.cacheWidth,
     this.phaseShift = 0,
     this.overlays = const [],
+
     /// When false, uses [ResizeImage] + [NetworkImage] like Discover.
     this.usePlainNetwork = true,
   });
@@ -100,11 +114,7 @@ class _BoomerangGridThumbnailState extends State<BoomerangGridThumbnail> {
     } else {
       final w = widget.cacheWidth ?? 1;
       builtImage = Image(
-        image: ResizeImage.resizeIfNeeded(
-          w,
-          null,
-          NetworkImage(url),
-        ),
+        image: ResizeImage.resizeIfNeeded(w, null, NetworkImage(url)),
         fit: BoxFit.cover,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSync) {
@@ -123,11 +133,7 @@ class _BoomerangGridThumbnailState extends State<BoomerangGridThumbnail> {
 
     return Stack(
       fit: StackFit.expand,
-      children: [
-        builtImage,
-        _shimmerLayer(shift: shift),
-        ...widget.overlays,
-      ],
+      children: [builtImage, _shimmerLayer(shift: shift), ...widget.overlays],
     );
   }
 

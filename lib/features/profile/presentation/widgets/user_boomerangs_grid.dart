@@ -37,23 +37,24 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Boomerang'),
-        content: const Text(
-          'Are you sure you want to delete this boomerang? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete Boomerang'),
+            content: const Text(
+              'Are you sure you want to delete this boomerang? This action cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     );
     if (confirmed != true || !context.mounted) return;
 
@@ -62,18 +63,22 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
           .read(userBoomerangsControllerProvider.notifier)
           .deleteBoomerang(boomerangId);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Boomerang deleted')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Boomerang deleted')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
     }
   }
 
-  void _showTileOptions(BuildContext context, WidgetRef ref, String boomerangId) {
+  void _showTileOptions(
+    BuildContext context,
+    WidgetRef ref,
+    String boomerangId,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -95,10 +100,16 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                ),
                 title: const Text(
                   'Delete Boomerang',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -157,19 +168,26 @@ class _UserBoomerangsGridState extends ConsumerState<UserBoomerangsGrid> {
                   final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
                   return InkWell(
                     onTap: () {
-                      final items = s.docs
-                          .map((d) => (id: d.id, data: d.data()))
-                          .toList();
+                      final items =
+                          s.docs
+                              .map((d) => (id: d.id, data: d.data()))
+                              .toList();
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => ProfileReelsPage(
-                            initialItems: items,
-                            initialIndex: index,
-                            hasMore: s.hasMore,
-                            onLoadMore: () => ref
-                                .read(userBoomerangsControllerProvider.notifier)
-                                .fetchNext(),
-                          ),
+                          builder:
+                              (_) => ProfileReelsPage(
+                                initialItems: items,
+                                initialIndex: index,
+                                hasMore: s.hasMore,
+                                onLoadMore:
+                                    () =>
+                                        ref
+                                            .read(
+                                              userBoomerangsControllerProvider
+                                                  .notifier,
+                                            )
+                                            .fetchNext(),
+                              ),
                         ),
                       );
                     },
@@ -240,61 +258,70 @@ class _GridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BoomerangGridThumbnail(
-      imageUrl: imageUrl,
-      borderRadius: BorderRadius.circular(12.r),
-      cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
-      phaseShift: phaseShift,
-      overlays: [
-        if (videoUrl != null && videoUrl!.isNotEmpty)
-          Positioned(
-            left: 8.w,
-            bottom: 8.h,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.fade(0.55),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.play_circle_filled,
-                    size: 14,
-                    color: Colors.white70,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cacheWidth = computeCacheWidthForLogicalWidth(
+          constraints.maxWidth,
+          MediaQuery.devicePixelRatioOf(context),
+          maxPx: 1200,
+        );
+        return BoomerangGridThumbnail(
+          imageUrl: imageUrl,
+          borderRadius: BorderRadius.circular(12.r),
+          cacheWidth: cacheWidth,
+          phaseShift: phaseShift,
+          overlays: [
+            if (videoUrl != null && videoUrl!.isNotEmpty)
+              Positioned(
+                left: 8.w,
+                bottom: 8.h,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.fade(0.55),
+                    borderRadius: BorderRadius.circular(12.r),
                   ),
-                  SizedBox(width: 4.w),
-                  Text(
-                    'Preview',
-                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.play_circle_filled,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
+                      SizedBox(width: 4.w),
+                      Text(
+                        'Preview',
+                        style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ),
-        if (onMoreTap != null)
-          Positioned(
-            top: 4.h,
-            right: 4.w,
-            child: GestureDetector(
-              onTap: onMoreTap,
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: EdgeInsets.all(4.r),
-                decoration: BoxDecoration(
-                  color: Colors.black.fade(0.45),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.more_vert,
-                  color: Colors.white,
-                  size: 18.r,
                 ),
               ),
-            ),
-          ),
-      ],
+            if (onMoreTap != null)
+              Positioned(
+                top: 4.h,
+                right: 4.w,
+                child: GestureDetector(
+                  onTap: onMoreTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: EdgeInsets.all(4.r),
+                    decoration: BoxDecoration(
+                      color: Colors.black.fade(0.45),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.more_vert,
+                      color: Colors.white,
+                      size: 18.r,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

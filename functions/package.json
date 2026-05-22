@@ -2,7 +2,8 @@
   "name": "boomerang-functions",
   "description": "Cloud Functions for Boomerang",
   "scripts": {
-    "build": "npx tsc"
+    "build": "npx tsc",
+    "test": "node --test test/**/*.test.js"
   },
   "engines": {
     "node": ">=22"

@@ -71,23 +71,27 @@ class _UserBoomerangsGridForUserState
                   final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
                   return InkWell(
                     onTap: () {
-                      final items = s.docs
-                          .map((d) => (id: d.id, data: d.data()))
-                          .toList();
+                      final items =
+                          s.docs
+                              .map((d) => (id: d.id, data: d.data()))
+                              .toList();
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => ProfileReelsPage(
-                            initialItems: items,
-                            initialIndex: index,
-                            hasMore: s.hasMore,
-                            onLoadMore: () => ref
-                                .read(
-                                  userBoomerangsByUserControllerProvider(
-                                    widget.userId,
-                                  ).notifier,
-                                )
-                                .fetchNext(),
-                          ),
+                          builder:
+                              (_) => ProfileReelsPage(
+                                initialItems: items,
+                                initialIndex: index,
+                                hasMore: s.hasMore,
+                                onLoadMore:
+                                    () =>
+                                        ref
+                                            .read(
+                                              userBoomerangsByUserControllerProvider(
+                                                widget.userId,
+                                              ).notifier,
+                                            )
+                                            .fetchNext(),
+                              ),
                         ),
                       );
                     },
@@ -158,40 +162,49 @@ class _GridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BoomerangGridThumbnail(
-      imageUrl: imageUrl,
-      borderRadius: BorderRadius.circular(12.r),
-      cacheWidth: (180 * MediaQuery.devicePixelRatioOf(context)).round(),
-      phaseShift: phaseShift,
-      overlays: [
-        if (videoUrl != null && videoUrl!.isNotEmpty)
-          Positioned(
-            left: 8.w,
-            bottom: 8.h,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.fade(0.55),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.play_circle_filled,
-                    size: 14,
-                    color: Colors.white70,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cacheWidth = computeCacheWidthForLogicalWidth(
+          constraints.maxWidth,
+          MediaQuery.devicePixelRatioOf(context),
+          maxPx: 1200,
+        );
+        return BoomerangGridThumbnail(
+          imageUrl: imageUrl,
+          borderRadius: BorderRadius.circular(12.r),
+          cacheWidth: cacheWidth,
+          phaseShift: phaseShift,
+          overlays: [
+            if (videoUrl != null && videoUrl!.isNotEmpty)
+              Positioned(
+                left: 8.w,
+                bottom: 8.h,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.fade(0.55),
+                    borderRadius: BorderRadius.circular(12.r),
                   ),
-                  SizedBox(width: 4.w),
-                  Text(
-                    'Preview',
-                    style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.play_circle_filled,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
+                      SizedBox(width: 4.w),
+                      Text(
+                        'Preview',
+                        style: TextStyle(color: Colors.white, fontSize: 12.sp),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

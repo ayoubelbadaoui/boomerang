@@ -215,10 +215,10 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   Future<void> _setupCam(CameraDescription desc) async {
     final prev = _cam;
     if (prev != null) await prev.dispose();
-    final c = CameraController(desc, ResolutionPreset.high, enableAudio: false);
-    _cam = c;
+    CameraController? c;
     try {
-      await c.initialize();
+      c = await _buildControllerWithPresetFallback(desc);
+      _cam = c;
       await c.lockCaptureOrientation(DeviceOrientation.portraitUp);
       _minZoom = await c.getMinZoomLevel();
       _maxZoom = await c.getMaxZoomLevel();
@@ -232,7 +232,32 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       if (Platform.isIOS) await _restoreAudioSession();
     } catch (e) {
       debugPrint('Camera init error: $e');
+      await c?.dispose();
+      _cam = null;
     }
+  }
+
+  Future<CameraController> _buildControllerWithPresetFallback(
+    CameraDescription desc,
+  ) async {
+    final presets = <ResolutionPreset>[
+      ResolutionPreset.veryHigh,
+      ResolutionPreset.high,
+      ResolutionPreset.medium,
+    ];
+    Object? lastError;
+    for (final preset in presets) {
+      final candidate = CameraController(desc, preset, enableAudio: false);
+      try {
+        await candidate.initialize();
+        debugPrint('Camera initialized with preset=$preset');
+        return candidate;
+      } catch (e) {
+        lastError = e;
+        await candidate.dispose();
+      }
+    }
+    throw Exception('Could not initialize camera: $lastError');
   }
 
   Future<void> _restoreAudioSession() async {

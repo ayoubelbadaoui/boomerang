@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 
 import 'package:boomerang/features/chat/domain/message_entity.dart';
+import 'package:boomerang/features/chat/presentation/widgets/chat_image_renderer.dart';
 import 'package:boomerang/features/chat/presentation/widgets/audio_message_player.dart';
 import 'package:boomerang/features/chat/presentation/widgets/fullscreen_image_viewer.dart';
 
@@ -54,16 +55,18 @@ class MessageBubble extends StatelessWidget {
                     right: isMine ? 16.w : 60.w,
                     bottom: 8.h,
                   ),
-                  padding: _isMediaType
-                      ? EdgeInsets.all(4.w)
-                      : EdgeInsets.symmetric(
-                          horizontal: 16.w,
-                          vertical: 10.h,
-                        ),
+                  padding:
+                      _isMediaType
+                          ? EdgeInsets.all(4.w)
+                          : EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 10.h,
+                          ),
                   decoration: BoxDecoration(
-                    color: isMine
-                        ? theme.colorScheme.primary
-                        : const Color(0xFFF5F5F5),
+                    color:
+                        isMine
+                            ? theme.colorScheme.primary
+                            : const Color(0xFFF5F5F5),
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(16.r),
                       topRight: Radius.circular(16.r),
@@ -90,9 +93,10 @@ class MessageBubble extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOut,
-      color: highlighted
-          ? theme.colorScheme.primary.withValues(alpha: 0.10)
-          : Colors.transparent,
+      color:
+          highlighted
+              ? theme.colorScheme.primary.withValues(alpha: 0.10)
+              : Colors.transparent,
       child: child,
     );
   }
@@ -101,9 +105,10 @@ class MessageBubble extends StatelessWidget {
       message.isImage || message.isGif || message.isSharedPost;
 
   Widget _buildReplyPreview(ThemeData theme) {
-    final replyBg = isMine
-        ? Colors.white.withValues(alpha: 0.15)
-        : Colors.grey.withValues(alpha: 0.15);
+    final replyBg =
+        isMine
+            ? Colors.white.withValues(alpha: 0.15)
+            : Colors.grey.withValues(alpha: 0.15);
     final replyTextColor = isMine ? Colors.white70 : Colors.black54;
     final senderColor = isMine ? Colors.white : Colors.black87;
 
@@ -231,10 +236,7 @@ class _UnsentBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(
-            color: Colors.grey.shade300,
-            width: 1,
-          ),
+          border: Border.all(color: Colors.grey.shade300, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -242,9 +244,7 @@ class _UnsentBubble extends StatelessWidget {
             Icon(Icons.block, size: 14.sp, color: Colors.grey),
             SizedBox(width: 6.w),
             Text(
-              isMine
-                  ? 'You unsent a message'
-                  : 'This message was unsent',
+              isMine ? 'You unsent a message' : 'This message was unsent',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.grey,
                 fontStyle: FontStyle.italic,
@@ -275,9 +275,10 @@ class _TextContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textColor = isMine ? Colors.white : theme.colorScheme.onSurface;
-    final timeColor = isMine
-        ? Colors.white.withValues(alpha: 0.7)
-        : theme.colorScheme.onSurfaceVariant;
+    final timeColor =
+        isMine
+            ? Colors.white.withValues(alpha: 0.7)
+            : theme.colorScheme.onSurfaceVariant;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,41 +322,56 @@ class _ImageContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heroTag = 'chat_image_$url';
+    final imageProvider = resolveChatImageProvider(url);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: () => FullscreenImageViewer.open(
-            context,
-            imageUrl: url,
-            heroTag: heroTag,
-          ),
+          onTap:
+              () => FullscreenImageViewer.open(
+                context,
+                imageUrl: url,
+                heroTag: heroTag,
+              ),
           child: Hero(
             tag: heroTag,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12.r),
-              child: Image.network(
-                url,
-                width: 200.w,
-                height: 200.w,
-                fit: BoxFit.cover,
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return SizedBox(
-                    width: 200.w,
-                    height: 200.w,
-                    child: const Center(child: CircularProgressIndicator()),
-                  );
-                },
-                errorBuilder: (_, __, ___) => SizedBox(
-                  width: 200.w,
-                  height: 200.w,
-                  child:
-                      const Center(child: Icon(Icons.broken_image_outlined)),
-                ),
-              ),
+              child:
+                  imageProvider == null
+                      ? SizedBox(
+                        width: 200.w,
+                        height: 200.w,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
+                      )
+                      : Image(
+                        image: imageProvider,
+                        width: 200.w,
+                        height: 200.w,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (_, child, progress) {
+                          if (progress == null) return child;
+                          return SizedBox(
+                            width: 200.w,
+                            height: 200.w,
+                            child: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        },
+                        errorBuilder:
+                            (_, __, ___) => SizedBox(
+                              width: 200.w,
+                              height: 200.w,
+                              child: const Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                      ),
             ),
           ),
         ),
@@ -363,9 +379,10 @@ class _ImageContent extends StatelessWidget {
         Text(
           time,
           style: theme.textTheme.labelSmall?.copyWith(
-            color: isMine
-                ? Colors.white.withValues(alpha: 0.7)
-                : theme.colorScheme.onSurfaceVariant,
+            color:
+                isMine
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : theme.colorScheme.onSurfaceVariant,
             fontSize: 10.sp,
           ),
         ),
@@ -398,11 +415,12 @@ class _GifContent extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: () => FullscreenImageViewer.open(
-            context,
-            imageUrl: url,
-            heroTag: heroTag,
-          ),
+          onTap:
+              () => FullscreenImageViewer.open(
+                context,
+                imageUrl: url,
+                heroTag: heroTag,
+              ),
           child: Hero(
             tag: heroTag,
             child: ClipRRect(
@@ -419,12 +437,14 @@ class _GifContent extends StatelessWidget {
                     child: const Center(child: CircularProgressIndicator()),
                   );
                 },
-                errorBuilder: (_, __, ___) => SizedBox(
-                  width: 200.w,
-                  height: 120.w,
-                  child:
-                      const Center(child: Icon(Icons.broken_image_outlined)),
-                ),
+                errorBuilder:
+                    (_, __, ___) => SizedBox(
+                      width: 200.w,
+                      height: 120.w,
+                      child: const Center(
+                        child: Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
               ),
             ),
           ),
@@ -438,18 +458,18 @@ class _GifContent extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9.sp,
                 fontWeight: FontWeight.w700,
-                color: isMine
-                    ? Colors.white.withValues(alpha: 0.5)
-                    : Colors.grey,
+                color:
+                    isMine ? Colors.white.withValues(alpha: 0.5) : Colors.grey,
               ),
             ),
             SizedBox(width: 6.w),
             Text(
               time,
               style: theme.textTheme.labelSmall?.copyWith(
-                color: isMine
-                    ? Colors.white.withValues(alpha: 0.7)
-                    : theme.colorScheme.onSurfaceVariant,
+                color:
+                    isMine
+                        ? Colors.white.withValues(alpha: 0.7)
+                        : theme.colorScheme.onSurfaceVariant,
                 fontSize: 10.sp,
               ),
             ),
@@ -482,9 +502,10 @@ class _SharedPostContent extends StatelessWidget {
     final imageUrl = message.sharedPostImageUrl;
     final userName = message.sharedPostUserName ?? '';
     final caption = message.sharedPostCaption ?? '';
-    final timeColor = isMine
-        ? Colors.white.withValues(alpha: 0.7)
-        : theme.colorScheme.onSurfaceVariant;
+    final timeColor =
+        isMine
+            ? Colors.white.withValues(alpha: 0.7)
+            : theme.colorScheme.onSurfaceVariant;
 
     return GestureDetector(
       onTap: onTap,
@@ -507,16 +528,17 @@ class _SharedPostContent extends StatelessWidget {
                     return SizedBox(
                       width: 220.w,
                       height: 180.w,
-                      child:
-                          const Center(child: CircularProgressIndicator()),
+                      child: const Center(child: CircularProgressIndicator()),
                     );
                   },
-                  errorBuilder: (_, __, ___) => SizedBox(
-                    width: 220.w,
-                    height: 180.w,
-                    child: const Center(
-                        child: Icon(Icons.broken_image_outlined)),
-                  ),
+                  errorBuilder:
+                      (_, __, ___) => SizedBox(
+                        width: 220.w,
+                        height: 180.w,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
                 ),
               ),
             Padding(
@@ -594,9 +616,10 @@ class _AudioContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeColor = isMine
-        ? Colors.white.withValues(alpha: 0.7)
-        : theme.colorScheme.onSurfaceVariant;
+    final timeColor =
+        isMine
+            ? Colors.white.withValues(alpha: 0.7)
+            : theme.colorScheme.onSurfaceVariant;
 
     return SizedBox(
       width: 200.w,

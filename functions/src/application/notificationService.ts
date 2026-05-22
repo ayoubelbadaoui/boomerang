@@ -58,14 +58,14 @@ export async function processNotification(targetUserId: string, raw: RawNotifica
   await sendToUserDevices(targetUserId, deviceTokens, message);
 }
 
-function normalizePayload(targetUserId: string, raw: RawNotification): NotificationPayload {
+export function normalizePayload(targetUserId: string, raw: RawNotification): NotificationPayload {
   return {
     type: (raw.type as string) ?? 'unknown',
     actorUserId: raw.actorUserId as string | undefined,
     actorName: raw.actorName as string | undefined,
     actorAvatar: raw.actorAvatar as string | undefined,
     targetUserId,
-    resourceId: raw.resourceId as string | undefined,
+    resourceId: (raw.resourceId ?? raw.boomerangId) as string | undefined,
     resourceType: raw.resourceType as string | undefined,
     text: raw.text as string | undefined,
     createdAt: raw.createdAt as FirebaseFirestore.Timestamp | undefined,
