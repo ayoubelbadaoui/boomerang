@@ -26,6 +26,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   final Set<String> _selectedIds = {};
   bool _isSelectionMode = false;
 
+  Future<void> _refreshConversations() async {
+    ref.invalidate(conversationsStreamProvider);
+    try {
+      await ref.read(conversationsStreamProvider.future);
+    } catch (_) {
+      // Keep pull-to-refresh resilient even if the upstream stream errors.
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -268,18 +277,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ),
               SizedBox(height: 4.h),
               Expanded(
-                child:
-                    filtered.isEmpty
-                        ? _EmptyState(theme: theme)
-                        : _ConversationList(
-                          conversations: filtered,
-                          currentUid: uid,
-                          searchQuery: _query,
-                          onTap: _openChat,
-                          isSelectionMode: _isSelectionMode,
-                          selectedIds: _selectedIds,
-                          onEnterSelection: _enterSelectionMode,
-                        ),
+                child: RefreshIndicator(
+                  color: Colors.black,
+                  onRefresh: _refreshConversations,
+                  child:
+                      filtered.isEmpty
+                          ? _RefreshableEmptyState(theme: theme)
+                          : _ConversationList(
+                            conversations: filtered,
+                            currentUid: uid,
+                            searchQuery: _query,
+                            onTap: _openChat,
+                            isSelectionMode: _isSelectionMode,
+                            selectedIds: _selectedIds,
+                            onEnterSelection: _enterSelectionMode,
+                          ),
+                ),
               ),
             ],
           );
@@ -403,6 +416,7 @@ class _ConversationList extends ConsumerWidget {
     });
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       itemCount: sorted.length,
       itemBuilder: (context, index) {
@@ -603,6 +617,23 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RefreshableEmptyState extends StatelessWidget {
+  const _RefreshableEmptyState({required this.theme});
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      children: [
+        SizedBox(height: MediaQuery.sizeOf(context).height * 0.25),
+        _EmptyState(theme: theme),
+      ],
     );
   }
 }
