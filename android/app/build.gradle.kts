@@ -10,7 +10,8 @@ plugins {
 
 android {
     namespace = "com.alwa.bm"
-    compileSdk = flutter.compileSdkVersion
+    // Keep this explicit so Android 12+ splash attributes always resolve.
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -29,7 +30,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

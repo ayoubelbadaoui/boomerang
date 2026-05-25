@@ -40,12 +40,19 @@ class FirestoreChatRepo implements ChatRepo {
         .where('participants', arrayContains: userId)
         .orderBy('lastMessageAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => ConversationDto.fromFirestore(doc).toEntity())
-            .toList())
+        .map(
+          (snap) =>
+              snap.docs
+                  .map((doc) => ConversationDto.fromFirestore(doc).toEntity())
+                  .toList(),
+        )
         .handleError((e, st) {
-      debugPrint('streamConversations error: $e');
-    });
+          if (e is FirebaseException && e.code == 'permission-denied') {
+            // Account/session transitions can briefly race stream permissions.
+            return;
+          }
+          debugPrint('streamConversations error: $e');
+        });
   }
 
   @override
@@ -53,10 +60,11 @@ class FirestoreChatRepo implements ChatRepo {
     final sorted = List<String>.from(participantIds)..sort();
 
     // Check for any legacy conversation created with an auto-generated ID.
-    final existing = await _conversations
-        .where('participants', isEqualTo: sorted)
-        .limit(1)
-        .get();
+    final existing =
+        await _conversations
+            .where('participants', isEqualTo: sorted)
+            .limit(1)
+            .get();
 
     if (existing.docs.isNotEmpty) return existing.docs.first.id;
 
@@ -96,12 +104,15 @@ class FirestoreChatRepo implements ChatRepo {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => MessageDto.fromFirestore(doc).toEntity())
-            .toList())
+        .map(
+          (snap) =>
+              snap.docs
+                  .map((doc) => MessageDto.fromFirestore(doc).toEntity())
+                  .toList(),
+        )
         .handleError((e, st) {
-      debugPrint('streamMessages error: $e');
-    });
+          debugPrint('streamMessages error: $e');
+        });
   }
 
   @override
@@ -127,22 +138,23 @@ class FirestoreChatRepo implements ChatRepo {
     // account and the sender has not been accepted as a follower. This is
     // the last line of defence even if the UI tries to bypass the gate.
     final convSnap = await conversationRef.get();
-    final participants =
-        List<String>.from(convSnap.data()?['participants'] ?? []);
+    final participants = List<String>.from(
+      convSnap.data()?['participants'] ?? [],
+    );
     for (final recipient in participants) {
       if (recipient == senderId) continue;
       final recipientDoc =
           await _firestore.collection('users').doc(recipient).get();
       final recipientData = recipientDoc.data();
-      final recipientIsPrivate =
-          (recipientData?['isPrivate'] ?? false) == true;
+      final recipientIsPrivate = (recipientData?['isPrivate'] ?? false) == true;
       if (!recipientIsPrivate) continue;
-      final followsRecipient = await _firestore
-          .collection('following')
-          .doc(senderId)
-          .collection('users')
-          .doc(recipient)
-          .get();
+      final followsRecipient =
+          await _firestore
+              .collection('following')
+              .doc(senderId)
+              .collection('users')
+              .doc(recipient)
+              .get();
       if (!followsRecipient.exists) {
         throw ChatPermissionException(
           'This account is private. They have to accept your follow request '
@@ -234,11 +246,12 @@ class FirestoreChatRepo implements ChatRepo {
     required DateTime before,
     int limit = 20,
   }) async {
-    final snapshot = await _messages(conversationId)
-        .orderBy('createdAt', descending: true)
-        .startAfter([Timestamp.fromDate(before)])
-        .limit(limit)
-        .get();
+    final snapshot =
+        await _messages(conversationId)
+            .orderBy('createdAt', descending: true)
+            .startAfter([Timestamp.fromDate(before)])
+            .limit(limit)
+            .get();
 
     return snapshot.docs
         .map((doc) => MessageDto.fromFirestore(doc).toEntity())
@@ -246,18 +259,16 @@ class FirestoreChatRepo implements ChatRepo {
   }
 
   @override
-  Future<void> markMessagesAsSeen(
-    String conversationId,
-    String userId,
-  ) async {
-    final snapshot = await _messages(conversationId)
-        .where('status', whereIn: ['sent', 'delivered'])
-        .get();
+  Future<void> markMessagesAsSeen(String conversationId, String userId) async {
+    final snapshot =
+        await _messages(
+          conversationId,
+        ).where('status', whereIn: ['sent', 'delivered']).get();
 
     if (snapshot.docs.isEmpty) {
-      await _conversations
-          .doc(conversationId)
-          .update({'unreadCount.$userId': 0});
+      await _conversations.doc(conversationId).update({
+        'unreadCount.$userId': 0,
+      });
       return;
     }
 
@@ -267,10 +278,9 @@ class FirestoreChatRepo implements ChatRepo {
         batch.update(doc.reference, {'status': 'seen'});
       }
     }
-    batch.update(
-      _conversations.doc(conversationId),
-      {'unreadCount.$userId': 0},
-    );
+    batch.update(_conversations.doc(conversationId), {
+      'unreadCount.$userId': 0,
+    });
     await batch.commit();
   }
 
@@ -302,13 +312,12 @@ class FirestoreChatRepo implements ChatRepo {
     final convSnap = await conversationRef.get();
     final convData = convSnap.data();
     if (convData != null) {
-      final latestMsg = await _messages(conversationId)
-          .orderBy('createdAt', descending: true)
-          .limit(1)
-          .get();
+      final latestMsg =
+          await _messages(
+            conversationId,
+          ).orderBy('createdAt', descending: true).limit(1).get();
 
-      if (latestMsg.docs.isNotEmpty &&
-          latestMsg.docs.first.id == messageId) {
+      if (latestMsg.docs.isNotEmpty && latestMsg.docs.first.id == messageId) {
         await conversationRef.update({'lastMessage': 'Message unsent'});
       }
     }
@@ -326,10 +335,10 @@ class FirestoreChatRepo implements ChatRepo {
 
     await messageRef.delete();
 
-    final latestSnap = await _messages(conversationId)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
-        .get();
+    final latestSnap =
+        await _messages(
+          conversationId,
+        ).orderBy('createdAt', descending: true).limit(1).get();
 
     if (latestSnap.docs.isEmpty) {
       await conversationRef.update({
@@ -401,8 +410,7 @@ class FirestoreChatRepo implements ChatRepo {
   }) async {
     final convRef = _conversations.doc(conversationId);
     final snap = await convRef.get();
-    final participants =
-        List<String>.from(snap.data()?['participants'] ?? []);
+    final participants = List<String>.from(snap.data()?['participants'] ?? []);
 
     final isLastParticipant =
         participants.length <= 1 && participants.contains(userId);

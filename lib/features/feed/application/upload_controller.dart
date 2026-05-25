@@ -70,6 +70,8 @@ final uploadControllerProvider =
 class UploadController extends Notifier<UploadState> {
   _PublishArgs? _lastArgs;
   static const _logName = 'BoomerangRepo';
+  static const _uploadPosterMaxWidth = 1400;
+  static const _uploadPosterJpegQuality = 2;
 
   @override
   UploadState build() => UploadState.idle;
@@ -212,8 +214,10 @@ class UploadController extends Notifier<UploadState> {
     final processor = ref.read(boomerangProcessorProvider);
     final storage = ref.read(storageProvider);
     final repo = ref.read(boomerangRepoProvider);
+    final totalTimer = Stopwatch()..start();
 
     // --- Phase 1: Processing (FFmpeg) ---
+    final processingTimer = Stopwatch()..start();
     log('Phase=processing start', name: _logName);
     state = const UploadState(phase: UploadPhase.processing);
 
@@ -248,13 +252,14 @@ class UploadController extends Notifier<UploadState> {
       );
     } catch (_) {}
 
-    // Generate a local poster early for the progress bar thumbnail
+    // Generate poster once and reuse it for both preview and upload to reduce
+    // end-to-end publish latency.
     String? localPoster;
     try {
       localPoster = await processor.generatePoster(
         inputPath,
-        targetWidth: 480,
-        jpegQuality: 4,
+        maxWidth: _uploadPosterMaxWidth,
+        jpegQuality: _uploadPosterJpegQuality,
         videoFilter: args.colorFilter,
       );
     } catch (e, st) {
@@ -265,8 +270,14 @@ class UploadController extends Notifier<UploadState> {
         stackTrace: st,
       );
     }
+    processingTimer.stop();
+    log(
+      'Phase=processing done in ${processingTimer.elapsedMilliseconds}ms',
+      name: _logName,
+    );
 
     // --- Phase 2: Uploading (video + poster in parallel) ---
+    final uploadTimer = Stopwatch()..start();
     log('Phase=uploading start. output=$outPath', name: _logName);
     state = UploadState(
       phase: UploadPhase.uploading,
@@ -280,6 +291,7 @@ class UploadController extends Notifier<UploadState> {
       processor,
       inputPath,
       args.colorFilter,
+      preferredPosterPath: localPoster,
       fallbackVideoPath: outPath,
     );
 
@@ -291,8 +303,14 @@ class UploadController extends Notifier<UploadState> {
       'posterUrlReady=${posterUrl != null && posterUrl.isNotEmpty}',
       name: _logName,
     );
+    uploadTimer.stop();
+    log(
+      'Phase=uploading done in ${uploadTimer.elapsedMilliseconds}ms',
+      name: _logName,
+    );
 
     // --- Phase 3: Finalizing (Firestore write) ---
+    final finalizeTimer = Stopwatch()..start();
     log('Phase=finalizing start. writing Firestore post', name: _logName);
     state = state.copyWith(phase: UploadPhase.finalizing, progress: () => null);
 
@@ -309,10 +327,19 @@ class UploadController extends Notifier<UploadState> {
       ownerIsPrivate: me.isPrivate,
     );
     log('Firestore boomerang post created successfully', name: _logName);
+    finalizeTimer.stop();
+    log(
+      'Phase=finalizing done in ${finalizeTimer.elapsedMilliseconds}ms',
+      name: _logName,
+    );
 
     // --- Phase 4: Done ---
     state = state.copyWith(phase: UploadPhase.done);
-    log('Phase=done', name: _logName);
+    totalTimer.stop();
+    log(
+      'Phase=done. totalPublishMs=${totalTimer.elapsedMilliseconds}',
+      name: _logName,
+    );
 
     // Auto-refresh profile grid so the new post appears immediately
     try {
@@ -367,31 +394,35 @@ class UploadController extends Notifier<UploadState> {
     BoomerangProcessor processor,
     String inputPath,
     String? colorFilter, {
+    String? preferredPosterPath,
     String? fallbackVideoPath,
   }) async {
     try {
-      String? posterPath;
-      try {
-        log('Generating poster from input video for upload', name: _logName);
-        posterPath = await processor.generatePoster(
-          inputPath,
-          maxWidth: 1800,
-          jpegQuality: 2,
-          videoFilter: colorFilter,
-        );
-      } catch (e, st) {
-        log(
-          'Primary poster generation failed; trying fallback video',
-          name: _logName,
-          error: e,
-          stackTrace: st,
-        );
-        if (fallbackVideoPath != null) {
+      String? posterPath = preferredPosterPath;
+
+      if (posterPath == null || !await File(posterPath).exists()) {
+        try {
+          log('Generating poster from input video for upload', name: _logName);
           posterPath = await processor.generatePoster(
-            fallbackVideoPath,
-            maxWidth: 1800,
-            jpegQuality: 2,
+            inputPath,
+            maxWidth: _uploadPosterMaxWidth,
+            jpegQuality: _uploadPosterJpegQuality,
+            videoFilter: colorFilter,
           );
+        } catch (e, st) {
+          log(
+            'Primary poster generation failed; trying fallback video',
+            name: _logName,
+            error: e,
+            stackTrace: st,
+          );
+          if (fallbackVideoPath != null) {
+            posterPath = await processor.generatePoster(
+              fallbackVideoPath,
+              maxWidth: _uploadPosterMaxWidth,
+              jpegQuality: _uploadPosterJpegQuality,
+            );
+          }
         }
       }
       if (posterPath == null) {

@@ -125,10 +125,27 @@ GoRouter _buildRouter(Listenable refresh) => GoRouter(
     ),
     GoRoute(
       path: '/boomerang/:boomerangId',
-      builder:
-          (c, s) => SingleBoomerangPage(
-            boomerangId: s.pathParameters['boomerangId']!,
-          ),
+      pageBuilder: (c, s) {
+        final boomerangId = s.pathParameters['boomerangId']!;
+        return CustomTransitionPage<void>(
+          key: s.pageKey,
+          transitionDuration: const Duration(milliseconds: 280),
+          reverseTransitionDuration: const Duration(milliseconds: 340),
+          child: SingleBoomerangPage(boomerangId: boomerangId),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInOutCubic,
+            );
+            final scale = Tween<double>(begin: 0.985, end: 1.0).animate(curved);
+            return FadeTransition(
+              opacity: curved,
+              child: ScaleTransition(scale: scale, child: child),
+            );
+          },
+        );
+      },
     ),
   ],
   redirect: (context, state) {

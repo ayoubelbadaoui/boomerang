@@ -2,6 +2,7 @@ import 'package:boomerang/features/auth/application/auth_controller.dart';
 import 'package:boomerang/features/auth/domain/auth_state.dart';
 import 'package:boomerang/features/auth/infrastructure/auth_repo.dart';
 import 'package:boomerang/features/auth/infrastructure/firebase_auth_repo.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -260,6 +261,17 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
         }
       }
     } catch (e, st) {
+      final isPermissionRace =
+          e is FirebaseException &&
+          (e.code == 'permission-denied' || e.code == 'unauthenticated');
+      final liveUid = auth.currentUser?.uid;
+      final isSwitching = ref.read(isSwitchingAccountProvider);
+      if (isPermissionRace &&
+          (isSwitching || liveUid == null || liveUid != u.uid)) {
+        // Expected during account switch: previous profile stream can emit one
+        // terminal auth/rules error between signOut and next signIn.
+        continue;
+      }
       // Do not emit null on transient listener failures (network/blips), as
       // that can look like an auth loss to downstream guards.
       debugPrint('currentUserProfileProvider stream error: $e\n$st');

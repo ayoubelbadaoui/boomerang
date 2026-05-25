@@ -163,7 +163,8 @@ class _PaginatedBoomerangListState
 
     final hasMore = feedState.hasMore;
     final isLoading = feedState.isLoading;
-    final isLoadingInitial = visibleItems.isEmpty && isLoading;
+    final isLoadingInitial =
+        visibleItems.isEmpty && (isLoading || feedState.pageIndex == 0);
 
     return RefreshIndicator(
       color: Colors.black,

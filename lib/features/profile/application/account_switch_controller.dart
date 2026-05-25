@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as dev;
 
 import 'package:boomerang/core/auth/user_session.dart';
@@ -7,6 +8,7 @@ import 'package:boomerang/core/notifications/push_notifications_service.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Application-layer controller that owns the account-switching flow.
@@ -17,6 +19,17 @@ class AccountSwitchController {
   AccountSwitchController(this._container);
   final ProviderContainer _container;
   int _switchGeneration = 0;
+
+  Future<void> _waitForTargetAuthSession(String targetUid) async {
+    final auth = _container.read(firebaseAuthProvider);
+    if (auth.currentUser?.uid != targetUid) {
+      await auth
+          .authStateChanges()
+          .firstWhere((u) => u?.uid == targetUid)
+          .timeout(const Duration(seconds: 10));
+    }
+    await auth.currentUser?.getIdToken(true);
+  }
 
   /// Whether stored credentials exist for [uid].
   Future<bool> hasCredentials(String uid) async {
@@ -139,6 +152,22 @@ class AccountSwitchController {
       }
 
       if (success) {
+        try {
+          await _waitForTargetAuthSession(target.uid);
+        } on TimeoutException {
+          dev.log(
+            '[multi-account] switchTo FAILED: auth state did not settle '
+            'for ${target.uid}',
+          );
+          return false;
+        } on FirebaseAuthException catch (e, st) {
+          dev.log(
+            '[multi-account] switchTo FAILED: token refresh failed',
+            error: e,
+            stackTrace: st,
+          );
+          return false;
+        }
         invalidateUserScopedProviders(_container);
         _container.invalidate(feedControllerProvider(FeedSurface.home));
         _container.invalidate(feedControllerProvider(FeedSurface.discovery));

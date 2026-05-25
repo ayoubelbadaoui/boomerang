@@ -28,14 +28,40 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _password = TextEditingController();
   bool _obscure = true;
   bool _rememberMe = false;
+  bool _initializedFromRoute = false;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initializedFromRoute) return;
+    _initializedFromRoute = true;
+
+    final addAccountMode =
+        GoRouterState.of(context).uri.queryParameters['addAccount'] == '1';
+
+    if (addAccountMode) {
+      _email.clear();
+      _password.clear();
+      _rememberMe = false;
+      return;
+    }
+
     if (kDebugMode) {
       _email.text = 'ayoubeb209@gmail.com';
       _password.text = 'ayoub123';
     }
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
   }
 
   Future<void> _showForgotPasswordDialog() async {
@@ -200,12 +226,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         );
                     if (!mounted) return;
                     final authResult = ref.read(authControllerProvider);
-                    final next = ref.read(authStateProvider).asData?.value;
                     final loginSucceeded =
                         authResult.error == null &&
                         authResult.success != null &&
-                        next != null;
+                        ref.read(firebaseAuthProvider).currentUser != null;
                     if (loginSucceeded) {
+                      try {
+                        await ref
+                            .read(firebaseAuthProvider)
+                            .currentUser
+                            ?.getIdToken(true);
+                      } catch (_) {}
                       final container = ProviderScope.containerOf(
                         context,
                         listen: false,

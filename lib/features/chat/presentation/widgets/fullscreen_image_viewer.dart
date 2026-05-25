@@ -18,9 +18,20 @@ class FullscreenImageViewer extends StatelessWidget {
     required String heroTag,
   }) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (_) => FullscreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 280),
+        reverseTransitionDuration: const Duration(milliseconds: 360),
+        pageBuilder:
+            (_, __, ___) =>
+                FullscreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
+        transitionsBuilder: (_, animation, __, child) {
+          final opacity = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInOutCubic,
+          );
+          return FadeTransition(opacity: opacity, child: child);
+        },
       ),
     );
   }
@@ -38,35 +49,40 @@ class FullscreenImageViewer extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Center(
-              child:
-                  imageProvider == null
-                      ? const Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white54,
-                        size: 48,
-                      )
-                      : InteractiveViewer(
-                        minScale: 1,
-                        maxScale: 5,
-                        child: Image(
-                          image: imageProvider,
-                          fit: BoxFit.contain,
-                          loadingBuilder: (_, child, progress) {
-                            if (progress == null) return child;
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            );
-                          },
-                          errorBuilder:
-                              (_, __, ___) => const Icon(
-                                Icons.broken_image_outlined,
-                                color: Colors.white54,
-                                size: 48,
-                              ),
+              child: Hero(
+                tag: heroTag,
+                createRectTween:
+                    (begin, end) => MaterialRectArcTween(begin: begin, end: end),
+                child:
+                    imageProvider == null
+                        ? const Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.white54,
+                          size: 48,
+                        )
+                        : InteractiveViewer(
+                          minScale: 1,
+                          maxScale: 5,
+                          child: Image(
+                            image: imageProvider,
+                            fit: BoxFit.contain,
+                            loadingBuilder: (_, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              );
+                            },
+                            errorBuilder:
+                                (_, __, ___) => const Icon(
+                                  Icons.broken_image_outlined,
+                                  color: Colors.white54,
+                                  size: 48,
+                                ),
+                          ),
                         ),
-                      ),
+              ),
             ),
             Positioned.fill(
               child: GestureDetector(

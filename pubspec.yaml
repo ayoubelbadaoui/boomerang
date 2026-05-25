@@ -130,23 +130,26 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 flutter_native_splash:
-  color: "#000000"
-  image: assets/branding/logo_dark.png
-  color_dark: "#000000"
-  image_dark: assets/branding/logo_dark.png
+  color: "#FFFFFF"
+  image: assets/branding/icon_ios.png
+  color_dark: "#FFFFFF"
+  image_dark: assets/branding/icon_ios.png
   android: true
   ios: true
   web: false
+  android_gravity: center
+  ios_content_mode: scaleAspectFit
+  fullscreen: true
   android_12:
-    image: assets/branding/logo_dark.png
-    color: "#000000"
-    image_dark: assets/branding/logo_dark.png
-    color_dark: "#000000"
+    image: assets/branding/icon_ios.png
+    color: "#FFFFFF"
+    image_dark: assets/branding/icon_ios.png
+    color_dark: "#FFFFFF"
 
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/branding/icon_ios.png
   adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: assets/branding/icon_foreground.png
+  adaptive_icon_foreground: assets/branding/icon_standard.png
   remove_alpha_ios: true

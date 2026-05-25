@@ -19,8 +19,9 @@ final activeConversationProvider = StateProvider<String?>((ref) => null);
 // Firestore confirms the update.  Entries are removed after a short delay
 // once the user leaves the chat, giving Firestore time to propagate.
 
-final pendingSeenConversationIdsProvider =
-    StateProvider<Set<String>>((ref) => {});
+final pendingSeenConversationIdsProvider = StateProvider<Set<String>>(
+  (ref) => {},
+);
 
 // ── Repository ──────────────────────────────────────────────────────────
 
@@ -32,13 +33,21 @@ final chatRepoProvider = Provider<ChatRepo>((ref) {
 
 // ── Conversation list (real-time) ───────────────────────────────────────
 
-final conversationsStreamProvider =
-    StreamProvider<List<ConversationEntity>>((ref) {
+final conversationsStreamProvider = StreamProvider<List<ConversationEntity>>((
+  ref,
+) {
+  final isSwitching = ref.watch(isSwitchingAccountProvider);
+  if (isSwitching) return Stream.value([]);
+
+  final authUid = ref.watch(authStateProvider).asData?.value?.uid;
+  if (authUid == null || authUid.isEmpty) return Stream.value([]);
+
   final user = ref.watch(currentUserProfileProvider).value;
-  if (user == null) return Stream.value([]);
+  if (user == null || user.uid != authUid) return Stream.value([]);
+
   return ref
       .watch(chatRepoProvider)
-      .streamConversations(user.uid)
+      .streamConversations(authUid)
       .transform(
         StreamTransformer.fromHandlers(
           handleData: (data, sink) => sink.add(data),
@@ -53,24 +62,25 @@ final conversationsStreamProvider =
 // ── Per-conversation chat controller ────────────────────────────────────
 
 final chatControllerProvider =
-    StateNotifierProvider.family<ChatController, ChatState, String>(
-  (ref, conversationId) {
-    final repo = ref.watch(chatRepoProvider);
-    final user = ref.watch(currentUserProfileProvider).value;
-    return ChatController(
-      repo: repo,
-      conversationId: conversationId,
-      currentUserId: user?.uid ?? '',
-    );
-  },
-);
+    StateNotifierProvider.family<ChatController, ChatState, String>((
+      ref,
+      conversationId,
+    ) {
+      final repo = ref.watch(chatRepoProvider);
+      final user = ref.watch(currentUserProfileProvider).value;
+      return ChatController(
+        repo: repo,
+        conversationId: conversationId,
+        currentUserId: user?.uid ?? '',
+      );
+    });
 
 // ── Voice messages (single shared player app-wide) ──────────────────────
 
 final voiceMessagePlaybackProvider = StateNotifierProvider<
-    VoiceMessagePlaybackNotifier, VoiceMessagePlaybackState>(
-  (ref) => VoiceMessagePlaybackNotifier(),
-);
+  VoiceMessagePlaybackNotifier,
+  VoiceMessagePlaybackState
+>((ref) => VoiceMessagePlaybackNotifier());
 
 // ── DM permission gate ──────────────────────────────────────────────────
 //
@@ -86,8 +96,10 @@ class CanDirectMessage {
   final String? reason;
 }
 
-final canDirectMessageProvider =
-    Provider.family<CanDirectMessage, String>((ref, otherUid) {
+final canDirectMessageProvider = Provider.family<CanDirectMessage, String>((
+  ref,
+  otherUid,
+) {
   if (otherUid.isEmpty) {
     return const CanDirectMessage(allowed: true, reason: null);
   }
@@ -104,14 +116,14 @@ final canDirectMessageProvider =
   if (!other.isPrivate) {
     return const CanDirectMessage(allowed: true, reason: null);
   }
-  final iFollow =
-      ref.watch(isFollowingStreamProvider(otherUid)).value ?? false;
+  final iFollow = ref.watch(isFollowingStreamProvider(otherUid)).value ?? false;
   if (iFollow) {
     return const CanDirectMessage(allowed: true, reason: null);
   }
   return const CanDirectMessage(
     allowed: false,
-    reason: 'This account is private. They have to accept your follow '
+    reason:
+        'This account is private. They have to accept your follow '
         'request before you can message them.',
   );
 });
@@ -123,11 +135,8 @@ final totalUnreadProvider = Provider<int>((ref) {
   final uid = ref.watch(currentUserProfileProvider).value?.uid ?? '';
   if (uid.isEmpty) return 0;
   final pendingSeen = ref.watch(pendingSeenConversationIdsProvider);
-  return conversations.fold<int>(
-    0,
-    (sum, c) {
-      if (pendingSeen.contains(c.id)) return sum;
-      return sum + c.unreadCountFor(uid);
-    },
-  );
+  return conversations.fold<int>(0, (sum, c) {
+    if (pendingSeen.contains(c.id)) return sum;
+    return sum + c.unreadCountFor(uid);
+  });
 });

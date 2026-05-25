@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' show log;
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:boomerang/features/feed/domain/entities/ranked_post.dart';
@@ -95,14 +96,17 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
 
   late FeedSurface _surface;
   Timer? _rankReconcileTimer;
+  Timer? _transientRetryTimer;
   bool _rankReconcileInFlight = false;
   bool _bootFetchScheduled = false;
+  int _consecutiveFetchFailures = 0;
 
   @override
   Future<FeedState> build(FeedSurface arg) async {
     _surface = arg;
     ref.onDispose(() {
       _rankReconcileTimer?.cancel();
+      _transientRetryTimer?.cancel();
     });
     final authUid = ref.watch(
       authStateProvider.select((auth) => auth.asData?.value?.uid),
@@ -130,6 +134,30 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
     Future<void>(() async {
       _bootFetchScheduled = false;
       await fetchNext();
+    });
+  }
+
+  bool _isTransientFetchError(Object error) {
+    if (error is TimeoutException) return true;
+    if (error is! FirebaseException) return false;
+    switch (error.code) {
+      case 'permission-denied':
+      case 'unauthenticated':
+      case 'network-request-failed':
+      case 'unavailable':
+      case 'aborted':
+      case 'deadline-exceeded':
+      case 'failed-precondition':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  void _scheduleTransientRetry() {
+    _transientRetryTimer?.cancel();
+    _transientRetryTimer = Timer(const Duration(milliseconds: 700), () {
+      unawaited(fetchNext());
     });
   }
 
@@ -269,7 +297,20 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
           rankingVersion: rankingVersion,
         ),
       );
+      _consecutiveFetchFailures = 0;
     } catch (e, st) {
+      _consecutiveFetchFailures++;
+      final shouldRetryTransiently =
+          _consecutiveFetchFailures <= 2 && _isTransientFetchError(e);
+      if (shouldRetryTransiently) {
+        log(
+          'feed fetchNext transient failure; retrying (attempt $_consecutiveFetchFailures)',
+          name: 'FeedController',
+        );
+        state = AsyncData(current.copyWith(isLoading: false));
+        _scheduleTransientRetry();
+        return;
+      }
       log(
         'feed fetchNext failed',
         name: 'FeedController',
