@@ -99,6 +99,7 @@ flutter:
     - assets/onboarding/
     - assets/logo.png
     - assets/branding/logo.png
+    - assets/branding/app_icon_primary.png
     - assets/branding/logo_dark.png
     - assets/branding/logo_light.png
     - assets/bottom_navigation/
@@ -130,10 +131,10 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 flutter_native_splash:
-  color: "#FFFFFF"
-  image: assets/branding/icon_ios.png
-  color_dark: "#FFFFFF"
-  image_dark: assets/branding/icon_ios.png
+  color: "#000000"
+  image: assets/branding/app_icon_primary.png
+  color_dark: "#000000"
+  image_dark: assets/branding/app_icon_primary.png
   android: true
   ios: true
   web: false
@@ -141,15 +142,13 @@ flutter_native_splash:
   ios_content_mode: scaleAspectFit
   fullscreen: true
   android_12:
-    image: assets/branding/icon_ios.png
-    color: "#FFFFFF"
-    image_dark: assets/branding/icon_ios.png
-    color_dark: "#FFFFFF"
+    image: assets/branding/app_icon_primary.png
+    color: "#000000"
+    image_dark: assets/branding/app_icon_primary.png
+    color_dark: "#000000"
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/branding/icon_ios.png
-  adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: assets/branding/icon_standard.png
-  remove_alpha_ios: true
+  image_path: assets/branding/app_icon_primary.png
+  remove_alpha_ios: false

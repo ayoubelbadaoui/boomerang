@@ -61,10 +61,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         (targetLogicalSize * devicePixelRatio).round() / devicePixelRatio;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.black,
       body: Center(
         child: Image.asset(
-          Assets.logoLight,
+          Assets.appIconPrimary,
           width: snappedLogicalSize,
           height: snappedLogicalSize,
           fit: BoxFit.contain,
