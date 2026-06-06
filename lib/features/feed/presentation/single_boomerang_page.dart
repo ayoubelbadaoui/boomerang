@@ -1,4 +1,5 @@
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
+import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -173,23 +174,18 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
     _maybeStartVideo(data['videoUrl'] as String?);
 
     final imageUrl = data['imageUrl'] as String?;
+    final metadataAspect = _readAspect(data);
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (_videoController != null && _videoController!.value.isInitialized)
-          FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _videoController!.value.size.width,
-              height: _videoController!.value.size.height,
-              child: VideoPlayer(_videoController!),
-            ),
-          )
-        else if (imageUrl != null && imageUrl.isNotEmpty)
-          Image.network(imageUrl, fit: BoxFit.cover)
-        else
-          const ColoredBox(color: Colors.black),
+        FullscreenBoomerangMedia(
+          controller: _videoController,
+          posterUrl: imageUrl,
+          showPosterOverlay:
+              _videoController == null || !_videoController!.value.isInitialized,
+          explicitVideoAspectRatio: metadataAspect,
+        ),
         BoomerangOverlay(
           boomerangId: widget.boomerangId,
           data: data,
@@ -200,6 +196,15 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
         ),
       ],
     );
+  }
+
+  double? _readAspect(Map<String, dynamic> data) {
+    final value = data['videoAspectRatio'];
+    if (value is num) {
+      final parsed = value.toDouble();
+      if (parsed.isFinite && parsed > 0) return parsed;
+    }
+    return null;
   }
 
   Widget _buildPrivateNotice() {

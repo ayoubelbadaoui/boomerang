@@ -1,6 +1,6 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
-import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
+import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -222,7 +222,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
   @override
   Widget build(BuildContext context) {
     final image = widget.data['imageUrl'] as String?;
-    final hasVideo = _controller != null && _controller!.value.isInitialized;
+    final metadataAspect = _readAspect(widget.data);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -236,32 +236,12 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (hasVideo)
-                    FittedBox(
-                      fit: BoxFit.cover,
-                      clipBehavior: Clip.hardEdge,
-                      child: SizedBox(
-                        width: _controller!.value.size.width,
-                        height: _controller!.value.size.height,
-                        child: VideoPlayer(_controller!),
-                      ),
-                    )
-                  else
-                    Container(color: Colors.black),
-                  if (image != null && image.isNotEmpty && _showPosterOverlay)
-                    AnimatedOpacity(
-                      opacity: _showPosterOverlay ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 180),
-                      child: Image.network(
-                        image,
-                        fit: BoxFit.cover,
-                        cacheWidth: computeCacheWidthForLogicalWidth(
-                          MediaQuery.sizeOf(context).width,
-                          MediaQuery.devicePixelRatioOf(context),
-                          maxPx: 2200,
-                        ),
-                      ),
-                    ),
+                  FullscreenBoomerangMedia(
+                    controller: _controller,
+                    posterUrl: image,
+                    showPosterOverlay: _showPosterOverlay,
+                    explicitVideoAspectRatio: metadataAspect,
+                  ),
                 ],
               ),
             ),
@@ -310,5 +290,14 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
         ],
       ),
     );
+  }
+
+  double? _readAspect(Map<String, dynamic> data) {
+    final value = data['videoAspectRatio'];
+    if (value is num) {
+      final parsed = value.toDouble();
+      if (parsed.isFinite && parsed > 0) return parsed;
+    }
+    return null;
   }
 }

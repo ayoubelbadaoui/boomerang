@@ -1,7 +1,7 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
-import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:boomerang/core/widgets/boomerang_pager_shimmer.dart';
+import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
@@ -435,6 +435,7 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   void initState() {
     super.initState();
     _posterResolved = widget.image == null || widget.image!.isEmpty;
+    _primePosterResolution();
     _likedOverride = widget.initialLikedOverride;
     _likesOverride = widget.initialLikesOverride;
     _anim = AnimationController(
@@ -448,6 +449,7 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
     super.didUpdateWidget(oldWidget);
     if (widget.image != oldWidget.image) {
       _posterResolved = widget.image == null || widget.image!.isEmpty;
+      _primePosterResolution();
     }
     if (widget.initialLikedOverride != oldWidget.initialLikedOverride) {
       _likedOverride = widget.initialLikedOverride;
@@ -461,6 +463,19 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   void dispose() {
     _anim.dispose();
     super.dispose();
+  }
+
+  Future<void> _primePosterResolution() async {
+    final image = widget.image;
+    if (image == null || image.isEmpty || _posterResolved) return;
+    try {
+      await precacheImage(NetworkImage(image), context);
+    } catch (_) {
+      // Treat load failures as resolved so UI does not block.
+    } finally {
+      if (!mounted || _posterResolved) return;
+      setState(() => _posterResolved = true);
+    }
   }
 
   bool _isPagerMediaReady() {
@@ -597,52 +612,12 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
                             ? const Color(0xFF1A1A1A)
                             : Colors.black,
                   ),
-                  if (widget.controller != null &&
-                      widget.controller!.value.isInitialized)
-                    FittedBox(
-                      fit: BoxFit.cover,
-                      clipBehavior: Clip.hardEdge,
-                      child: SizedBox(
-                        width: widget.controller!.value.size.width,
-                        height: widget.controller!.value.size.height,
-                        child: VideoPlayer(widget.controller!),
-                      ),
-                    ),
-                  if (widget.image != null &&
-                      widget.image!.isNotEmpty &&
-                      widget.showPosterOverlay)
-                    AnimatedOpacity(
-                      opacity: widget.showPosterOverlay ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 180),
-                      child: Image.network(
-                        widget.image!,
-                        fit: BoxFit.cover,
-                        cacheWidth: computeCacheWidthForLogicalWidth(
-                          MediaQuery.sizeOf(context).width,
-                          MediaQuery.devicePixelRatioOf(context),
-                          maxPx: 2200,
-                        ),
-                        frameBuilder: (context, child, frame, wasSyncLoaded) {
-                          final done = frame != null || wasSyncLoaded;
-                          if (done && !_posterResolved) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (!mounted) return;
-                              setState(() => _posterResolved = true);
-                            });
-                          }
-                          return child;
-                        },
-                        errorBuilder: (_, __, ___) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!mounted) return;
-                            if (!_posterResolved) {
-                              setState(() => _posterResolved = true);
-                            }
-                          });
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ),
+                  FullscreenBoomerangMedia(
+                    controller: widget.controller,
+                    posterUrl: widget.image,
+                    showPosterOverlay: widget.showPosterOverlay,
+                    explicitVideoAspectRatio: _readAspect(widget.data),
+                  ),
                 ],
               ),
             ),
@@ -704,5 +679,14 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
         ),
       ],
     );
+  }
+
+  double? _readAspect(Map<String, dynamic> data) {
+    final value = data['videoAspectRatio'];
+    if (value is num) {
+      final parsed = value.toDouble();
+      if (parsed.isFinite && parsed > 0) return parsed;
+    }
+    return null;
   }
 }

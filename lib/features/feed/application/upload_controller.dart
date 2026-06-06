@@ -8,6 +8,7 @@ import 'package:boomerang/features/profile/domain/user_profile.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
 enum UploadPhase { idle, processing, uploading, finalizing, done, failed }
 
@@ -70,7 +71,7 @@ final uploadControllerProvider =
 class UploadController extends Notifier<UploadState> {
   _PublishArgs? _lastArgs;
   static const _logName = 'BoomerangRepo';
-  static const _uploadPosterMaxWidth = 1400;
+  static const _uploadPosterMaxWidth = 2000;
   static const _uploadPosterJpegQuality = 2;
 
   @override
@@ -244,6 +245,7 @@ class UploadController extends Notifier<UploadState> {
       speed: args.speed,
       videoFilter: args.colorFilter,
     );
+    final videoMetadata = await _probeVideoMetadata(outPath);
     try {
       final outBytes = await File(outPath).length();
       log(
@@ -325,6 +327,10 @@ class UploadController extends Notifier<UploadState> {
       caption: args.caption.isEmpty ? null : args.caption,
       hashtags: tags.isEmpty ? null : tags.toList(),
       ownerIsPrivate: me.isPrivate,
+      videoWidth: videoMetadata?.width,
+      videoHeight: videoMetadata?.height,
+      videoAspectRatio: videoMetadata?.aspectRatio,
+      videoDurationMs: videoMetadata?.durationMs,
     );
     log('Firestore boomerang post created successfully', name: _logName);
     finalizeTimer.stop();
@@ -464,4 +470,48 @@ class UploadController extends Notifier<UploadState> {
     }
     return tags.toList();
   }
+
+  Future<_VideoMetadata?> _probeVideoMetadata(String filePath) async {
+    VideoPlayerController? controller;
+    try {
+      controller = VideoPlayerController.file(File(filePath));
+      await controller.initialize();
+      final value = controller.value;
+      final width = value.size.width.round();
+      final height = value.size.height.round();
+      final durationMs = value.duration.inMilliseconds;
+      if (width <= 0 || height <= 0 || durationMs <= 0) return null;
+      final aspectRatio = value.aspectRatio;
+      return _VideoMetadata(
+        width: width,
+        height: height,
+        aspectRatio: aspectRatio > 0 ? aspectRatio : (width / height),
+        durationMs: durationMs,
+      );
+    } catch (e, st) {
+      log(
+        'Non-fatal: could not probe processed video metadata',
+        name: _logName,
+        error: e,
+        stackTrace: st,
+      );
+      return null;
+    } finally {
+      await controller?.dispose();
+    }
+  }
+}
+
+class _VideoMetadata {
+  const _VideoMetadata({
+    required this.width,
+    required this.height,
+    required this.aspectRatio,
+    required this.durationMs,
+  });
+
+  final int width;
+  final int height;
+  final double aspectRatio;
+  final int durationMs;
 }

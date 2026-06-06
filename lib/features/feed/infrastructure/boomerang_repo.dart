@@ -389,6 +389,10 @@ class BoomerangRepo {
     String? caption,
     List<String>? hashtags,
     bool ownerIsPrivate = false,
+    int? videoWidth,
+    int? videoHeight,
+    double? videoAspectRatio,
+    int? videoDurationMs,
   }) async {
     developer.log(
       'createBoomerangPost() start for user=$userId, hasCaption=${caption != null && caption.trim().isNotEmpty}, '
@@ -432,6 +436,10 @@ class BoomerangRepo {
       'userAvatar': userAvatar,
       'videoUrl': videoUrl,
       'imageUrl': imageUrl,
+      if (videoWidth != null) 'videoWidth': videoWidth,
+      if (videoHeight != null) 'videoHeight': videoHeight,
+      if (videoAspectRatio != null) 'videoAspectRatio': videoAspectRatio,
+      if (videoDurationMs != null) 'videoDurationMs': videoDurationMs,
       if (caption != null) 'caption': caption,
       if (normalizedTags.isNotEmpty) 'hashtags': normalizedTags,
       'ownerIsPrivate': ownerIsPrivate,
