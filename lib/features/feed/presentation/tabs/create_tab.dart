@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/infrastructure/gallery_video_ingestor.dart';
-import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
-import 'package:boomerang/features/feed/presentation/editor/video_trim_page.dart';
+import 'package:boomerang/features/feed/presentation/editor/gallery_import_flow.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 
 class CreateTab extends ConsumerStatefulWidget {
@@ -26,48 +23,23 @@ class _CreateTabState extends ConsumerState<CreateTab> {
     ).push(MaterialPageRoute(builder: (_) => const BoomerangCameraPage()));
   }
 
-  // Max window the user can pick from a gallery clip — matches the existing
-  // boomerang segment budget (1.5 s → 3 s looped).
-  static const _maxWindow = Duration(milliseconds: 1500);
-
   Future<void> _importFromGallery() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
     try {
       final picker = ImagePicker();
       // No maxDuration on the picker any more — the user trims it themselves.
-      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
+      XFile? file = await picker.pickVideo(source: ImageSource.gallery);
+
+      // On Android the host Activity can be reclaimed while the picker is open;
+      // when it comes back the result is delivered as "lost data" rather than
+      // through the awaited future, so pickVideo() resolves to null. Try to
+      // recover it before giving up — HomeShell also recovers on resume, but
+      // this covers the case where the Activity survived.
+      file ??= await _recoverImmediateLostVideo(picker);
       if (file == null) return;
 
-      final ingested = await GalleryVideoIngestor().ingest(file);
-      if (!mounted) return;
-
-      // Videos already within the allowed window skip the trim page.
-      final sourceDuration = ingested.duration;
-      if (sourceDuration <= _maxWindow) {
-        final trimmed = await const BoomerangProcessor().trimToMaxDuration(
-          ingested.file.path,
-          maxSeconds: 1.5,
-        );
-        if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => BoomerangEditorPage(inputFile: File(trimmed)),
-          ),
-        );
-        return;
-      }
-
-      // Long clip → let the user pick which slice to use.
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder:
-              (_) => VideoTrimPage(
-                inputFile: ingested.file,
-                maxWindow: _maxWindow,
-              ),
-        ),
-      );
+      await presentGalleryVideo(context, file);
     } on GalleryVideoIngestException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -80,6 +52,19 @@ class _CreateTabState extends ConsumerState<CreateTab> {
       ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Best-effort retrieval of a gallery video that the platform cached as
+  /// "lost data" after an Activity restart. Returns null on iOS / when there
+  /// is nothing to recover.
+  Future<XFile?> _recoverImmediateLostVideo(ImagePicker picker) async {
+    try {
+      final lost = await picker.retrieveLostData();
+      if (lost.isEmpty || lost.type != RetrieveType.video) return null;
+      return lost.file;
+    } catch (_) {
+      return null;
     }
   }
 

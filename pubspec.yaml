@@ -100,6 +100,8 @@ flutter:
     - assets/logo.png
     - assets/branding/logo.png
     - assets/branding/app_icon_primary.png
+    - assets/branding/app_icon_android_foreground.png
+    - assets/branding/app_icon_android_splash.png
     - assets/branding/logo_dark.png
     - assets/branding/logo_light.png
     - assets/bottom_navigation/
@@ -135,6 +137,8 @@ flutter_native_splash:
   image: assets/branding/app_icon_primary.png
   color_dark: "#000000"
   image_dark: assets/branding/app_icon_primary.png
+  image_android: assets/branding/app_icon_android_splash.png
+  image_dark_android: assets/branding/app_icon_android_splash.png
   android: true
   ios: true
   web: false
@@ -142,15 +146,17 @@ flutter_native_splash:
   ios_content_mode: scaleAspectFit
   fullscreen: true
   android_12:
-    image: assets/branding/app_icon_primary.png
+    image: assets/branding/app_icon_android_foreground.png
     color: "#000000"
-    image_dark: assets/branding/app_icon_primary.png
+    icon_background_color: "#000000"
+    image_dark: assets/branding/app_icon_android_foreground.png
     color_dark: "#000000"
+    icon_background_color_dark: "#000000"
 
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/branding/app_icon_primary.png
   adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: assets/branding/app_icon_primary.png
+  adaptive_icon_foreground: assets/branding/app_icon_android_foreground.png
   remove_alpha_ios: false

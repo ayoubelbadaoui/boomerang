@@ -13,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/features/feed/presentation/hashtag_feed_page.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:boomerang/features/feed/presentation/boomerang_pager_page.dart';
+import 'package:boomerang/features/feed/presentation/widgets/boomerang_grid_video_tile.dart';
 import 'package:boomerang/core/widgets/boomerang_grid_shimmers.dart';
 import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:boomerang/core/widgets/instagram_shimmer.dart';
@@ -363,6 +364,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
                     ? liveName!.trim()
                     : fallbackName;
             final poster = (d['imageUrl'] ?? '') as String;
+            final video = (d['videoUrl'] ?? '') as String;
             final avatar = d['userAvatar'] as String?;
             final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
             final tileWidth =
@@ -380,6 +382,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
                         (_) => BoomerangPagerPage(
                           initialId: post.id,
                           initialData: d,
+                          feedSurface: FeedSurface.discovery,
                         ),
                   ),
                 );
@@ -390,12 +393,13 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
                 children: [
                   AspectRatio(
                     aspectRatio: aspectRatio,
-                    child: BoomerangGridThumbnail(
+                    child: BoomerangGridVideoTile(
+                      postId: post.id,
+                      videoUrl: video.isNotEmpty ? video : null,
                       imageUrl: poster.isNotEmpty ? poster : null,
                       borderRadius: BorderRadius.circular(18.r),
                       cacheWidth: cacheW,
                       phaseShift: i * 0.025,
-                      usePlainNetwork: false,
                     ),
                   ),
                   SizedBox(height: 8.h),
@@ -548,6 +552,7 @@ class _BmgGridContent extends ConsumerWidget {
                       ? liveName!.trim()
                       : fallbackName;
               final poster = (d['imageUrl'] ?? '') as String;
+              final video = (d['videoUrl'] ?? '') as String;
               final avatar = (d['userAvatar'] as String?);
               final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
               final tileWidth =
@@ -574,12 +579,13 @@ class _BmgGridContent extends ConsumerWidget {
                   children: [
                     AspectRatio(
                       aspectRatio: aspectRatio,
-                      child: BoomerangGridThumbnail(
+                      child: BoomerangGridVideoTile(
+                        postId: id,
+                        videoUrl: video.isNotEmpty ? video : null,
                         imageUrl: poster.isNotEmpty ? poster : null,
                         borderRadius: BorderRadius.circular(18.r),
                         cacheWidth: cacheW,
                         phaseShift: i * 0.025,
-                        usePlainNetwork: false,
                       ),
                     ),
                     SizedBox(height: 8.h),

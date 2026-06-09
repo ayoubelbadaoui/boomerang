@@ -1,6 +1,9 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
 import 'package:boomerang/core/widgets/boomerang_pager_shimmer.dart';
+import 'package:boomerang/features/feed/application/feed_controller.dart';
+import 'package:boomerang/features/feed/domain/entities/ranked_post.dart';
+import 'package:boomerang/features/feed/domain/ranking/feed_surface.dart';
 import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -17,11 +20,18 @@ class BoomerangPagerPage extends ConsumerStatefulWidget {
     required this.initialData,
     this.targetCommentId,
     this.targetReplyId,
+    this.feedSurface,
   });
   final String initialId;
   final Map<String, dynamic> initialData;
   final String? targetCommentId;
   final String? targetReplyId;
+
+  /// When set, subsequent posts are paged from the ranked [FeedController] for
+  /// this surface (preserving the feed's ordering) instead of the global
+  /// chronological timeline. Used so opening a post from Discovery keeps
+  /// scrolling within the Discovery feed.
+  final FeedSurface? feedSurface;
 
   @override
   ConsumerState<BoomerangPagerPage> createState() => _BoomerangPagerPageState();
@@ -32,9 +42,14 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   final _videoWarmups = <String, Future<void>>{};
   final _likedOverrides = <String, bool>{};
   final _likeCountOverrides = <String, int>{};
+  final _seenIds = <String>{};
   bool _loading = false;
   bool _hasMore = true;
   dynamic _last;
+
+  // Absolute index of the next item to consume from the ranked feed surface
+  // (only used when [widget.feedSurface] is set).
+  int _surfaceNextIndex = 0;
   late final PageController _pageController;
   int _currentPage = 0;
   int _prewarmedUntil = -1;
@@ -50,7 +65,9 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     super.initState();
     _pageController = PageController(initialPage: 0);
     _docs.add((id: widget.initialId, data: widget.initialData));
+    _seenIds.add(widget.initialId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initSurfaceCursor();
       _advancePrewarmWindow(fromIndex: 0, count: _initialPrewarmCount);
       _fetchNext();
     });
@@ -81,7 +98,24 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     super.dispose();
   }
 
+  void _initSurfaceCursor() {
+    final surface = widget.feedSurface;
+    if (surface == null) return;
+    final items =
+        ref.read(feedControllerProvider(surface)).value?.items ??
+        const <RankedPost>[];
+    final idx = items.indexWhere((p) => p.id == widget.initialId);
+    // Continue right after the tapped post when found; otherwise start from the
+    // top of the loaded feed (the tapped id is already in _seenIds so it won't
+    // be duplicated).
+    _surfaceNextIndex = idx >= 0 ? idx + 1 : 0;
+  }
+
   Future<void> _fetchNext() async {
+    if (widget.feedSurface != null) {
+      await _fetchNextFromSurface();
+      return;
+    }
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
     try {
@@ -103,6 +137,51 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         _docs.addAll(items);
         if (snap.docs.isNotEmpty) _last = snap.docs.last;
         if (snap.docs.length < 10) _hasMore = false;
+      });
+      _advancePrewarmWindow(
+        fromIndex: _currentPage,
+        count: _rollingPrewarmBatch,
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _fetchNextFromSurface() async {
+    if (_loading || !_hasMore) return;
+    final surface = widget.feedSurface!;
+    setState(() => _loading = true);
+    try {
+      var feedState = ref.read(feedControllerProvider(surface)).value;
+      // Pull another ranked page when we've exhausted what's already loaded.
+      if (feedState != null &&
+          _surfaceNextIndex >= feedState.items.length &&
+          feedState.hasMore) {
+        await ref.read(feedControllerProvider(surface).notifier).fetchNext();
+        feedState = ref.read(feedControllerProvider(surface)).value;
+      }
+
+      final blockedSet =
+          ref.read(blockedUsersProvider).value?.toSet() ?? const <String>{};
+      final newItems = <({String id, Map<String, dynamic> data})>[];
+      if (feedState != null) {
+        while (_surfaceNextIndex < feedState.items.length) {
+          final post = feedState.items[_surfaceNextIndex];
+          _surfaceNextIndex++;
+          if (_seenIds.contains(post.id)) continue;
+          if (blockedSet.contains(post.authorId)) continue;
+          _seenIds.add(post.id);
+          newItems.add((id: post.id, data: post.raw));
+        }
+      }
+
+      final moreAvailable =
+          feedState != null &&
+          (feedState.hasMore || _surfaceNextIndex < feedState.items.length);
+
+      setState(() {
+        _docs.addAll(newItems);
+        _hasMore = moreAvailable;
       });
       _advancePrewarmWindow(
         fromIndex: _currentPage,

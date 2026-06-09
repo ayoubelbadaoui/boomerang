@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/discover_tab.dart';
 import 'tabs/create_tab.dart';
@@ -10,6 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/features/chat/presentation/pages/conversations_page.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
+import 'package:boomerang/features/feed/infrastructure/gallery_video_ingestor.dart';
+import 'package:boomerang/features/feed/presentation/editor/gallery_import_flow.dart';
 import 'package:boomerang/features/feed/presentation/widgets/upload_progress_bar.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 import 'package:boomerang/core/navigation/home_tab_navigation.dart';
@@ -23,8 +28,13 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
+
+  // Guards against overlapping lost-data recoveries (e.g. several rapid
+  // resume events) so a recovered video is only routed once.
+  bool _recoveringLostVideo = false;
 
   @override
   void initState() {
@@ -34,6 +44,54 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         setState(() => _currentIndex = next);
       }
     });
+    WidgetsBinding.instance.addObserver(this);
+    // The Activity may have just been recreated after being reclaimed while a
+    // gallery picker was open — recover any dropped selection on first frame.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _recoverLostGalleryVideo(),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _recoverLostGalleryVideo();
+    }
+  }
+
+  /// Recovers a gallery video that Android cached as "lost data" after the
+  /// host Activity was destroyed while the picker was in the foreground.
+  ///
+  /// Without this, the original `pickVideo()` future is gone when the Activity
+  /// is recreated, the picked clip is silently dropped, and the upload never
+  /// starts — the post can't be published. Routing it back through the normal
+  /// gallery flow drops the user straight onto the editor where they publish.
+  Future<void> _recoverLostGalleryVideo() async {
+    // Lost-data caching is Android-only; iOS returns an empty response.
+    if (!Platform.isAndroid || _recoveringLostVideo || !mounted) return;
+    _recoveringLostVideo = true;
+    try {
+      final lost = await ImagePicker().retrieveLostData();
+      if (lost.isEmpty || lost.type != RetrieveType.video) return;
+      final file = lost.file;
+      if (file == null || !mounted) return;
+      await presentGalleryVideo(context, file);
+    } on GalleryVideoIngestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      // Best-effort recovery — never crash the shell over a dropped pick.
+    } finally {
+      _recoveringLostVideo = false;
+    }
   }
 
   static final List<Widget> _tabs = <Widget>[
