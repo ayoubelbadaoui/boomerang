@@ -150,8 +150,8 @@ class FirestoreFeedRepo implements FeedRepo {
       posts.add(_mapDoc(d.id, data));
       final s = data['rankScore'];
       if (s is num) lastScore = s.toDouble();
-      final t = data['createdAt'];
-      if (t is Timestamp) lastMs = t.millisecondsSinceEpoch;
+      final t = BoomerangRepo.createdAtMillis(data['createdAt']);
+      if (t != null) lastMs = t;
     }
     final hasMore = docs.length >= requested;
     return CandidatePool(
@@ -186,8 +186,8 @@ class FirestoreFeedRepo implements FeedRepo {
         continue;
       }
       posts.add(_mapDoc(d.id, data));
-      final t = data['createdAt'];
-      if (t is Timestamp) lastMs = t.millisecondsSinceEpoch;
+      final t = BoomerangRepo.createdAtMillis(data['createdAt']);
+      if (t != null) lastMs = t;
     }
     final hasMore = docs.length >= requested;
     return CandidatePool(
@@ -223,9 +223,9 @@ class FirestoreFeedRepo implements FeedRepo {
         continue;
       }
       posts.add(_mapDoc(d.id, data));
-      final t = data['createdAt'];
-      if (t is Timestamp) {
-        lastFollowingMs = t.millisecondsSinceEpoch;
+      final t = BoomerangRepo.createdAtMillis(data['createdAt']);
+      if (t != null) {
+        lastFollowingMs = t;
       }
     }
     final hasMore = docs.length >= requested;
@@ -306,7 +306,7 @@ class FirestoreFeedRepo implements FeedRepo {
     int? lastMs;
     for (final d in docs) {
       final data = d.data();
-      final authorId = (data['userId'] ?? '') as String;
+      final authorId = _asString(data['userId']);
       // Exploration on Home should prefer non-followed authors.
       if (followingIds.contains(authorId) || authorId == myUid) continue;
       if (!_passesFilters(
@@ -320,8 +320,8 @@ class FirestoreFeedRepo implements FeedRepo {
       posts.add(_mapDoc(d.id, data));
       final s = data['rankScore'];
       if (s is num) lastScore = s.toDouble();
-      final t = data['createdAt'];
-      if (t is Timestamp) lastMs = t.millisecondsSinceEpoch;
+      final t = BoomerangRepo.createdAtMillis(data['createdAt']);
+      if (t != null) lastMs = t;
     }
     final hasMore = docs.length >= requested;
     return CandidatePool(
@@ -351,7 +351,7 @@ class FirestoreFeedRepo implements FeedRepo {
     int? lastMs;
     for (final d in docs) {
       final data = d.data();
-      final authorId = (data['userId'] ?? '') as String;
+      final authorId = _asString(data['userId']);
       if (followingIds.contains(authorId) || authorId == myUid) continue;
       if (!_passesFilters(
         data: data,
@@ -362,8 +362,8 @@ class FirestoreFeedRepo implements FeedRepo {
         continue;
       }
       posts.add(_mapDoc(d.id, data));
-      final t = data['createdAt'];
-      if (t is Timestamp) lastMs = t.millisecondsSinceEpoch;
+      final t = BoomerangRepo.createdAtMillis(data['createdAt']);
+      if (t != null) lastMs = t;
     }
     final hasMore = docs.length >= requested;
     return CandidatePool(
@@ -389,7 +389,7 @@ class FirestoreFeedRepo implements FeedRepo {
     required Set<String> blockedIds,
     required Set<String> followingIds,
   }) {
-    final authorId = (data['userId'] ?? '') as String;
+    final authorId = _asString(data['userId']);
     if (authorId.isEmpty) return false;
     if (blockedIds.contains(authorId)) return false;
     // Privacy gate — defense-in-depth alongside firestore.rules.
@@ -403,9 +403,10 @@ class FirestoreFeedRepo implements FeedRepo {
   }
 
   RankedPost _mapDoc(String id, Map<String, dynamic> data) {
-    final ts = data['createdAt'];
-    DateTime? createdAt;
-    if (ts is Timestamp) createdAt = ts.toDate();
+    final createdMs = BoomerangRepo.createdAtMillis(data['createdAt']);
+    final createdAt = createdMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(createdMs);
 
     final tagsRaw = data['hashtags'];
     final hashtags = tagsRaw is List
@@ -417,18 +418,26 @@ class FirestoreFeedRepo implements FeedRepo {
 
     return RankedPost(
       id: id,
-      authorId: (data['userId'] ?? '') as String,
+      authorId: _asString(data['userId']),
       createdAt: createdAt,
-      likes: (data['likes'] is int)
-          ? data['likes'] as int
-          : ((data['likes'] ?? 0) as num).toInt(),
-      commentsCount: (data['commentsCount'] is int)
-          ? data['commentsCount'] as int
-          : ((data['commentsCount'] ?? 0) as num).toInt(),
+      likes: _asInt(data['likes']),
+      commentsCount: _asInt(data['commentsCount']),
       hashtags: hashtags,
       ownerIsPrivate: data['ownerIsPrivate'] == true,
       serverRankScore: serverRankScore,
       raw: data,
     );
+  }
+
+  /// Defensive coercion for legacy/imported documents whose fields may not
+  /// match the current schema (e.g. counters stored as strings). Never
+  /// throws — a single malformed field must not fail the whole feed page.
+  static String _asString(Object? value) => value is String ? value : '';
+
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
   }
 }

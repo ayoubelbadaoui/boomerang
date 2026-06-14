@@ -16,6 +16,39 @@ class BoomerangRepo {
   static final Set<String> _inFlightLikeWrites = <String>{};
   static const _logName = 'BoomerangRepo';
 
+  /// Defensively reads a `createdAt`-style field into epoch milliseconds.
+  ///
+  /// Tolerates the several shapes the field has had across app versions and
+  /// imports — [Timestamp], [DateTime], epoch [int]/[num], or ISO [String] —
+  /// instead of a hard `as Timestamp` cast that throws on legacy documents
+  /// and takes down the whole feed page. Returns `null` when the value is
+  /// missing or unparseable (e.g. a pending server timestamp).
+  static int? createdAtMillis(Object? value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.millisecondsSinceEpoch;
+    if (value is DateTime) return value.millisecondsSinceEpoch;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final asInt = int.tryParse(value);
+      if (asInt != null) return asInt;
+      return DateTime.tryParse(value)?.millisecondsSinceEpoch;
+    }
+    return null;
+  }
+
+  static int _compareByCreatedAtDesc(
+    QueryDocumentSnapshot<Map<String, dynamic>> a,
+    QueryDocumentSnapshot<Map<String, dynamic>> b,
+  ) {
+    final aMs = createdAtMillis(a.data()['createdAt']);
+    final bMs = createdAtMillis(b.data()['createdAt']);
+    if (aMs == null && bMs == null) return 0;
+    if (aMs == null) return 1;
+    if (bMs == null) return -1;
+    return bMs.compareTo(aMs);
+  }
+
   Future<void> addRandomBoomerang() async {
     // pick a random user
     final usersSnap = await _fs.collection('users').limit(50).get();
@@ -107,14 +140,7 @@ class BoomerangRepo {
     }
 
     if (chunks.length > 1) {
-      allDocs.sort((a, b) {
-        final aT = a.data()['createdAt'] as Timestamp?;
-        final bT = b.data()['createdAt'] as Timestamp?;
-        if (aT == null && bT == null) return 0;
-        if (aT == null) return 1;
-        if (bT == null) return -1;
-        return bT.compareTo(aT);
-      });
+      allDocs.sort(_compareByCreatedAtDesc);
     }
 
     return allDocs.take(limit).toList();
@@ -221,14 +247,7 @@ class BoomerangRepo {
 
     // Merge chunks by createdAt desc and cap at limit*2 candidates so the
     // application layer has room to rerank.
-    allDocs.sort((a, b) {
-      final aT = a.data()['createdAt'] as Timestamp?;
-      final bT = b.data()['createdAt'] as Timestamp?;
-      if (aT == null && bT == null) return 0;
-      if (aT == null) return 1;
-      if (bT == null) return -1;
-      return bT.compareTo(aT);
-    });
+    allDocs.sort(_compareByCreatedAtDesc);
 
     return allDocs.take(limit).toList();
   }

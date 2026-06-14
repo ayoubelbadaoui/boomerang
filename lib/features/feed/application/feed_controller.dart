@@ -21,6 +21,7 @@ import 'ranking/session_seed.dart';
 class FeedState {
   const FeedState({
     required this.items,
+    required this.buffer,
     required this.nextCursor,
     required this.hasMore,
     required this.isLoading,
@@ -33,6 +34,12 @@ class FeedState {
   });
 
   final List<RankedPost> items;
+
+  /// Candidates fetched from the source but not yet emitted into [items].
+  /// They are drained a page at a time before the source cursor advances,
+  /// so a fetch that returns more candidates than a page can never silently
+  /// drop the overflow.
+  final List<RankedPost> buffer;
   final FeedCursor? nextCursor;
   final bool hasMore;
   final bool isLoading;
@@ -45,6 +52,7 @@ class FeedState {
 
   FeedState copyWith({
     List<RankedPost>? items,
+    List<RankedPost>? buffer,
     FeedCursor? nextCursor,
     bool clearCursor = false,
     bool? hasMore,
@@ -58,6 +66,7 @@ class FeedState {
   }) {
     return FeedState(
       items: items ?? this.items,
+      buffer: buffer ?? this.buffer,
       nextCursor: clearCursor ? null : (nextCursor ?? this.nextCursor),
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
@@ -72,6 +81,7 @@ class FeedState {
 
   static const empty = FeedState(
     items: <RankedPost>[],
+    buffer: <RankedPost>[],
     nextCursor: null,
     hasMore: true,
     isLoading: false,
@@ -198,7 +208,10 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       _scheduleInitialFetch();
       return;
     }
-    if (current.isLoading || !current.hasMore) return;
+    if (current.isLoading) return;
+    // Nothing more to show only when the source is drained AND there are no
+    // buffered candidates left to emit.
+    if (!current.hasMore && current.buffer.isEmpty) return;
 
     state = AsyncData(current.copyWith(isLoading: true));
 
@@ -232,22 +245,44 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
               ? FeedMetrics.rankingVersionLegacy
               : FeedMetrics.rankingVersionV2;
 
-      final repo = ref.read(feedRepoProvider);
-      final pool = await _fetchPool(
-        repo: repo,
-        cursor: current.nextCursor,
-        myUid: me.uid,
-        followingIds: followingIds,
-        blockedIds: blockedIds,
-      );
+      var buffer = current.buffer;
+      var nextCursor = current.nextCursor;
+      var sourceHasMore = current.hasMore;
 
-      // Filter out anything we've already shown this session.
-      final fresh = pool.posts
-          .where((p) => !current.seenIds.contains(p.id))
-          .toList(growable: false);
+      // Only hit the network when the buffer can't fill a page and the source
+      // still has candidates. The source cursor advances solely by the page
+      // we fetch here — never past buffered-but-unshown posts — so a pool that
+      // returns more candidates than `_pageSize` no longer drops the overflow.
+      if (buffer.length < _pageSize && sourceHasMore) {
+        final repo = ref.read(feedRepoProvider);
+        final pool = await _fetchPool(
+          repo: repo,
+          cursor: nextCursor,
+          myUid: requestUid,
+          followingIds: followingIds,
+          blockedIds: blockedIds,
+        );
+        final liveUidAfterFetch =
+            ref.read(firebaseAuthProvider).currentUser?.uid;
+        if (liveUidAfterFetch != requestUid) {
+          state = AsyncData(current.copyWith(isLoading: false));
+          return;
+        }
+        // Drop anything already shown or already buffered.
+        final known = <String>{
+          ...current.seenIds,
+          ...buffer.map((p) => p.id),
+        };
+        final freshFromPool = pool.posts
+            .where((p) => !known.contains(p.id))
+            .toList(growable: false);
+        buffer = <RankedPost>[...buffer, ...freshFromPool];
+        nextCursor = pool.nextCursor;
+        sourceHasMore = pool.hasMore;
+      }
 
-      // Re-rank using the policy + previously-shown tail for cross-page
-      // burst control.
+      // Re-rank the full buffer using the policy + previously-shown tail for
+      // cross-page burst control, emit one page, keep the remainder buffered.
       final tail =
           current.items.length > 5
               ? current.items.sublist(current.items.length - 5)
@@ -260,8 +295,12 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         sessionSeed: current.sessionSeed,
         previouslyShown: tail,
       );
-      final ranked = policy.rerank(fresh, context);
+      final ranked = policy.rerank(buffer, context);
       final pageSlice = ranked.take(_pageSize).toList(growable: false);
+      final remaining =
+          ranked.length > _pageSize
+              ? ranked.sublist(_pageSize)
+              : const <RankedPost>[];
 
       final mergedItems = <RankedPost>[...current.items, ...pageSlice];
       final mergedSeen = <String>{
@@ -269,7 +308,7 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         ...pageSlice.map((p) => p.id),
       };
 
-      final exhausted = !pool.hasMore && fresh.length <= pageSlice.length;
+      final hasMore = sourceHasMore || remaining.isNotEmpty;
 
       _metrics.recordPage(
         surface: _surface,
@@ -289,8 +328,10 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       state = AsyncData(
         current.copyWith(
           items: mergedItems,
-          nextCursor: pool.nextCursor,
-          hasMore: !exhausted,
+          buffer: remaining,
+          nextCursor: nextCursor,
+          clearCursor: nextCursor == null,
+          hasMore: hasMore,
           isLoading: false,
           seenIds: mergedSeen,
           pageIndex: current.pageIndex + 1,

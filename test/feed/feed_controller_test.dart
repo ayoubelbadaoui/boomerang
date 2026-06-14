@@ -304,5 +304,92 @@ void main() {
         expect(mergedOrder.toSet().length, mergedOrder.length);
       },
     );
+
+    test(
+      'a candidate pool larger than one page is fully emitted, not dropped',
+      () async {
+        final auth = MockFirebaseAuth(
+          signedIn: true,
+          mockUser: MockUser(uid: 'me'),
+        );
+        final now = DateTime(2026, 1, 1, 12);
+        // First (cursor==null) fetch returns 25 candidates — more than the
+        // controller's internal page size. The overflow must be buffered and
+        // emitted on later pages instead of being skipped when the cursor
+        // advances.
+        const poolSize = 25;
+        var cursorFetches = 0;
+        final repo = _FakeFeedRepo(
+          onHomeFetch: (myUid, followingIds, blockedIds, cursor) {
+            if (cursor == null) {
+              return CandidatePool(
+                posts: <RankedPost>[
+                  for (var i = 0; i < poolSize; i++)
+                    _post(
+                      id: 'p$i',
+                      authorId: 'author$i',
+                      createdAt: now.subtract(Duration(minutes: i)),
+                      rankScore: 1.0 - i / 100.0,
+                    ),
+                ],
+                nextCursor: const HomeCursor(
+                  followingExhausted: true,
+                  lastExplorationScore: 0.5,
+                ),
+                hasMore: true,
+              );
+            }
+            cursorFetches++;
+            return const CandidatePool(
+              posts: <RankedPost>[],
+              nextCursor: null,
+              hasMore: false,
+            );
+          },
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            firebaseAuthProvider.overrideWithValue(auth),
+            feedRepoProvider.overrideWithValue(repo),
+            followingIdsProvider.overrideWith(
+              (_) => Stream.value(const <String>{}),
+            ),
+            blockedUsersProvider.overrideWith(
+              (_) => Stream.value(const <String>[]),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await container.read(feedControllerProvider(FeedSurface.home).future);
+
+        final notifier = container.read(
+          feedControllerProvider(FeedSurface.home).notifier,
+        );
+        // Drain: keep paging until the source and buffer are exhausted.
+        for (var i = 0; i < 10; i++) {
+          final state = container
+              .read(feedControllerProvider(FeedSurface.home))
+              .value!;
+          if (!state.hasMore) break;
+          await notifier.fetchNext();
+        }
+
+        final ids = container
+            .read(feedControllerProvider(FeedSurface.home))
+            .value!
+            .items
+            .map((e) => e.id)
+            .toList();
+
+        // Every candidate is present exactly once — none lost to the cursor.
+        expect(ids.length, poolSize);
+        expect(ids.toSet().length, poolSize);
+        // The single overflowing pool was drained from the buffer, so the
+        // source was only re-queried after the buffer emptied.
+        expect(cursorFetches, lessThanOrEqualTo(1));
+      },
+    );
   });
 }
