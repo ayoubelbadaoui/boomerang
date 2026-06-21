@@ -10,10 +10,12 @@ class ReportSheet extends ConsumerStatefulWidget {
     super.key,
     required this.reportedUid,
     this.boomerangId,
+    this.commentId,
   });
 
   final String reportedUid;
   final String? boomerangId;
+  final String? commentId;
 
   @override
   ConsumerState<ReportSheet> createState() => _ReportSheetState();
@@ -41,9 +43,12 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
         reporterUid: me.uid,
         reportedUid: widget.reportedUid,
         boomerangId: widget.boomerangId,
-        type: widget.boomerangId != null
-            ? ReportType.boomerang
-            : ReportType.user,
+        commentId: widget.commentId,
+        type: widget.commentId != null
+            ? ReportType.comment
+            : widget.boomerangId != null
+                ? ReportType.boomerang
+                : ReportType.user,
         reason: _selectedReason!,
         details: _detailsController.text.trim().isEmpty
             ? null
@@ -70,7 +75,14 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isBoomerang = widget.boomerangId != null;
+    final String title;
+    if (widget.commentId != null) {
+      title = 'Report this comment';
+    } else if (widget.boomerangId != null) {
+      title = 'Report this boomerang';
+    } else {
+      title = 'Report this user';
+    }
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -95,7 +107,7 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
               ),
             ),
             Text(
-              isBoomerang ? 'Report this boomerang' : 'Report this user',
+              title,
               style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w800),
             ),
             SizedBox(height: 4.h),
@@ -184,6 +196,7 @@ void showReportSheet(
   BuildContext context, {
   required String reportedUid,
   String? boomerangId,
+  String? commentId,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -195,6 +208,7 @@ void showReportSheet(
     builder: (_) => ReportSheet(
       reportedUid: reportedUid,
       boomerangId: boomerangId,
+      commentId: commentId,
     ),
   );
 }

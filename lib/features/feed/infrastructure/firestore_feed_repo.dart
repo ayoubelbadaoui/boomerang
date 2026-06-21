@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:boomerang/features/feed/domain/entities/ranked_post.dart';
@@ -25,10 +27,17 @@ class FirestoreFeedRepo implements FeedRepo {
   }) async {
     final hasFollowing = followingIds.isNotEmpty;
     final followingExhausted = cursor?.followingExhausted ?? !hasFollowing;
+    developer.log(
+      '[FEEDDBG] fetchHomeCandidates uid=$myUid following=${followingIds.length} '
+      'blocked=${blockedIds.length} followingExhausted=$followingExhausted '
+      'fallbackChrono=${cursor?.fallbackChronological ?? false}',
+      name: 'FirestoreFeedRepo',
+    );
 
     // Stage 1 — followed feed first. This keeps Home feeling personal for
     // users who already follow people.
     if (!followingExhausted) {
+      developer.log('[FEEDDBG] home stage=FOLLOWING', name: 'FirestoreFeedRepo');
       final followingDocs = await _boomerangs.fetchFollowingByCreatedAtPage(
         followingIds: followingIds,
         myUid: myUid,
@@ -67,6 +76,7 @@ class FirestoreFeedRepo implements FeedRepo {
     }
 
     // Stage 2 — ranked exploration for fresh users or once follows dry up.
+    developer.log('[FEEDDBG] home stage=EXPLORATION', name: 'FirestoreFeedRepo');
     return _fetchHomeExploration(
       myUid: myUid,
       followingIds: followingIds,

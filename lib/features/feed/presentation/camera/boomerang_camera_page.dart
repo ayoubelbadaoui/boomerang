@@ -10,6 +10,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // ---------------------------------------------------------------------------
 // Filter definitions
@@ -147,7 +148,7 @@ class BoomerangCameraPage extends StatefulWidget {
 }
 
 class _BoomerangCameraPageState extends State<BoomerangCameraPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const _audioSession = MethodChannel('com.boomerang/audio_session');
 
   CameraController? _cam;
@@ -155,6 +156,9 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   int _camIdx = 0;
   bool _recording = false;
   bool _navigating = false;
+  bool _camInitFailed = false;
+  bool _camPermanentlyDenied = false;
+  bool _initializing = false;
 
   FlashMode _flash = FlashMode.off;
   double _zoom = 1.0;
@@ -199,17 +203,80 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       duration: const Duration(milliseconds: 200),
     );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    WidgetsBinding.instance.addObserver(this);
     _initCameras();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When the user returns from the system Settings (e.g. after granting
+    // camera access), automatically retry so they don't have to tap again.
+    if (state == AppLifecycleState.resumed &&
+        _camInitFailed &&
+        !_initializing) {
+      _initCameras();
+    }
+  }
+
   Future<void> _initCameras() async {
-    _cameras = await availableCameras();
-    if (_cameras.isEmpty) return;
-    _camIdx = _cameras.indexWhere(
-      (c) => c.lensDirection == CameraLensDirection.back,
-    );
-    if (_camIdx < 0) _camIdx = 0;
-    await _setupCam(_cameras[_camIdx]);
+    if (_initializing) return;
+    _initializing = true;
+    if (mounted) {
+      setState(() {
+        _camInitFailed = false;
+      });
+    }
+    try {
+      // Request camera access. On iOS the system prompt only appears the very
+      // first time; after that request() returns the existing decision without
+      // re-prompting, so a permanently-denied user is sent to Settings instead.
+      var status = await Permission.camera.status;
+      if (!status.isGranted) {
+        status = await Permission.camera.request();
+      }
+      if (!status.isGranted) {
+        if (mounted) {
+          setState(() {
+            _camInitFailed = true;
+            _camPermanentlyDenied =
+                status.isPermanentlyDenied || status.isRestricted;
+          });
+        }
+        return;
+      }
+
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) {
+        throw Exception('No cameras available on this device');
+      }
+      _camIdx = _cameras.indexWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+      );
+      if (_camIdx < 0) _camIdx = 0;
+      await _setupCam(_cameras[_camIdx]);
+      if (_cam == null) {
+        throw Exception('Camera failed to initialize');
+      }
+    } catch (e) {
+      debugPrint('Camera init failed: $e');
+      if (mounted) {
+        setState(() {
+          _camInitFailed = true;
+        });
+      }
+    } finally {
+      _initializing = false;
+    }
+  }
+
+  Future<void> _retryCameraAccess() async {
+    // If the user permanently denied access, requesting again won't show a
+    // prompt — take them to Settings. Otherwise just try to initialize again.
+    if (_camPermanentlyDenied) {
+      await openAppSettings();
+      return;
+    }
+    await _initCameras();
   }
 
   Future<void> _setupCam(CameraDescription desc) async {
@@ -274,6 +341,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
@@ -512,7 +580,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
           // Camera preview (no gesture detector here — platform views absorb touches)
           if (ready)
             Positioned.fill(child: _filteredPreview(c))
-          else
+          else if (!_camInitFailed)
             const Center(
               child: CircularProgressIndicator(color: Colors.white38),
             ),
@@ -849,6 +917,74 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                   ),
                 ),
               ],
+            ),
+          ),
+
+          // Full-screen error overlay — shown when the camera can't be opened
+          // (e.g. permission denied). Sits on top of the dead controls so the
+          // screen never looks "frozen" / unresponsive.
+          if (_camInitFailed) Positioned.fill(child: _buildCameraError()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraError() {
+    final denied = _camPermanentlyDenied;
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 56),
+          const SizedBox(height: 20),
+          Text(
+            denied ? 'Camera access needed' : 'Camera unavailable',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            denied
+                ? 'Boomerang needs access to your camera to record. Open '
+                    'Settings and enable Camera, then come back.'
+                : 'We couldn\'t access your camera. Please make sure no other '
+                    'app is using it and try again.',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          ElevatedButton.icon(
+            onPressed: _initializing ? null : _retryCameraAccess,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            icon: Icon(denied ? Icons.settings_rounded : Icons.refresh_rounded),
+            label: Text(
+              denied ? 'Open Settings' : 'Try again',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text(
+              'Go back',
+              style: TextStyle(color: Colors.white70),
             ),
           ),
         ],

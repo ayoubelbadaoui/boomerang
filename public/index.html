@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boomerang</title>
+  <meta name="description" content="Boomerang — share life in short looping videos." />
+  <style>
+    :root {
+      --bg: #0e0e10;
+      --card: #1a1a1f;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --accent: #6366f1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .logo {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+    }
+    .logo span { color: var(--accent); }
+    p.tag { color: var(--muted); font-size: 18px; max-width: 420px; margin-bottom: 32px; }
+    .links { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    a.btn {
+      background: var(--card);
+      color: var(--text);
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      border: 1px solid #2a2a32;
+      transition: border-color .2s;
+    }
+    a.btn:hover { border-color: var(--accent); }
+    footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="logo">Boomerang<span>.</span></div>
+  <p class="tag">Share your moments in short looping videos. Follow friends, discover creators, and join the conversation.</p>
+  <div class="links">
+    <a class="btn" href="/support.html">Support</a>
+    <a class="btn" href="/privacy.html">Privacy Policy</a>
+  </div>
+  <footer>&copy; 2026 Alwa Team. All rights reserved.</footer>
+</body>
+</html>

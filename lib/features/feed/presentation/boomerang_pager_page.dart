@@ -39,7 +39,6 @@ class BoomerangPagerPage extends ConsumerStatefulWidget {
 
 class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   final _docs = <({String id, Map<String, dynamic> data})>[];
-  final _videoWarmups = <String, Future<void>>{};
   final _likedOverrides = <String, bool>{};
   final _likeCountOverrides = <String, int>{};
   final _seenIds = <String>{};
@@ -54,10 +53,13 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   int _currentPage = 0;
   int _prewarmedUntil = -1;
 
-  // Slightly aggressive defaults to hide per-item loading while keeping
-  // memory/network usage bounded.
-  static const int _initialPrewarmCount = 6;
-  static const int _rollingPrewarmBatch = 4;
+  // How many upcoming POSTER images to prefetch ahead of the current page.
+  // Poster prefetch is cheap (bounded by the image cache) and is what keeps the
+  // feed looking smooth — a sharp poster shows instantly while each page's own
+  // video controller initializes. (Video prewarming was removed: it span up an
+  // ExoPlayer per upcoming item and OOM-crashed the app while scrolling.)
+  static const int _initialPrewarmCount = 4;
+  static const int _rollingPrewarmBatch = 3;
   static const int _prewarmTriggerRemaining = 2;
 
   @override
@@ -199,7 +201,6 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     if (target <= _prewarmedUntil) return;
     for (var i = _prewarmedUntil + 1; i <= target; i++) {
       _warmPosterFor(i);
-      _warmVideoFor(i);
     }
     _prewarmedUntil = target;
   }
@@ -208,26 +209,6 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     final poster = _docs[index].data['imageUrl'] as String?;
     if (poster == null || poster.isEmpty) return;
     precacheImage(NetworkImage(poster), context);
-  }
-
-  void _warmVideoFor(int index) {
-    final id = _docs[index].id;
-    if (_videoWarmups.containsKey(id)) return;
-    final videoUrl = _docs[index].data['videoUrl'] as String?;
-    if (videoUrl == null || videoUrl.isEmpty) return;
-    _videoWarmups[id] = _primeVideo(videoUrl);
-  }
-
-  Future<void> _primeVideo(String url) async {
-    VideoPlayerController? controller;
-    try {
-      controller = VideoPlayerController.networkUrl(Uri.parse(url));
-      await controller.initialize().timeout(const Duration(seconds: 8));
-    } catch (_) {
-      // Best-effort warmup; ignore failures.
-    } finally {
-      await controller?.dispose();
-    }
   }
 
   void _ensureRollingPrewarm(int pageIndex) {

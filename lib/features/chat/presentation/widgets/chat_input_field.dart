@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -122,11 +123,52 @@ class ChatInputFieldState extends State<ChatInputField>
     _controller.clear();
   }
 
+  void _showHoldToRecordHint() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        duration: Duration(seconds: 2),
+        content: Text('Hold to record a voice message'),
+      ),
+    );
+  }
+
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: source, imageQuality: 70);
-    if (file == null) return;
-    widget.onSendImage(file.path);
+    final isCamera = source == ImageSource.camera;
+    if (isCamera && !await _ensureCameraPermission()) return;
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: source, imageQuality: 70);
+      if (file == null) return;
+      widget.onSendImage(file.path);
+    } catch (e) {
+      if (!mounted) return;
+      _showPermissionMessage(
+        isCamera
+            ? 'Unable to open the camera. Please allow camera access in Settings.'
+            : 'Unable to open your photos. Please allow photo access in Settings.',
+        withSettings: true,
+      );
+    }
+  }
+
+  /// Ensures camera access for taking photos in chat. Requests it when
+  /// possible; if permanently denied, guides the user to Settings.
+  Future<bool> _ensureCameraPermission() async {
+    var status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
+    }
+    if (status.isGranted) return true;
+    if (status.isPermanentlyDenied || status.isRestricted) {
+      _showPermissionMessage(
+        'Camera access is off. Enable it in Settings to take photos.',
+        withSettings: true,
+      );
+    } else {
+      _showPermissionMessage('Camera permission is required to take photos.');
+    }
+    return false;
   }
 
   Future<void> _openGifPicker() async {
@@ -154,11 +196,8 @@ class ChatInputFieldState extends State<ChatInputField>
     _lockArmed = false;
 
     try {
-      if (!await _recorder.hasPermission()) {
+      if (!await _ensureMicPermission()) {
         _starting = false;
-        _showMicMessage(
-          'Microphone permission is required to record voice messages.',
-        );
         return;
       }
 
@@ -246,6 +285,44 @@ class ChatInputFieldState extends State<ChatInputField>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
     );
+  }
+
+  /// Shows a permission message. When [withSettings] is true (access was
+  /// permanently denied), the snackbar offers a shortcut to the app's
+  /// Settings page so the user can enable access.
+  void _showPermissionMessage(String message, {bool withSettings = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 5),
+        action: withSettings
+            ? SnackBarAction(label: 'Settings', onPressed: openAppSettings)
+            : null,
+      ),
+    );
+  }
+
+  /// Ensures microphone access. Requests it when possible; if permanently
+  /// denied, guides the user to Settings. Returns true only when granted.
+  Future<bool> _ensureMicPermission() async {
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+    }
+    if (status.isGranted) return true;
+    if (status.isPermanentlyDenied || status.isRestricted) {
+      _showPermissionMessage(
+        'Microphone access is off. Enable it in Settings to record voice '
+        'messages.',
+        withSettings: true,
+      );
+    } else {
+      _showMicMessage(
+        'Microphone permission is required to record voice messages.',
+      );
+    }
+    return false;
   }
 
   void _showMicBusyMessage() {
@@ -638,7 +715,9 @@ class ChatInputFieldState extends State<ChatInputField>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: widget.isSending ? null : (showSend ? _send : null),
+      onTap: widget.isSending
+          ? null
+          : (showSend ? _send : _showHoldToRecordHint),
       onLongPressStart:
           _hasText || widget.isSending ? null : (_) => _onLongPressStart(),
       onLongPressMoveUpdate:

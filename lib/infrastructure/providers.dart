@@ -2,7 +2,6 @@ import 'package:boomerang/features/auth/application/auth_controller.dart';
 import 'package:boomerang/features/auth/domain/auth_state.dart';
 import 'package:boomerang/features/auth/infrastructure/auth_repo.dart';
 import 'package:boomerang/features/auth/infrastructure/firebase_auth_repo.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';

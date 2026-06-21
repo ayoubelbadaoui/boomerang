@@ -1,6 +1,7 @@
 import 'package:boomerang/core/auth/user_session.dart';
 import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 import 'package:boomerang/features/auth/presentation/signup_page.dart';
+import 'package:boomerang/features/legal/presentation/legal_page.dart';
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
@@ -28,6 +29,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _password = TextEditingController();
   bool _obscure = true;
   bool _rememberMe = false;
+  bool _acceptedTerms = false;
+  bool _acceptedPrivacy = false;
   bool _initializedFromRoute = false;
 
   @override
@@ -185,10 +188,45 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ],
                 ),
                 SizedBox(height: 8.h),
+                _ConsentCheckbox(
+                  value: _acceptedTerms,
+                  onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+                  label: 'I agree to the ',
+                  linkText: 'Terms of Service',
+                  onLinkTap: () => showTermsOfService(context),
+                ),
+                SizedBox(height: 4.h),
+                _ConsentCheckbox(
+                  value: _acceptedPrivacy,
+                  onChanged:
+                      (v) => setState(() => _acceptedPrivacy = v ?? false),
+                  label: 'I agree to the ',
+                  linkText: 'Privacy Policy',
+                  onLinkTap: () => showPrivacyPolicy(context),
+                ),
+                if (!_acceptedTerms || !_acceptedPrivacy)
+                  Padding(
+                    padding: EdgeInsets.only(top: 4.h, left: 12.w),
+                    child: Text(
+                      'You must accept both to sign in',
+                      style: TextStyle(fontSize: 12.sp, color: Colors.black38),
+                    ),
+                  ),
+                SizedBox(height: 16.h),
                 PrimaryButton(
                   loading: state.loading,
                   onPressed: () async {
                     if (!_formKey.currentState!.validate()) return;
+                    if (!_acceptedTerms || !_acceptedPrivacy) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please accept the Terms of Service and Privacy Policy',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
 
                     // Snapshot the currently signed-in user (if any)
                     // BEFORE signIn replaces the Firebase session.
@@ -324,3 +362,70 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 }
 
 // Shared UI components are defined in core/widgets/ui.dart
+
+class _ConsentCheckbox extends StatelessWidget {
+  const _ConsentCheckbox({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    required this.linkText,
+    required this.onLinkTap,
+  });
+
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  final String label;
+  final String linkText;
+  final VoidCallback onLinkTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 28.r,
+          height: 28.r,
+          child: Checkbox(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.black,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4.r),
+            ),
+          ),
+        ),
+        SizedBox(width: 8.w),
+        Flexible(
+          child: GestureDetector(
+            onTap: () => onChanged(!value),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: label,
+                    style: TextStyle(fontSize: 13.sp, color: Colors.black54),
+                  ),
+                  WidgetSpan(
+                    child: GestureDetector(
+                      onTap: onLinkTap,
+                      child: Text(
+                        linkText,
+                        style: TextStyle(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

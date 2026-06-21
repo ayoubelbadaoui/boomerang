@@ -34,6 +34,7 @@
         android:label="boomerang"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:largeHeap="true"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -64,6 +65,16 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+        <!-- Disable Impeller on Android. Impeller renders video_player textures
+             through ImageReaderSurfaceProducer, which accumulates
+             android.media.Image / GPU buffers while scrolling the fullscreen
+             video feed and causes unbounded Graphics + Java heap growth ->
+             OutOfMemoryError. The Skia fallback uses SurfaceTexture, which
+             releases video frames promptly. Must be an <application>-level
+             meta-data (Flutter does not read it from the <activity>). -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

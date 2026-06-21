@@ -1,5 +1,6 @@
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/features/feed/presentation/navigation/user_profile_navigation.dart';
+import 'package:boomerang/features/moderation/presentation/widgets/report_sheet.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -210,8 +211,16 @@ class _CommentTile extends ConsumerWidget {
         liveName?.trim().isNotEmpty == true ? liveName!.trim() : userName;
     final canDelete =
         myUid != null && (myUid == userId || myUid == postOwnerId);
+    final canReport = myUid != null && myUid != userId;
     return GestureDetector(
-      onLongPress: canDelete ? () => _confirmDelete(context, ref) : null,
+      onLongPress: (canDelete || canReport)
+          ? () => _showCommentMenu(
+                context,
+                ref,
+                canDelete: canDelete,
+                canReport: canReport,
+              )
+          : null,
       child: Padding(
         padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
         child: Column(
@@ -355,7 +364,12 @@ class _CommentTile extends ConsumerWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref) {
+  void _showCommentMenu(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool canDelete,
+    required bool canReport,
+  }) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -369,30 +383,56 @@ class _CommentTile extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                    ),
-                    title: Text(
-                      'Delete comment',
-                      style: TextStyle(
-                        fontFamily: 'Urbanist',
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w600,
+                  if (canReport)
+                    ListTile(
+                      leading: const Icon(
+                        Icons.flag_outlined,
                         color: Colors.red,
                       ),
+                      title: Text(
+                        'Report comment',
+                        style: TextStyle(
+                          fontFamily: 'Urbanist',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        showReportSheet(
+                          context,
+                          reportedUid: userId,
+                          boomerangId: boomerangId,
+                          commentId: commentId,
+                        );
+                      },
                     ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      ref
-                          .read(commentsRepoProvider)
-                          .delete(
-                            boomerangId: boomerangId,
-                            commentId: commentId,
-                          );
-                    },
-                  ),
+                  if (canDelete)
+                    ListTile(
+                      leading: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                      title: Text(
+                        'Delete comment',
+                        style: TextStyle(
+                          fontFamily: 'Urbanist',
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        ref
+                            .read(commentsRepoProvider)
+                            .delete(
+                              boomerangId: boomerangId,
+                              commentId: commentId,
+                            );
+                      },
+                    ),
                   ListTile(
                     leading: const Icon(Icons.close),
                     title: Text(

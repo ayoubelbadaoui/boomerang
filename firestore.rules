@@ -213,7 +213,7 @@ service cloud.firestore {
 
     // ── Reports (abuse / content) ─────────────────────────────────────
     match /reports/{reportId} {
-      allow create: if authed() && request.resource.data.reporterId == request.auth.uid;
+      allow create: if authed() && request.resource.data.reporterUid == request.auth.uid;
     }
 
     // ── Data export requests (GDPR) ───────────────────────────────────

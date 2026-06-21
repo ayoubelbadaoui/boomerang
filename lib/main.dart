@@ -24,7 +24,11 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 200 * 1024 * 1024;
+  // Keep the image cache well below the Android per-app heap ceiling. On
+  // low-RAM devices the heap growth limit can be as low as 256 MB, so a large
+  // poster cache competes with video decoder (MediaCodec/ExoPlayer) buffers and
+  // triggers OutOfMemoryError while scrolling the fullscreen feed.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 * 1024 * 1024;
 
   // Let background music (Spotify, Apple Music, etc.) keep playing.
   // Videos in this app are muted; voice notes switch to a playback session on demand.

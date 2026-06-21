@@ -225,10 +225,27 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         return;
       }
       final requestUid = me.uid;
+      log(
+        '[FEEDDBG] fetchNext ENTER surface=${_surface.name} uid=$requestUid '
+        'page=${current.pageIndex} buffer=${current.buffer.length} '
+        'seen=${current.seenIds.length} hasMore=${current.hasMore} '
+        'cursor=${current.nextCursor.runtimeType}',
+        name: 'FeedController',
+      );
       final followingIds = await _resolveFollowingIds(requestUid: requestUid);
       final blockedIds = await _resolveBlockedIds(requestUid: requestUid);
+      log(
+        '[FEEDDBG] deps resolved surface=${_surface.name} '
+        'following=${followingIds.length} blocked=${blockedIds.length}',
+        name: 'FeedController',
+      );
       final liveUidAfterDeps = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (liveUidAfterDeps != requestUid) {
+        log(
+          '[FEEDDBG] uid changed after deps ($requestUid -> $liveUidAfterDeps); '
+          'aborting fetch',
+          name: 'FeedController',
+        );
         state = AsyncData(current.copyWith(isLoading: false));
         return;
       }
@@ -255,12 +272,23 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       // returns more candidates than `_pageSize` no longer drops the overflow.
       if (buffer.length < _pageSize && sourceHasMore) {
         final repo = ref.read(feedRepoProvider);
+        log(
+          '[FEEDDBG] fetching pool surface=${_surface.name} '
+          'cursor=${nextCursor.runtimeType}',
+          name: 'FeedController',
+        );
         final pool = await _fetchPool(
           repo: repo,
           cursor: nextCursor,
           myUid: requestUid,
           followingIds: followingIds,
           blockedIds: blockedIds,
+        );
+        log(
+          '[FEEDDBG] pool OK surface=${_surface.name} '
+          'posts=${pool.posts.length} hasMore=${pool.hasMore} '
+          'nextCursor=${pool.nextCursor.runtimeType}',
+          name: 'FeedController',
         );
         final liveUidAfterFetch =
             ref.read(firebaseAuthProvider).currentUser?.uid;
@@ -341,11 +369,27 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
       _consecutiveFetchFailures = 0;
     } catch (e, st) {
       _consecutiveFetchFailures++;
+      // Detailed diagnostics so intermittent / data-dependent failures that
+      // only repro on certain accounts can be root-caused from logs.
+      final firebaseInfo =
+          e is FirebaseException
+              ? 'FirebaseException plugin=${e.plugin} code=${e.code} '
+                  'message=${e.message}'
+              : 'type=${e.runtimeType}';
+      log(
+        '[FEEDDBG] fetchNext ERROR surface=${_surface.name} '
+        'attempt=$_consecutiveFetchFailures '
+        'transient=${_isTransientFetchError(e)} $firebaseInfo',
+        name: 'FeedController',
+        error: e,
+        stackTrace: st,
+      );
       final shouldRetryTransiently =
           _consecutiveFetchFailures <= 2 && _isTransientFetchError(e);
       if (shouldRetryTransiently) {
         log(
-          'feed fetchNext transient failure; retrying (attempt $_consecutiveFetchFailures)',
+          '[FEEDDBG] transient failure; scheduling retry '
+          '(attempt $_consecutiveFetchFailures)',
           name: 'FeedController',
         );
         state = AsyncData(current.copyWith(isLoading: false));
@@ -353,7 +397,8 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         return;
       }
       log(
-        'feed fetchNext failed',
+        '[FEEDDBG] fetchNext SURFACING error to UI (error screen) '
+        'surface=${_surface.name} $firebaseInfo',
         name: 'FeedController',
         error: e,
         stackTrace: st,

@@ -174,7 +174,7 @@ class BoomerangRepo {
   Future<QuerySnapshot<Map<String, dynamic>>> fetchPublicByRankScorePage({
     double? startAfterScore,
     int limit = 20,
-  }) {
+  }) async {
     Query<Map<String, dynamic>> q = _fs
         .collection('boomerangs')
         .where('ownerIsPrivate', isEqualTo: false)
@@ -183,7 +183,19 @@ class BoomerangRepo {
     if (startAfterScore != null) {
       q = q.where('rankScore', isLessThan: startAfterScore);
     }
-    return q.get();
+    try {
+      return await q.get();
+    } catch (e, st) {
+      developer.log(
+        '[FEEDDBG] fetchPublicByRankScorePage FAILED startAfterScore='
+        '$startAfterScore '
+        '${e is FirebaseException ? 'code=${e.code} message=${e.message}' : 'type=${e.runtimeType}'}',
+        name: _logName,
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
   }
 
   /// Page of public boomerangs ordered by `createdAt`, with a millisecond
@@ -192,7 +204,7 @@ class BoomerangRepo {
   Future<QuerySnapshot<Map<String, dynamic>>> fetchPublicByCreatedAtPage({
     int? startAfterMillis,
     int limit = 20,
-  }) {
+  }) async {
     Query<Map<String, dynamic>> q = _fs
         .collection('boomerangs')
         .where('ownerIsPrivate', isEqualTo: false)
@@ -204,12 +216,39 @@ class BoomerangRepo {
         isLessThan: Timestamp.fromMillisecondsSinceEpoch(startAfterMillis),
       );
     }
-    return q.get();
+    try {
+      return await q.get();
+    } catch (e, st) {
+      developer.log(
+        '[FEEDDBG] fetchPublicByCreatedAtPage FAILED startAfterMs='
+        '$startAfterMillis '
+        '${e is FirebaseException ? 'code=${e.code} message=${e.message}' : 'type=${e.runtimeType}'}',
+        name: _logName,
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
   }
 
   /// Following-feed page using a millisecond cursor instead of a document
-  /// snapshot. Functionally identical to [fetchFollowingFeedPage] except
-  /// the cursor is portable (no Firestore snapshot leak).
+  /// snapshot.
+  ///
+  /// Permission-safe by construction. Firestore evaluates `canReadBoomerang`
+  /// per returned document on list queries, so a single `whereIn` over all
+  /// followed authors fails the WHOLE query with `permission-denied` if even
+  /// one matched post is a private post the caller can't read (e.g. a private
+  /// account whose reverse `followers/.../users/{me}` record is missing or
+  /// stale). That used to break Home entirely for users following such
+  /// accounts. To avoid it we never issue an unconstrained `whereIn`:
+  ///
+  ///  * Public posts by followed authors — constrained to
+  ///    `ownerIsPrivate == false`, so every match is guaranteed readable.
+  ///  * The caller's own posts — guaranteed readable (`userId == me`).
+  ///  * Private posts by followed authors — best-effort: a `whereIn` per
+  ///    chunk, and if that is denied (broken/stale follow record somewhere in
+  ///    the chunk) we fall back to per-author queries and silently skip only
+  ///    the authors we genuinely can't read, instead of failing the feed.
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   fetchFollowingByCreatedAtPage({
     required Set<String> followingIds,
@@ -217,38 +256,99 @@ class BoomerangRepo {
     int? startAfterMillis,
     int limit = 20,
   }) async {
-    final allIds = {...followingIds, myUid};
-    if (allIds.isEmpty) return const [];
+    final followed =
+        followingIds.where((u) => u.isNotEmpty && u != myUid).toList();
 
-    final idList = allIds.toList();
-    final chunks = <List<String>>[];
-    for (var i = 0; i < idList.length; i += 30) {
-      chunks.add(
-        idList.sublist(i, i + 30 > idList.length ? idList.length : i + 30),
-      );
-    }
-
-    final allDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-    for (final chunk in chunks) {
-      Query<Map<String, dynamic>> q = _fs
-          .collection('boomerangs')
-          .where('userId', whereIn: chunk)
-          .orderBy('createdAt', descending: true)
-          .limit(limit);
+    Query<Map<String, dynamic>> ordered(Query<Map<String, dynamic>> q) {
+      q = q.orderBy('createdAt', descending: true).limit(limit);
       if (startAfterMillis != null) {
         q = q.where(
           'createdAt',
           isLessThan: Timestamp.fromMillisecondsSinceEpoch(startAfterMillis),
         );
       }
-      final snap = await q.get();
-      allDocs.addAll(snap.docs);
+      return q;
     }
 
-    // Merge chunks by createdAt desc and cap at limit*2 candidates so the
-    // application layer has room to rerank.
-    allDocs.sort(_compareByCreatedAtDesc);
+    List<List<String>> chunked(List<String> ids) {
+      final out = <List<String>>[];
+      for (var i = 0; i < ids.length; i += 30) {
+        out.add(ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30));
+      }
+      return out;
+    }
 
+    final byId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final col = _fs.collection('boomerangs');
+
+    developer.log(
+      '[FEEDDBG] fetchFollowingByCreatedAtPage followed=${followed.length} '
+      'startAfterMs=$startAfterMillis limit=$limit',
+      name: _logName,
+    );
+
+    // 1. Own posts (always readable).
+    final ownSnap =
+        await ordered(col.where('userId', isEqualTo: myUid)).get();
+    for (final d in ownSnap.docs) {
+      byId[d.id] = d;
+    }
+
+    // 2. Public posts by followed authors (always readable).
+    for (final chunk in chunked(followed)) {
+      final snap = await ordered(
+        col
+            .where('userId', whereIn: chunk)
+            .where('ownerIsPrivate', isEqualTo: false),
+      ).get();
+      for (final d in snap.docs) {
+        byId[d.id] = d;
+      }
+    }
+
+    // 3. Private posts by followed authors (best-effort; never fatal).
+    for (final chunk in chunked(followed)) {
+      try {
+        final snap = await ordered(
+          col
+              .where('userId', whereIn: chunk)
+              .where('ownerIsPrivate', isEqualTo: true),
+        ).get();
+        for (final d in snap.docs) {
+          byId[d.id] = d;
+        }
+      } on FirebaseException catch (e) {
+        if (e.code != 'permission-denied') rethrow;
+        developer.log(
+          '[FEEDDBG] private whereIn denied for chunk(size=${chunk.length}); '
+          'falling back to per-author',
+          name: _logName,
+        );
+        for (final author in chunk) {
+          try {
+            final snap = await ordered(
+              col
+                  .where('userId', isEqualTo: author)
+                  .where('ownerIsPrivate', isEqualTo: true),
+            ).get();
+            for (final d in snap.docs) {
+              byId[d.id] = d;
+            }
+          } on FirebaseException catch (e2) {
+            if (e2.code != 'permission-denied') rethrow;
+            // Broken/stale follow record for this private author — skip their
+            // private posts rather than failing the whole feed.
+            developer.log(
+              '[FEEDDBG] skipping unreadable private author $author',
+              name: _logName,
+            );
+          }
+        }
+      }
+    }
+
+    final allDocs = byId.values.toList();
+    allDocs.sort(_compareByCreatedAtDesc);
     return allDocs.take(limit).toList();
   }
 

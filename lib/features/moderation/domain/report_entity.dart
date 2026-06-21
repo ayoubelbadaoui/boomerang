@@ -1,4 +1,4 @@
-enum ReportType { user, boomerang }
+enum ReportType { user, boomerang, comment }
 
 enum ReportReason { spam, harassment, nudity, violence, hateSpeech, other }
 
@@ -10,6 +10,7 @@ class ReportEntity {
     required this.reporterUid,
     required this.reportedUid,
     this.boomerangId,
+    this.commentId,
     required this.type,
     required this.reason,
     this.details,
@@ -23,6 +24,7 @@ class ReportEntity {
   final String reporterUid;
   final String reportedUid;
   final String? boomerangId;
+  final String? commentId;
   final ReportType type;
   final ReportReason reason;
   final String? details;
@@ -35,6 +37,7 @@ class ReportEntity {
         'reporterUid': reporterUid,
         'reportedUid': reportedUid,
         if (boomerangId != null) 'boomerangId': boomerangId,
+        if (commentId != null) 'commentId': commentId,
         'type': type.name,
         'reason': reason.name,
         if (details != null && details!.isNotEmpty) 'details': details,
