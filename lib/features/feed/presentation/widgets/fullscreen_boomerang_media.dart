@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:ui';
 
+import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -24,54 +26,71 @@ class FullscreenBoomerangMedia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final screenAspect =
-        size.height > 0 ? (size.width / size.height) : (9.0 / 16.0);
-    final hasPoster = posterUrl != null && posterUrl!.isNotEmpty;
-    final hasVideo = controller != null && controller!.value.isInitialized;
+    // Prefer parent constraints over MediaQuery.size so fit decisions match the
+    // actual paint box (edge-to-edge scaffolds still expand to the full body).
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width =
+            constraints.maxWidth.isFinite && constraints.maxWidth > 0
+                ? constraints.maxWidth
+                : MediaQuery.sizeOf(context).width;
+        final height =
+            constraints.maxHeight.isFinite && constraints.maxHeight > 0
+                ? constraints.maxHeight
+                : MediaQuery.sizeOf(context).height;
+        final screenAspect =
+            height > 0 ? (width / height) : (9.0 / 16.0);
+        final hasPoster = posterUrl != null && posterUrl!.isNotEmpty;
+        final hasVideo =
+            controller != null && controller!.value.isInitialized;
 
-    final mediaAspect = _resolveMediaAspect(screenAspect);
-    final fit = _resolveFit(screenAspect: screenAspect, mediaAspect: mediaAspect);
+        final mediaAspect = _resolveMediaAspect(screenAspect);
+        final fit = _resolveFit(
+          screenAspect: screenAspect,
+          mediaAspect: mediaAspect,
+        );
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _BackgroundFill(
-          fit: BoxFit.cover,
-          posterUrl: posterUrl,
-          controller: controller,
-          cacheWidth: _cacheWidth(context, maxPx: 2600),
-        ),
-        // Dim/blur layer so letterboxing on contain feels intentional.
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(color: Colors.black.withValues(alpha: 0.32)),
-          ),
-        ),
-        if (hasVideo)
-          _ForegroundVideo(
-            controller: controller!,
-            fit: fit,
-            key: const ValueKey('video'),
-          )
-        else if (hasPoster)
-          _ForegroundPoster(
-            url: posterUrl!,
-            fit: fit,
-            cacheWidth: _cacheWidth(context, maxPx: 2800),
-            key: const ValueKey('poster-fallback'),
-          )
-        else
-          const ColoredBox(color: Colors.black),
-        if (hasPoster && showPosterOverlay)
-          _ForegroundPoster(
-            url: posterUrl!,
-            fit: fit,
-            cacheWidth: _cacheWidth(context, maxPx: 2800),
-            key: const ValueKey('poster-overlay'),
-          ),
-      ],
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _BackgroundFill(
+              fit: BoxFit.cover,
+              posterUrl: posterUrl,
+              controller: controller,
+              cacheWidth: _cacheWidth(context, maxPx: 2600),
+            ),
+            // Dim/blur layer so letterboxing on contain feels intentional.
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(color: Colors.black.withValues(alpha: 0.32)),
+              ),
+            ),
+            if (hasVideo)
+              _ForegroundVideo(
+                controller: controller!,
+                fit: fit,
+                key: const ValueKey('video'),
+              )
+            else if (hasPoster)
+              _ForegroundPoster(
+                url: posterUrl!,
+                fit: fit,
+                cacheWidth: _cacheWidth(context, maxPx: 2800),
+                key: const ValueKey('poster-fallback'),
+              )
+            else
+              const ColoredBox(color: Colors.black),
+            if (hasPoster && showPosterOverlay)
+              _ForegroundPoster(
+                url: posterUrl!,
+                fit: fit,
+                cacheWidth: _cacheWidth(context, maxPx: 2800),
+                key: const ValueKey('poster-overlay'),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -100,10 +119,14 @@ class FullscreenBoomerangMedia extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final logical = size.width > size.height ? size.width : size.height;
+    // Android Skia + MediaCodec compete for heap; decode posters smaller.
+    final cappedMax = Platform.isAndroid
+        ? (maxPx > 1440 ? 1440 : maxPx)
+        : maxPx;
     return computeCacheWidthForLogicalWidth(
       logical,
       dpr,
-      maxPx: maxPx,
+      maxPx: cappedMax,
       scale: 1.05,
     );
   }
@@ -128,8 +151,8 @@ class _BackgroundFill extends StatelessWidget {
     final hasVideo = controller != null && controller!.value.isInitialized;
 
     if (hasPoster) {
-      return Image.network(
-        posterUrl!,
+      return BoomerangCachedImage(
+        url: posterUrl!,
         fit: fit,
         cacheWidth: cacheWidth,
         errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.black),
@@ -184,8 +207,8 @@ class _ForegroundPoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      url,
+    return BoomerangCachedImage(
+      url: url,
       fit: fit,
       cacheWidth: cacheWidth,
       errorBuilder: (_, __, ___) => const SizedBox.shrink(),

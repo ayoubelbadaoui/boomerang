@@ -1,4 +1,5 @@
 import 'package:boomerang/core/auth/user_session.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
 import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 import 'package:boomerang/features/auth/presentation/signup_page.dart';
 import 'package:boomerang/features/legal/presentation/legal_page.dart';
@@ -32,6 +33,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _acceptedTerms = false;
   bool _acceptedPrivacy = false;
   bool _initializedFromRoute = false;
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -128,15 +130,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           onPressed: () => context.pop(),
         ),
       ),
+      // Scaffold (adjustResize + resizeToAvoidBottomInset) already lifts for
+      // the keyboard; do not also pad by viewInsets.bottom.
       body: SafeArea(
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(
-            24.w,
-            12.h,
-            24.w,
-            12.h + MediaQuery.viewInsetsOf(context).bottom,
-          ),
+          padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 12.h),
           child: Form(
             key: _formKey,
             child: Column(
@@ -214,9 +213,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 SizedBox(height: 16.h),
                 PrimaryButton(
-                  loading: state.loading,
+                  loading: state.loading || _submitting,
                   onPressed: () async {
+                    if (_submitting) return;
                     if (!_formKey.currentState!.validate()) return;
+                    final tapClock = Stopwatch()..start();
                     if (!_acceptedTerms || !_acceptedPrivacy) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -228,64 +229,84 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       return;
                     }
 
-                    // Snapshot the currently signed-in user (if any)
-                    // BEFORE signIn replaces the Firebase session.
-                    final prevUser = ref.read(firebaseAuthProvider).currentUser;
-                    final profileCandidate =
-                        ref.read(currentUserProfileProvider).value;
-                    final prevProfile =
-                        prevUser != null &&
-                                profileCandidate != null &&
-                                profileCandidate.uid == prevUser.uid
-                            ? profileCandidate
-                            : null;
-                    UserSession? prevSession;
-                    if (prevUser != null) {
-                      prevSession = UserSession(
-                        uid: prevUser.uid,
-                        email: prevProfile?.email ?? prevUser.email ?? '',
-                        displayName:
-                            prevProfile?.fullName.isNotEmpty == true
-                                ? prevProfile!.fullName
-                                : prevProfile?.nickname ??
-                                    prevUser.displayName ??
-                                    '',
-                        photoUrl: prevProfile?.avatarUrl ?? prevUser.photoURL,
-                        lastLogin: DateTime.now(),
-                      );
-                    }
-
-                    await ref
-                        .read(authControllerProvider.notifier)
-                        .login(
-                          _email.text.trim(),
-                          _password.text,
-                          previousAccount: prevSession,
+                    setState(() => _submitting = true);
+                    var keepLocked = false;
+                    try {
+                      // Snapshot the currently signed-in user (if any)
+                      // BEFORE signIn replaces the Firebase session.
+                      final prevUser =
+                          ref.read(firebaseAuthProvider).currentUser;
+                      final profileCandidate =
+                          ref.read(currentUserProfileProvider).value;
+                      final prevProfile =
+                          prevUser != null &&
+                                  profileCandidate != null &&
+                                  profileCandidate.uid == prevUser.uid
+                              ? profileCandidate
+                              : null;
+                      UserSession? prevSession;
+                      if (prevUser != null) {
+                        prevSession = UserSession(
+                          uid: prevUser.uid,
+                          email: prevProfile?.email ?? prevUser.email ?? '',
+                          displayName:
+                              prevProfile?.fullName.isNotEmpty == true
+                                  ? prevProfile!.fullName
+                                  : prevProfile?.nickname ??
+                                      prevUser.displayName ??
+                                      '',
+                          photoUrl:
+                              prevProfile?.avatarUrl ?? prevUser.photoURL,
+                          lastLogin: DateTime.now(),
                         );
-                    if (!mounted) return;
-                    final authResult = ref.read(authControllerProvider);
-                    final loginSucceeded =
-                        authResult.error == null &&
-                        authResult.success != null &&
-                        ref.read(firebaseAuthProvider).currentUser != null;
-                    if (loginSucceeded) {
-                      try {
-                        await ref
-                            .read(firebaseAuthProvider)
-                            .currentUser
-                            ?.getIdToken(true);
-                      } catch (_) {}
-                      final container = ProviderScope.containerOf(
-                        context,
-                        listen: false,
-                      );
-                      invalidateUserScopedProviders(container);
-                      container.invalidate(profileControllerProvider);
-                      container.invalidate(userBoomerangsControllerProvider);
-                      container.invalidate(storedAccountsProvider);
-                      ref.read(homeTabIndexProvider.notifier).state = 0;
+                      }
+
+                      await ref
+                          .read(authControllerProvider.notifier)
+                          .login(
+                            _email.text.trim(),
+                            _password.text,
+                            previousAccount: prevSession,
+                          );
                       if (!mounted) return;
-                      context.go(HomeShell.routeName);
+                      final authResult = ref.read(authControllerProvider);
+                      final loginSucceeded =
+                          authResult.error == null &&
+                          authResult.success != null &&
+                          ref.read(firebaseAuthProvider).currentUser != null;
+                      if (loginSucceeded) {
+                        // Stay locked through navigation so a second tap
+                        // cannot fire while the route is still mounted.
+                        keepLocked = true;
+                        try {
+                          await PerfLog.track(
+                            'login.idTokenRefresh',
+                            () async => ref
+                                .read(firebaseAuthProvider)
+                                .currentUser
+                                ?.getIdToken(true),
+                          );
+                        } catch (_) {}
+                        final container = ProviderScope.containerOf(
+                          context,
+                          listen: false,
+                        );
+                        invalidateUserScopedProviders(container);
+                        container.invalidate(profileControllerProvider);
+                        container.invalidate(userBoomerangsControllerProvider);
+                        container.invalidate(storedAccountsProvider);
+                        ref.read(homeTabIndexProvider.notifier).state = 0;
+                        if (!mounted) return;
+                        PerfLog.event(
+                          'login NAVIGATE-TO-HOME',
+                          'tapToHomeMs=${tapClock.elapsedMilliseconds}',
+                        );
+                        context.go(HomeShell.routeName);
+                      }
+                    } finally {
+                      if (mounted && !keepLocked) {
+                        setState(() => _submitting = false);
+                      }
                     }
                   },
                   child: Text(

@@ -1,8 +1,9 @@
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
+import 'package:boomerang/features/chat/presentation/widgets/chat_image_renderer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:boomerang/features/chat/presentation/widgets/chat_image_renderer.dart';
 
-class FullscreenImageViewer extends StatelessWidget {
+class FullscreenImageViewer extends StatefulWidget {
   const FullscreenImageViewer({
     super.key,
     required this.imageUrl,
@@ -37,9 +38,26 @@ class FullscreenImageViewer extends StatelessWidget {
   }
 
   @override
+  State<FullscreenImageViewer> createState() => _FullscreenImageViewerState();
+}
+
+class _FullscreenImageViewerState extends State<FullscreenImageViewer> {
+  @override
+  void initState() {
+    super.initState();
+    ImmersiveSystemUi.enter();
+  }
+
+  @override
+  void dispose() {
+    ImmersiveSystemUi.leave();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final padding = MediaQuery.of(context).padding;
-    final imageProvider = resolveChatImageProvider(imageUrl);
+    final padding = MediaQuery.viewPaddingOf(context);
+    final imageProvider = resolveChatImageProvider(widget.imageUrl);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -50,7 +68,7 @@ class FullscreenImageViewer extends StatelessWidget {
           children: [
             Center(
               child: Hero(
-                tag: heroTag,
+                tag: widget.heroTag,
                 createRectTween:
                     (begin, end) => MaterialRectArcTween(begin: begin, end: end),
                 child:

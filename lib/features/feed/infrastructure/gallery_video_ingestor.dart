@@ -72,19 +72,45 @@ class GalleryVideoIngestor {
       return candidate;
     }
 
-    final bytes = await source.readAsBytes();
-    if (bytes.isEmpty) {
-      throw const GalleryVideoIngestException(
-        'Could not read that video file. Please re-download it and try again.',
-      );
-    }
-
+    // Stream content:// (common on Android) instead of readAsBytes — loading
+    // up to 500MB into the Dart/Java heap OOMs mid-tier devices.
     final ext = _extensionFrom(source.name, rawPath);
     final tmp = await getTemporaryDirectory();
     final output = File(
       '${tmp.path}/gallery_import_${DateTime.now().millisecondsSinceEpoch}.$ext',
     );
-    await output.writeAsBytes(bytes, flush: true);
+    final sink = output.openWrite();
+    var total = 0;
+    try {
+      await for (final chunk in source.openRead()) {
+        total += chunk.length;
+        if (total > _maxBytes) {
+          throw const GalleryVideoIngestException(
+            'This video is too large to process. Please choose a smaller clip.',
+          );
+        }
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+    } catch (e) {
+      try {
+        await sink.close();
+      } catch (_) {}
+      try {
+        if (await output.exists()) await output.delete();
+      } catch (_) {}
+      if (e is GalleryVideoIngestException) rethrow;
+      throw const GalleryVideoIngestException(
+        'Could not read that video file. Please re-download it and try again.',
+      );
+    }
+
+    if (total <= 0 || !await output.exists()) {
+      throw const GalleryVideoIngestException(
+        'Could not read that video file. Please re-download it and try again.',
+      );
+    }
     return output;
   }
 

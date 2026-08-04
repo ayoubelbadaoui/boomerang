@@ -14,8 +14,13 @@ Future<bool> showBlockDialog(
   String? blockedName,
   String? blockedAvatar,
 }) async {
+  // Capture the messenger up front: the [context] passed in may belong to a
+  // bottom sheet that gets popped before the async work completes (common on
+  // iPad), which would make `ScaffoldMessenger.of(context)` throw or no-op.
+  final messenger = ScaffoldMessenger.of(context);
   final confirmed = await showDialog<bool>(
     context: context,
+    useRootNavigator: true,
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
@@ -52,28 +57,32 @@ Future<bool> showBlockDialog(
 
   if (confirmed != true) return false;
 
-  final me = ref.read(currentUserProfileProvider).value;
-  if (me == null) return false;
+  // Prefer the loaded profile uid, but fall back to the FirebaseAuth uid so a
+  // not-yet-hydrated profile never turns the tap into a silent no-op.
+  final blockerUid = ref.read(currentUserProfileProvider).value?.uid ??
+      ref.read(firebaseAuthProvider).currentUser?.uid;
+  if (blockerUid == null) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('You must be signed in to block users')),
+    );
+    return false;
+  }
 
   try {
     await ref.read(moderationRepoProvider).blockUser(
-          blockerUid: me.uid,
+          blockerUid: blockerUid,
           blockedUid: blockedUid,
           blockedName: blockedName,
           blockedAvatar: blockedAvatar,
         );
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$handle has been blocked')),
-      );
-    }
+    messenger.showSnackBar(
+      SnackBar(content: Text('$handle has been blocked')),
+    );
     return true;
   } catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to block user')),
-      );
-    }
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Failed to block user')),
+    );
     return false;
   }
 }
@@ -86,8 +95,10 @@ Future<bool> showUnblockDialog(
   required String blockedUid,
   required String handle,
 }) async {
+  final messenger = ScaffoldMessenger.of(context);
   final confirmed = await showDialog<bool>(
     context: context,
+    useRootNavigator: true,
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
@@ -124,26 +135,28 @@ Future<bool> showUnblockDialog(
 
   if (confirmed != true) return false;
 
-  final me = ref.read(currentUserProfileProvider).value;
-  if (me == null) return false;
+  final blockerUid = ref.read(currentUserProfileProvider).value?.uid ??
+      ref.read(firebaseAuthProvider).currentUser?.uid;
+  if (blockerUid == null) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('You must be signed in to unblock users')),
+    );
+    return false;
+  }
 
   try {
     await ref.read(moderationRepoProvider).unblockUser(
-          blockerUid: me.uid,
+          blockerUid: blockerUid,
           blockedUid: blockedUid,
         );
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$handle has been unblocked')),
-      );
-    }
+    messenger.showSnackBar(
+      SnackBar(content: Text('$handle has been unblocked')),
+    );
     return true;
   } catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to unblock user')),
-      );
-    }
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Failed to unblock user')),
+    );
     return false;
   }
 }

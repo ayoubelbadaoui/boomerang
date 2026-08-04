@@ -1,9 +1,10 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
-import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
+import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
@@ -38,15 +39,12 @@ class _ProfileReelsPageState extends ConsumerState<ProfileReelsPage> {
     super.initState();
     _currentPage = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    ImmersiveSystemUi.enter();
   }
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    ImmersiveSystemUi.leave();
     _pageController.dispose();
     super.dispose();
   }
@@ -122,17 +120,24 @@ class _PostPageState extends ConsumerState<_PostPage> {
     super.initState();
     final videoUrl = widget.data['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        ..initialize().then((_) {
-          if (!mounted) return;
-          _initialized = true;
-          setState(() {});
-          _controller?.setLooping(true);
-          _controller?.setVolume(0.0);
-          if (widget.isActive) _controller?.play();
-          _controller?.addListener(_onVideoTickForPoster);
-          _schedulePosterFallback();
-        });
+      // ignore: discarded_futures
+      BoomerangVideoCache.instance.createController(videoUrl).then((c) {
+        if (!mounted) {
+          c.dispose();
+          return;
+        }
+        _controller = c
+          ..initialize().then((_) {
+            if (!mounted) return;
+            _initialized = true;
+            setState(() {});
+            _controller?.setLooping(true);
+            _controller?.setVolume(0.0);
+            if (widget.isActive) _controller?.play();
+            _controller?.addListener(_onVideoTickForPoster);
+            _schedulePosterFallback();
+          });
+      });
     }
   }
 
@@ -362,39 +367,11 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
             onTap: _onTap,
             onDoubleTap: _onDoubleTap,
             behavior: HitTestBehavior.opaque,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (widget.controller != null &&
-                    widget.controller!.value.isInitialized)
-                  FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      width: widget.controller!.value.size.width,
-                      height: widget.controller!.value.size.height,
-                      child: VideoPlayer(widget.controller!),
-                    ),
-                  )
-                else
-                  Container(color: Colors.black),
-                if (widget.image != null &&
-                    widget.image!.isNotEmpty &&
-                    widget.showPosterOverlay)
-                  AnimatedOpacity(
-                    opacity: widget.showPosterOverlay ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    child: Image.network(
-                      widget.image!,
-                      fit: BoxFit.cover,
-                      cacheWidth: computeCacheWidthForLogicalWidth(
-                        MediaQuery.sizeOf(context).width,
-                        MediaQuery.devicePixelRatioOf(context),
-                        maxPx: 2200,
-                      ),
-                    ),
-                  ),
-              ],
+            child: FullscreenBoomerangMedia(
+              controller: widget.controller,
+              posterUrl: widget.image,
+              showPosterOverlay: widget.showPosterOverlay,
+              explicitVideoAspectRatio: _readAspect(widget.data),
             ),
           ),
         ),
@@ -440,5 +417,14 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
         ),
       ],
     );
+  }
+
+  double? _readAspect(Map<String, dynamic> data) {
+    final value = data['videoAspectRatio'];
+    if (value is num) {
+      final parsed = value.toDouble();
+      if (parsed.isFinite && parsed > 0) return parsed;
+    }
+    return null;
   }
 }

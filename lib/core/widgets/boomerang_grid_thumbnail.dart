@@ -1,3 +1,4 @@
+import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:boomerang/core/widgets/instagram_shimmer.dart';
 import 'package:flutter/material.dart';
 
@@ -94,11 +95,10 @@ class _BoomerangGridThumbnailState extends State<BoomerangGridThumbnail> {
 
     Widget builtImage;
     if (widget.usePlainNetwork) {
-      builtImage = Image.network(
-        url,
+      builtImage = BoomerangCachedImage(
+        url: url,
         fit: BoxFit.cover,
         cacheWidth: widget.cacheWidth,
-        gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSync) {
           final done = frame != null || wasSync;
           if (done) {
@@ -114,7 +114,11 @@ class _BoomerangGridThumbnailState extends State<BoomerangGridThumbnail> {
     } else {
       final w = widget.cacheWidth ?? 1;
       builtImage = Image(
-        image: ResizeImage.resizeIfNeeded(w, null, NetworkImage(url)),
+        image: ResizeImage.resizeIfNeeded(
+          w,
+          null,
+          cachedNetworkImageProvider(url, cacheWidth: w),
+        ),
         fit: BoxFit.cover,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSync) {

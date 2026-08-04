@@ -10,7 +10,12 @@ class BoomerangPagerShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.viewPaddingOf(context).top;
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final top = viewPadding.top;
+    final bottom = viewPadding.bottom;
+    final topBarHeight = 48.h;
+    final actionsBottom = bottom + 100.h;
+    final infoBottom = bottom + 24.h;
     return ColoredBox(
       // Keep fullscreen loading neutral gray (not pure black) for softer UX.
       color: const Color(0xFF2A2A2A),
@@ -63,37 +68,45 @@ class BoomerangPagerShimmer extends StatelessWidget {
             ),
             Positioned(
               right: 12.w,
-              bottom: 100.h,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ShimmerCircle(size: 62.r, phaseShift: 0.07),
-                  SizedBox(height: 8.h),
-                  ShimmerBone(
-                    width: 28.w,
-                    height: 14.h,
-                    borderRadius: BorderRadius.circular(6.r),
-                    phaseShift: 0.09,
+              top: top + 8.h + topBarHeight,
+              bottom: actionsBottom,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomCenter,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ShimmerCircle(size: 62.r, phaseShift: 0.07),
+                      SizedBox(height: 8.h),
+                      ShimmerBone(
+                        width: 28.w,
+                        height: 14.h,
+                        borderRadius: BorderRadius.circular(6.r),
+                        phaseShift: 0.09,
+                      ),
+                      SizedBox(height: 18.h),
+                      ShimmerCircle(size: 62.r, phaseShift: 0.11),
+                      SizedBox(height: 8.h),
+                      ShimmerBone(
+                        width: 28.w,
+                        height: 14.h,
+                        borderRadius: BorderRadius.circular(6.r),
+                        phaseShift: 0.13,
+                      ),
+                      SizedBox(height: 18.h),
+                      ShimmerCircle(size: 62.r, phaseShift: 0.15),
+                      SizedBox(height: 18.h),
+                      ShimmerCircle(size: 62.r, phaseShift: 0.17),
+                    ],
                   ),
-                  SizedBox(height: 18.h),
-                  ShimmerCircle(size: 62.r, phaseShift: 0.11),
-                  SizedBox(height: 8.h),
-                  ShimmerBone(
-                    width: 28.w,
-                    height: 14.h,
-                    borderRadius: BorderRadius.circular(6.r),
-                    phaseShift: 0.13,
-                  ),
-                  SizedBox(height: 18.h),
-                  ShimmerCircle(size: 62.r, phaseShift: 0.15),
-                  SizedBox(height: 18.h),
-                  ShimmerCircle(size: 62.r, phaseShift: 0.17),
-                ],
+                ),
               ),
             ),
             Positioned(
               left: 12.w,
-              bottom: 24.h,
+              bottom: infoBottom,
               right: 88.w,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

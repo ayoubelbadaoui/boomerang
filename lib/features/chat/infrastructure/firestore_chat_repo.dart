@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:boomerang/core/storage/storage_metadata.dart';
 import 'package:boomerang/features/chat/domain/chat_repo.dart';
 import 'package:boomerang/features/chat/domain/conversation_entity.dart';
 import 'package:boomerang/features/chat/domain/message_entity.dart';
@@ -466,7 +467,7 @@ class FirestoreChatRepo implements ChatRepo {
   ) async {
     final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
     final ref = _storage.ref('chat_images/$conversationId/$fileName');
-    await ref.putFile(File(localPath));
+    await ref.putFile(File(localPath), immutableMediaMetadata('image/jpeg'));
     return ref.getDownloadURL();
   }
 
@@ -477,7 +478,7 @@ class FirestoreChatRepo implements ChatRepo {
   ) async {
     final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
     final ref = _storage.ref('chat_audio/$conversationId/$fileName');
-    await ref.putFile(File(localPath));
+    await ref.putFile(File(localPath), immutableMediaMetadata('audio/mp4'));
     return ref.getDownloadURL();
   }
 }

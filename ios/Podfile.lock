@@ -1453,6 +1453,9 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - sqflite_darwin (0.0.4):
+    - Flutter
+    - FlutterMacOS
   - TOCropViewController (2.8.0)
   - video_player_avfoundation (0.0.1):
     - Flutter
@@ -1480,6 +1483,7 @@ DEPENDENCIES:
   - record_darwin (from `.symlinks/plugins/record_darwin/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
   - video_player_avfoundation (from `.symlinks/plugins/video_player_avfoundation/darwin`)
 
 SPEC REPOS:
@@ -1553,6 +1557,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/share_plus/ios"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
+  sqflite_darwin:
+    :path: ".symlinks/plugins/sqflite_darwin/darwin"
   video_player_avfoundation:
     :path: ".symlinks/plugins/video_player_avfoundation/darwin"
 
@@ -1602,6 +1608,7 @@ SPEC CHECKSUMS:
   record_darwin: fb1f375f1d9603714f55b8708a903bbb91ffdb0a
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
+  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   TOCropViewController: 797deaf39c90e6e9ddd848d88817f6b9a8a09888
   video_player_avfoundation: 2cef49524dd1f16c5300b9cd6efd9611ce03639b
 

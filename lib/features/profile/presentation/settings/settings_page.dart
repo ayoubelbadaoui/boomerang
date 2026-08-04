@@ -1,7 +1,6 @@
 import 'package:boomerang/features/profile/application/profile_controller.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/profile/presentation/settings/manage_account_page.dart';
-import 'package:boomerang/features/profile/presentation/settings/notifications_page.dart';
 import 'package:boomerang/features/profile/presentation/settings/privacy_page.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
 import 'package:boomerang/core/notifications/push_notifications_service.dart';
@@ -53,17 +52,6 @@ class SettingsPage extends ConsumerWidget {
                 onTap:
                     () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const PrivacyPage()),
-                    ),
-              ),
-              _SettingsTile(
-                icon: Icons.notifications_none_rounded,
-                title: 'Notifications',
-                subtitle: 'Push alerts, sounds, preferences',
-                onTap:
-                    () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationsPage(),
-                      ),
                     ),
               ),
             ],

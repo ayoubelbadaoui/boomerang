@@ -290,7 +290,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
 
   void _onScroll() {
     if (!_controller.hasClients) return;
-    const threshold = 600.0;
+    const threshold = 1200.0;
     if (_controller.position.maxScrollExtent - _controller.position.pixels <=
         threshold) {
       ref

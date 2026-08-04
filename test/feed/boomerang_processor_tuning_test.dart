@@ -12,7 +12,7 @@ void main() {
       );
       expect(candidates, isNotEmpty);
       expect(candidates.first, containsAllInOrder(['-c:v', 'libx264']));
-      expect(candidates.first, containsAllInOrder(['-crf', '16']));
+      expect(candidates.first, containsAllInOrder(['-crf', '18']));
       expect(candidates.first, containsAllInOrder(['-pix_fmt', 'yuv420p']));
       expect(candidates.first, containsAllInOrder(['-g', '60']));
     });

@@ -94,10 +94,12 @@ function buildPushMessage(payload, template, actorUser, badgeCount = 1) {
                     'mutable-content': 1,
                 },
             },
+            ...(imageUrl ? { fcmOptions: { image: imageUrl } } : {}),
         },
         android: {
             priority: 'high',
             notification: {
+                channelId: 'boomerang_push',
                 sound: 'default',
                 ...(imageUrl ? { image: imageUrl } : {}),
             },

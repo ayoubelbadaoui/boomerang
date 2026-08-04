@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:boomerang/core/audio/app_audio_session.dart';
 import 'package:boomerang/core/assets/shared_assets.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
 import 'package:boomerang/firebase_options.dart';
 import 'package:boomerang/infrastructure/auth/install_session_guard.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -24,11 +26,25 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  // Keep the image cache well below the Android per-app heap ceiling. On
-  // low-RAM devices the heap growth limit can be as low as 256 MB, so a large
-  // poster cache competes with video decoder (MediaCodec/ExoPlayer) buffers and
-  // triggers OutOfMemoryError while scrolling the fullscreen feed.
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 * 1024 * 1024;
+  // Match iOS-style edge-to-edge chrome: transparent bars; fullscreen routes
+  // still use ImmersiveSystemUi to hide overlays entirely.
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+  if (Platform.isAndroid) {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
+  // Poster disk cache (CachedNetworkImage) handles scroll-back; keep in-memory
+  // budget modest so video decoders still have headroom on low-RAM devices.
+  // Android MediaCodec heaps compete harder — keep a tighter Flutter image cache.
+  PaintingBinding.instance.imageCache.maximumSizeBytes =
+      (Platform.isAndroid ? 64 : 96) * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = Platform.isAndroid ? 160 : 200;
 
   // Let background music (Spotify, Apple Music, etc.) keep playing.
   // Videos in this app are muted; voice notes switch to a playback session on demand.
@@ -66,12 +82,28 @@ class _BootstrapAppState extends State<_BootstrapApp> {
   }
 
   Future<_BootstrapState> _initialize() async {
-    final hasInternet = await _hasInternetConnection();
+    PerfLog.event('bootstrap START');
+    final hasInternet = await PerfLog.track(
+      'bootstrap.connectivityCheck',
+      _hasInternetConnection,
+    );
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
+      await PerfLog.track(
+        'bootstrap.firebaseInit',
+        () => Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        ),
       );
-      await InstallSessionGuard().enforce();
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        // Cap persistence so Android native heap does not grow unboundedly.
+        cacheSizeBytes: 100 * 1024 * 1024,
+      );
+      await PerfLog.track(
+        'bootstrap.installSessionGuard',
+        () => InstallSessionGuard().enforce(),
+      );
+      PerfLog.event('bootstrap READY');
       return _BootstrapState.ready;
     } catch (e, st) {
       debugPrint('Firebase initialization failed: $e\n$st');

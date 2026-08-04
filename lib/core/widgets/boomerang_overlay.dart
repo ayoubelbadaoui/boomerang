@@ -47,7 +47,14 @@ class BoomerangOverlay extends ConsumerWidget {
     final likes = likesOverride ?? (data['likes'] ?? 0) as int;
     final caption = (data['caption'] ?? '') as String;
     final initialCommentsCount = ((data['commentsCount'] ?? 0) as num).toInt();
-    final topInset = MediaQuery.viewPaddingOf(context).top;
+    // viewPadding keeps cutout/gesture insets even when SystemChrome hides
+    // overlays (edge-to-edge / immersive) — same idea as camera/editor pads.
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final topInset = viewPadding.top;
+    final bottomInset = viewPadding.bottom;
+    final topBarHeight = 48.h;
+    final actionsBottom = bottomInset + 100.h;
+    final infoBottom = bottomInset + 24.h;
     final me = ref.watch(currentUserProfileProvider).value;
 
     return Stack(
@@ -77,133 +84,168 @@ class BoomerangOverlay extends ConsumerWidget {
               ],
             ),
           ),
-        // Right side actions
+        // Right side actions — constrained below the top bar on short screens.
         Positioned(
           right: 12.w,
-          bottom: 100.h,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ActionBubble(
-                child: _LikeIcon(
-                  postId: boomerangId,
-                  data: data,
-                  likedOverride: likedOverride,
-                  likesOverride: likesOverride,
-                  onToggleLike: onToggleLike,
-                ),
-              ),
-              SizedBox(height: 4.h),
-              Text(
-                '$likes',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              SizedBox(height: 18.h),
-              _ActionBubble(
-                onTap: () => _showCommentsSheet(context, boomerangId, userId),
-                child: Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  color: Colors.white,
-                  size: 34.r,
-                ),
-              ),
-              SizedBox(height: 4.h),
-              StreamBuilder(
-                stream: ref.watch(commentsRepoProvider).watch(boomerangId),
-                builder: (context, snapshot) {
-                  final count =
-                      snapshot.data?.docs.length ?? initialCommentsCount;
-                  return Text(
-                    '$count',
+          top:
+              showTopBar
+                  ? topInset + 8.h + topBarHeight
+                  : topInset + 8.h,
+          bottom: actionsBottom,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.bottomCenter,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ActionBubble(
+                    child: _LikeIcon(
+                      postId: boomerangId,
+                      data: data,
+                      likedOverride: likedOverride,
+                      likesOverride: likesOverride,
+                      onToggleLike: onToggleLike,
+                    ),
+                  ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    '$likes',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 15.sp,
                       fontWeight: FontWeight.w600,
                     ),
-                  );
-                },
-              ),
-              SizedBox(height: 18.h),
-              if (me != null)
-                StreamBuilder<bool>(
-                  stream: ref
-                      .watch(savedRepoProvider)
-                      .watchIsSaved(userId: me.uid, boomerangId: boomerangId),
-                  initialData: false,
-                  builder: (context, snapshot) {
-                    final saved = snapshot.data ?? false;
-                    return _ActionBubble(
-                      onTap: () async {
-                        await ref
-                            .read(savedRepoProvider)
-                            .toggleSave(
-                              userId: me.uid,
-                              boomerangId: boomerangId,
-                              boomerangData: data,
-                            );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                saved
-                                    ? 'Removed from saved'
-                                    : 'Saved to your profile',
-                              ),
-                            ),
-                          );
-                        }
+                  ),
+                  SizedBox(height: 18.h),
+                  _ActionBubble(
+                    onTap:
+                        () => _showCommentsSheet(context, boomerangId, userId),
+                    child: Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: Colors.white,
+                      size: 34.r,
+                    ),
+                  ),
+                  SizedBox(height: 4.h),
+                  StreamBuilder(
+                    stream: ref.watch(commentsRepoProvider).watch(boomerangId),
+                    builder: (context, snapshot) {
+                      final count =
+                          snapshot.data?.docs.length ?? initialCommentsCount;
+                      return Text(
+                        '$count',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
+                  ),
+                  SizedBox(height: 18.h),
+                  if (me != null)
+                    Builder(
+                      builder: (context) {
+                        final savedIds =
+                            ref.watch(savedBoomerangIdsProvider).value ??
+                            const {};
+                        final saved = savedIds.contains(boomerangId);
+                        return _ActionBubble(
+                          onTap: () async {
+                            await ref
+                                .read(savedRepoProvider)
+                                .toggleSave(
+                                  userId: me.uid,
+                                  boomerangId: boomerangId,
+                                  boomerangData: data,
+                                );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    saved
+                                        ? 'Removed from saved'
+                                        : 'Saved to your profile',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          child: Icon(
+                            saved
+                                ? Icons.bookmark
+                                : Icons.bookmark_outline_rounded,
+                            color: Colors.white,
+                            size: 34.r,
+                          ),
+                        );
                       },
+                    ),
+                  SizedBox(height: 16.h),
+                  _ActionBubble(
+                    onTap:
+                        () => _showShareSheet(
+                          context,
+                          video,
+                          handle,
+                          boomerangId: boomerangId,
+                          imageUrl: data['imageUrl'] as String?,
+                          userName: userName,
+                          caption: data['caption'] as String?,
+                        ),
+                    child: Icon(
+                      Icons.send_outlined,
+                      color: Colors.white,
+                      size: 34.r,
+                    ),
+                  ),
+                  if (me != null && me.uid != userId && userId.isNotEmpty) ...[
+                    SizedBox(height: 16.h),
+                    _ActionBubble(
+                      onTap:
+                          () => showReportSheet(
+                            context,
+                            reportedUid: userId,
+                            boomerangId: boomerangId,
+                            showBlockOption: true,
+                            reportedName: userName,
+                            reportedAvatar: avatar,
+                            reportedHandle: handle,
+                          ),
                       child: Icon(
-                        saved ? Icons.bookmark : Icons.bookmark_outline_rounded,
+                        Icons.flag_outlined,
                         color: Colors.white,
                         size: 34.r,
                       ),
-                    );
-                  },
-                ),
-              SizedBox(height: 16.h),
-              _ActionBubble(
-                onTap:
-                    () => _showShareSheet(
-                      context,
-                      video,
-                      handle,
-                      reportedUid: userId,
-                      boomerangId: boomerangId,
-                      imageUrl: data['imageUrl'] as String?,
-                      userName: userName,
-                      caption: data['caption'] as String?,
                     ),
-                child: Icon(
-                  Icons.send_outlined,
-                  color: Colors.white,
-                  size: 34.r,
-                ),
+                  ],
+                  if (me != null && me.uid == userId) ...[
+                    SizedBox(height: 16.h),
+                    _ActionBubble(
+                      onTap:
+                          () => _confirmDeleteFromOverlay(
+                            context,
+                            ref,
+                            boomerangId,
+                          ),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.white,
+                        size: 34.r,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              if (me != null && me.uid == userId) ...[
-                SizedBox(height: 16.h),
-                _ActionBubble(
-                  onTap:
-                      () =>
-                          _confirmDeleteFromOverlay(context, ref, boomerangId),
-                  child: Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.white,
-                    size: 34.r,
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
         // Bottom info: avatar, handle, caption
         Positioned(
           left: 12.w,
-          bottom: 24.h,
+          bottom: infoBottom,
           right: 60.w,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,6 +369,7 @@ class _LikeIconState extends ConsumerState<_LikeIcon> {
           me == null || _busy
               ? null
               : () async {
+                setState(() => _busy = true);
                 final previousLiked = isLiked;
                 final previousLikes = currentLikes;
                 final nextLiked = !previousLiked;
@@ -341,7 +384,6 @@ class _LikeIconState extends ConsumerState<_LikeIcon> {
                       liked: nextLiked,
                       likes: nextLikes,
                     );
-                setState(() => _busy = true);
                 try {
                   final result = await ref
                       .read(boomerangRepoProvider)
@@ -366,6 +408,21 @@ class _LikeIconState extends ConsumerState<_LikeIcon> {
                           postId: widget.postId,
                           liked: result.liked,
                           likes: result.likes,
+                        );
+                  } else {
+                    // In-flight duplicate write — roll back optimistic UI.
+                    widget.onToggleLike?.call(previousLiked, previousLikes);
+                    _patchHomeFeedLike(
+                      me: me,
+                      liked: previousLiked,
+                      likes: previousLikes,
+                    );
+                    ref
+                        .read(postLikeUiControllerProvider.notifier)
+                        .setStateForPost(
+                          postId: widget.postId,
+                          liked: previousLiked,
+                          likes: previousLikes,
                         );
                   }
                 } catch (_) {
@@ -434,7 +491,6 @@ void _showShareSheet(
   BuildContext context,
   String? videoUrl,
   String handle, {
-  required String reportedUid,
   String? boomerangId,
   String? imageUrl,
   String? userName,
@@ -505,18 +561,6 @@ void _showShareSheet(
                     label: 'Share',
                     // ignore: deprecated_member_use
                     onTap: () => Share.share(videoUrl ?? handle),
-                  ),
-                  _ShareOption(
-                    icon: Icons.flag_outlined,
-                    label: 'Report',
-                    onTap: () {
-                      Navigator.pop(context);
-                      showReportSheet(
-                        context,
-                        reportedUid: reportedUid,
-                        boomerangId: boomerangId,
-                      );
-                    },
                   ),
                 ],
               ),

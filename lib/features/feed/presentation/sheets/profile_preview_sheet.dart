@@ -364,8 +364,19 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                     children: [
                       TextButton.icon(
                         onPressed: () {
+                          // Capture a context that survives popping this sheet
+                          // (the sheet's own context becomes defunct after
+                          // pop, which on iPad silently swallows the next
+                          // route/dialog).
+                          final rootContext = Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).context;
                           Navigator.pop(context);
-                          showReportSheet(context, reportedUid: widget.userId);
+                          showReportSheet(
+                            rootContext,
+                            reportedUid: widget.userId,
+                          );
                         },
                         icon: Icon(
                           Icons.flag_outlined,
@@ -383,17 +394,26 @@ class _ProfilePreviewSheetState extends ConsumerState<ProfilePreviewSheet> {
                       SizedBox(width: 16.w),
                       TextButton.icon(
                         onPressed: () async {
+                          // Use the root navigator's context so the
+                          // confirmation dialog still shows after this sheet
+                          // is popped (the sheet's context is unmounted by
+                          // then — the root cause of the unresponsive Block
+                          // button on iPad).
+                          final rootContext = Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).context;
                           Navigator.pop(context);
                           if (isBlocked) {
                             await showUnblockDialog(
-                              context,
+                              rootContext,
                               ref: ref,
                               blockedUid: widget.userId,
                               handle: widget.handle,
                             );
                           } else {
                             await showBlockDialog(
-                              context,
+                              rootContext,
                               ref: ref,
                               blockedUid: widget.userId,
                               handle: widget.handle,
@@ -486,9 +506,13 @@ class _BlockedPreview extends ConsumerWidget {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () {
+                  final rootContext = Navigator.of(
+                    context,
+                    rootNavigator: true,
+                  ).context;
                   Navigator.pop(context);
                   showUnblockDialog(
-                    context,
+                    rootContext,
                     ref: ref,
                     blockedUid: userId,
                     handle: handle,

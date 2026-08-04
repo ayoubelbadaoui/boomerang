@@ -1,3 +1,4 @@
+import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:flutter/widgets.dart';
 
 /// Precaches a list of network images with limited concurrency to avoid
@@ -16,11 +17,10 @@ Future<void> precacheImages(
     while (queue.isNotEmpty) {
       final url = queue.removeAt(0);
       try {
-        ImageProvider provider = NetworkImage(url);
-        if (cacheWidth != null) {
-          provider = ResizeImage(provider, width: cacheWidth);
-        }
-        await precacheImage(provider, context);
+        await precacheImage(
+          cachedNetworkImageProvider(url, cacheWidth: cacheWidth),
+          context,
+        );
       } catch (_) {
         // Individual failure is fine — skip and continue.
       }

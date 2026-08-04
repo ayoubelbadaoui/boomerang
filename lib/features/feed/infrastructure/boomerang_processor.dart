@@ -60,6 +60,23 @@ class BoomerangProcessor {
         ['-c:v', 'mpeg4', '-q:v', favorQuality ? '2' : '3', ...common],
       ];
     }
+    if (Platform.isAndroid) {
+      return [
+        [
+          '-c:v',
+          'h264_mediacodec',
+          '-b:v',
+          tuning.targetBitrate,
+          '-maxrate',
+          tuning.maxBitrate,
+          '-bufsize',
+          tuning.bufferSize,
+          ...common,
+        ],
+        x264Path,
+        ['-c:v', 'mpeg4', '-q:v', favorQuality ? '2' : '3', ...common],
+      ];
+    }
     return [
       x264Path,
       ['-c:v', 'mpeg4', '-q:v', favorQuality ? '2' : '3', ...common],
@@ -935,38 +952,42 @@ _EncodeTuning _tuningFor({
   final pixels = safeW * safeH;
   final fpsFactor = (safeFps / 30.0).clamp(0.85, 2.0);
 
+  // Delivery-oriented rate ladder. These files are streamed uncached-first
+  // over cellular in the feed — the old ladder (5.8/9/13.5/18 Mbps) produced
+  // 5-8 MB boomerangs that took seconds to start on mediocre LTE. CRF still
+  // sets the quality floor; maxrate (1.45x target) is the hard ceiling.
   double baseMbps;
   if (pixels <= 640 * 360) {
-    baseMbps = 2.0;
+    baseMbps = 1.8;
   } else if (pixels <= 854 * 480) {
-    baseMbps = 3.0;
+    baseMbps = 2.5;
   } else if (pixels <= 1280 * 720) {
-    baseMbps = 5.8;
+    baseMbps = 3.6;
   } else if (pixels <= 1920 * 1080) {
-    baseMbps = 9.0;
+    baseMbps = 5.5;
   } else if (pixels <= 2560 * 1440) {
-    baseMbps = 13.5;
+    baseMbps = 7.5;
   } else {
-    baseMbps = 18.0;
+    baseMbps = 9.0;
   }
 
   var targetMbps = baseMbps * fpsFactor;
   if (favorQuality) {
-    targetMbps = targetMbps.clamp(2.8, 24.0);
+    targetMbps = targetMbps.clamp(2.2, 7.0);
   } else {
-    targetMbps = targetMbps.clamp(1.6, 9.0);
+    targetMbps = targetMbps.clamp(1.4, 5.0);
   }
-  final maxMbps = (targetMbps * 1.45).clamp(3.4, 28.0);
-  final bufMbps = (maxMbps * 2).clamp(7.0, 48.0);
+  final maxMbps = (targetMbps * 1.45).clamp(2.4, 10.5);
+  final bufMbps = (maxMbps * 2).clamp(4.8, 21.0);
 
   final crf =
       pixels <= 854 * 480
-          ? 19
+          ? 21
           : pixels <= 1280 * 720
-          ? 18
+          ? 20
           : pixels <= 1920 * 1080
-          ? 17
-          : 16;
+          ? 19
+          : 18;
   final gop = (safeFps * 2).round().clamp(24, 180);
 
   String fmt(double mbps) => '${mbps.toStringAsFixed(1)}M';

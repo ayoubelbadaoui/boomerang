@@ -124,7 +124,7 @@ class OnboardingPage extends StatelessWidget {
           ),
           // Skip button top-right
           Positioned(
-            top: MediaQuery.paddingOf(context).top + 12.h,
+            top: MediaQuery.viewPaddingOf(context).top + 12.h,
             right: 16.w,
             child: TextButton(
               onPressed: () => context.push(AuthChoicePage.routeName),

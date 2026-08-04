@@ -1,3 +1,4 @@
+import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:boomerang/core/widgets/fullscreen_avatar_viewer.dart';
 import 'package:flutter/material.dart';
 
@@ -45,10 +46,8 @@ class AppAvatar extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: Image.network(
-          url!,
-          width: size,
-          height: size,
+        child: BoomerangCachedImage(
+          url: url!,
           fit: BoxFit.cover,
           cacheWidth: cacheSize,
           cacheHeight: cacheSize,

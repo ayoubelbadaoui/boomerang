@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/feed/infrastructure/gallery_video_ingestor.dart';
 import 'package:boomerang/features/feed/presentation/editor/boomerang_editor_page.dart';
@@ -155,10 +156,13 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   List<CameraDescription> _cameras = [];
   int _camIdx = 0;
   bool _recording = false;
+  bool _starting = false;
+  bool _stopWhenStarted = false;
   bool _navigating = false;
   bool _camInitFailed = false;
   bool _camPermanentlyDenied = false;
   bool _initializing = false;
+  bool _lifecycleSuspended = false;
 
   FlashMode _flash = FlashMode.off;
   double _zoom = 1.0;
@@ -202,7 +206,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    ImmersiveSystemUi.enter();
     WidgetsBinding.instance.addObserver(this);
     _initCameras();
   }
@@ -211,11 +215,61 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // When the user returns from the system Settings (e.g. after granting
     // camera access), automatically retry so they don't have to tap again.
-    if (state == AppLifecycleState.resumed &&
-        _camInitFailed &&
-        !_initializing) {
-      _initCameras();
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      _suspendCameraForLifecycle();
+      return;
     }
+    if (state == AppLifecycleState.resumed) {
+      if (_camInitFailed && !_initializing) {
+        _initCameras();
+        return;
+      }
+      _resumeCameraAfterLifecycle();
+    }
+  }
+
+  Future<void> _suspendCameraForLifecycle() async {
+    if (_lifecycleSuspended || _navigating) return;
+    _lifecycleSuspended = true;
+    _burstTimer?.cancel();
+    _progressAnim.stop();
+    _progressAnim.reset();
+    _pulseAnim.stop();
+    _pulseAnim.reset();
+    final wasRecording = _recording || _starting;
+    _recording = false;
+    _starting = false;
+    _stopWhenStarted = false;
+    final cam = _cam;
+    _cam = null;
+    if (cam != null) {
+      try {
+        if (wasRecording && cam.value.isRecordingVideo) {
+          await cam.stopVideoRecording();
+        }
+      } catch (_) {}
+      try {
+        await cam.dispose();
+      } catch (_) {}
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _resumeCameraAfterLifecycle() async {
+    if (!_lifecycleSuspended || _navigating || _initializing) return;
+    _lifecycleSuspended = false;
+    if (_cameras.isEmpty) {
+      await _initCameras();
+      return;
+    }
+    final idx = _camIdx.clamp(0, _cameras.length - 1);
+    await _setupCam(_cameras[idx]);
+  }
+
+  void _requestClose() {
+    if (_recording || _starting || _navigating) return;
+    Navigator.of(context).maybePop();
   }
 
   Future<void> _initCameras() async {
@@ -307,11 +361,20 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   Future<CameraController> _buildControllerWithPresetFallback(
     CameraDescription desc,
   ) async {
-    final presets = <ResolutionPreset>[
-      ResolutionPreset.veryHigh,
-      ResolutionPreset.high,
-      ResolutionPreset.medium,
-    ];
+    // Android mid-tier devices often fail or thrash on veryHigh first; start
+    // gentler and only escalate. iOS keeps the quality-first order.
+    final presets =
+        Platform.isAndroid
+            ? <ResolutionPreset>[
+              ResolutionPreset.high,
+              ResolutionPreset.medium,
+              ResolutionPreset.veryHigh,
+            ]
+            : <ResolutionPreset>[
+              ResolutionPreset.veryHigh,
+              ResolutionPreset.high,
+              ResolutionPreset.medium,
+            ];
     Object? lastError;
     for (final preset in presets) {
       final candidate = CameraController(desc, preset, enableAudio: false);
@@ -342,10 +405,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    ImmersiveSystemUi.leave();
     _burstTimer?.cancel();
     _progressAnim.dispose();
     _flipAnim.dispose();
@@ -455,17 +515,26 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   // -- Recording -----------------------------------------------------------
 
   void _onHoldStart() {
-    if (_recording || _cam == null || _navigating) return;
+    if (_recording || _starting || _cam == null || _navigating) return;
     HapticFeedback.heavyImpact();
     _startRecording();
   }
 
   Future<void> _startRecording() async {
     final c = _cam;
-    if (c == null || !c.value.isInitialized) return;
+    if (c == null || !c.value.isInitialized || _starting || _recording) return;
+    _starting = true;
+    _stopWhenStarted = false;
     try {
       await c.startVideoRecording();
-      setState(() => _recording = true);
+      if (!mounted || _cam != c) {
+        _starting = false;
+        return;
+      }
+      setState(() {
+        _recording = true;
+        _starting = false;
+      });
       _progressAnim.duration = Duration(
         milliseconds: (_duration * 1000).round(),
       );
@@ -477,17 +546,31 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
           if (_recording) _stopRecording();
         },
       );
+      if (_stopWhenStarted) {
+        _stopWhenStarted = false;
+        await _stopRecording();
+      }
     } catch (e) {
+      _starting = false;
+      _stopWhenStarted = false;
       debugPrint('Record start error: $e');
     }
   }
 
   void _onHoldEnd() {
+    if (_starting) {
+      _stopWhenStarted = true;
+      return;
+    }
     if (!_recording) return;
     _stopRecording();
   }
 
   Future<void> _stopRecording() async {
+    if (_starting) {
+      _stopWhenStarted = true;
+      return;
+    }
     if (!_recording || _cam == null || _navigating) return;
     _burstTimer?.cancel();
     _progressAnim.stop();
@@ -569,10 +652,17 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
   Widget build(BuildContext context) {
     final c = _cam;
     final ready = c != null && c.value.isInitialized;
-    final pad = MediaQuery.paddingOf(context);
+    // viewPadding keeps cutout/gesture insets while immersive SystemChrome
+    // hides the overlays (padding may collapse to zero on Android).
+    final pad = MediaQuery.viewPaddingOf(context);
     final screenH = MediaQuery.sizeOf(context).height;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_recording && !_starting && !_navigating,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _requestClose();
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
@@ -729,7 +819,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
                   const Spacer(),
                   _GlassButton(
                     icon: Icons.close_rounded,
-                    onTap: () => Navigator.pop(context),
+                    onTap: _requestClose,
                   ),
                 ],
               ),
@@ -926,6 +1016,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
           if (_camInitFailed) Positioned.fill(child: _buildCameraError()),
         ],
       ),
+    ),
     );
   }
 
@@ -1343,13 +1434,26 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
   // to the editor.
   static const _maxWindow = Duration(milliseconds: 1500);
 
+  Future<XFile?> _recoverImmediateLostVideo(ImagePicker picker) async {
+    try {
+      final lost = await picker.retrieveLostData();
+      if (lost.isEmpty || lost.type != RetrieveType.video) return null;
+      return lost.file;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _pickVideo() async {
     if (_picking) return;
     setState(() => _picking = true);
     try {
       final picker = ImagePicker();
       // No maxDuration — we let the trim page handle long videos.
-      final xfile = await picker.pickVideo(source: ImageSource.gallery);
+      XFile? xfile = await picker.pickVideo(source: ImageSource.gallery);
+      // Android may reclaim the Activity while the picker is open and deliver
+      // the selection as lost data instead of the awaited future.
+      xfile ??= await _recoverImmediateLostVideo(picker);
       if (xfile == null) {
         if (mounted) Navigator.pop(context);
         return;
@@ -1396,7 +1500,7 @@ class _GalleryImportSheetState extends State<_GalleryImportSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.paddingOf(context);
+    final pad = MediaQuery.viewPaddingOf(context);
     return Container(
       padding: EdgeInsets.fromLTRB(24, 20, 24, pad.bottom + 20),
       decoration: const BoxDecoration(

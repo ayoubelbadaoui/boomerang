@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:boomerang/core/storage/storage_metadata.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
@@ -55,7 +56,9 @@ class BoomerangService {
     // Upload
     final storagePath =
         'boomerangs/processed_${DateTime.now().millisecondsSinceEpoch}.mp4';
-    final task = await _storage.ref(storagePath).putFile(outFile);
+    final task = await _storage
+        .ref(storagePath)
+        .putFile(outFile, immutableMediaMetadata('video/mp4'));
     final videoUrl = await task.ref.getDownloadURL();
 
     // Optional poster

@@ -1,10 +1,11 @@
 import 'package:boomerang/core/utils/color_opacity.dart';
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
 import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
 import 'package:video_player/video_player.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 
@@ -41,22 +42,29 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     _likesOverride = seeded?.likes;
     final videoUrl = widget.data['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        ..initialize().then((_) {
-          if (!mounted) return;
-          setState(() {});
-          _controller?.setLooping(true);
-          _controller?.setVolume(0.0);
-          _controller?.play();
-          _controller?.addListener(_onVideoTickForPoster);
-          _schedulePosterFallback();
-        });
+      // ignore: discarded_futures
+      BoomerangVideoCache.instance.createController(videoUrl).then((c) {
+        if (!mounted) {
+          c.dispose();
+          return;
+        }
+        _controller = c
+          ..initialize().then((_) {
+            if (!mounted) return;
+            setState(() {});
+            _controller?.setLooping(true);
+            _controller?.setVolume(0.0);
+            _controller?.play();
+            _controller?.addListener(_onVideoTickForPoster);
+            _schedulePosterFallback();
+          });
+      });
     }
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
     );
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    ImmersiveSystemUi.enter();
   }
 
   @override
@@ -64,10 +72,7 @@ class _BoomerangViewerPageState extends ConsumerState<BoomerangViewerPage>
     _controller?.removeListener(_onVideoTickForPoster);
     _controller?.dispose();
     _anim.dispose();
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    ImmersiveSystemUi.leave();
     super.dispose();
   }
 

@@ -1,8 +1,9 @@
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Fullscreen viewer for profile pictures.
-class FullscreenAvatarViewer extends StatelessWidget {
+class FullscreenAvatarViewer extends StatefulWidget {
   const FullscreenAvatarViewer({
     super.key,
     required this.imageUrl,
@@ -26,8 +27,25 @@ class FullscreenAvatarViewer extends StatelessWidget {
   }
 
   @override
+  State<FullscreenAvatarViewer> createState() => _FullscreenAvatarViewerState();
+}
+
+class _FullscreenAvatarViewerState extends State<FullscreenAvatarViewer> {
+  @override
+  void initState() {
+    super.initState();
+    ImmersiveSystemUi.enter();
+  }
+
+  @override
+  void dispose() {
+    ImmersiveSystemUi.leave();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final padding = MediaQuery.of(context).padding;
+    final padding = MediaQuery.viewPaddingOf(context);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
@@ -40,7 +58,7 @@ class FullscreenAvatarViewer extends StatelessWidget {
                 minScale: 1,
                 maxScale: 5,
                 child: Image.network(
-                  imageUrl,
+                  widget.imageUrl,
                   fit: BoxFit.contain,
                   loadingBuilder: (_, child, progress) {
                     if (progress == null) return child;

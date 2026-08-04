@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:boomerang/features/feed/presentation/home_shell.dart';
@@ -27,11 +26,20 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
   final PageController _controller = PageController();
   final _profileFormKey = GlobalKey<FormState>();
   int _index = 0;
-  String _gender = 'male';
+
+  /// Optional (Guideline 5.1.1(v)): null means the user did not specify a
+  /// gender. Empty string means they explicitly chose "Prefer not to say".
+  String? _gender;
 
   /// Firestore `isPrivate`: default public; only explicit `true` in the doc means private.
   bool _isPrivate = false;
-  DateTime _birthday = DateTime(1995, 12, 27);
+
+  /// Optional date of birth. Stored only when the user provides it.
+  DateTime? _birthday;
+
+  /// COPPA age-gate confirmation. Required to continue, but does not collect
+  /// or store an exact date of birth.
+  bool _ageConfirmed = false;
   final TextEditingController _fullName = TextEditingController();
   final TextEditingController _nickname = TextEditingController();
   final TextEditingController _email = TextEditingController();
@@ -221,8 +229,12 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
     if (_saving) return;
 
     if (_index == 1) {
-      final age = _ageFromBirthday(_birthday);
-      if (age < 13) {
+      // The age-gate is a simple 13+ confirmation (COPPA). An exact birthday
+      // is optional; if the user did supply one and it implies under-13,
+      // block as well.
+      if (!_ageConfirmed) return;
+      final birthday = _birthday;
+      if (birthday != null && _ageFromBirthday(birthday) < 13) {
         _showAgeRestrictionDialog();
         return;
       }
@@ -282,6 +294,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
         gender: _gender,
         birthday: _birthday,
         fullName: _fullName.text.trim(),
+        // gender/birthday are optional; passed through as-is (may be null).
         nickname: _nickname.text.trim(),
         email: _email.text.trim(),
         avatarUrl: avatarUrl,
@@ -362,7 +375,12 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBackPressed();
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -395,6 +413,9 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                 _BirthdayStep(
                   birthday: _birthday,
                   onChanged: (d) => setState(() => _birthday = d),
+                  ageConfirmed: _ageConfirmed,
+                  onAgeConfirmedChanged:
+                      (v) => setState(() => _ageConfirmed = v),
                 ),
                 _FillProfileStep(
                   formKey: _profileFormKey,
@@ -414,7 +435,15 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
             ),
           ),
           Padding(
-            padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 20.h),
+            // Scaffold already resizes for the keyboard (adjustResize + default
+            // resizeToAvoidBottomInset). Do not also add viewInsets.bottom —
+            // that double-lifts the Continue button on Android.
+            padding: EdgeInsets.fromLTRB(
+              20.w,
+              8.h,
+              20.w,
+              20.h + MediaQuery.viewPaddingOf(context).bottom,
+            ),
             child:
                 _saving
                     ? const Center(child: CircularProgressIndicator())
@@ -436,7 +465,8 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed:
-                            _index == 2 && !_canContinueFromProfileStep
+                            (_index == 2 && !_canContinueFromProfileStep) ||
+                                    (_index == 1 && !_ageConfirmed)
                                 ? null
                                 : _next,
                         style: ElevatedButton.styleFrom(
@@ -451,6 +481,7 @@ class _SetupFlowPageState extends State<SetupFlowPage> {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -651,15 +682,21 @@ class _FillProfileStep extends StatelessWidget {
 }
 
 class _BirthdayStep extends StatelessWidget {
-  const _BirthdayStep({required this.birthday, required this.onChanged});
-  final DateTime birthday;
+  const _BirthdayStep({
+    required this.birthday,
+    required this.onChanged,
+    required this.ageConfirmed,
+    required this.onAgeConfirmedChanged,
+  });
+  final DateTime? birthday;
   final ValueChanged<DateTime> onChanged;
+  final bool ageConfirmed;
+  final ValueChanged<bool> onAgeConfirmedChanged;
 
-  int _calculatedAge() {
+  int _ageFor(DateTime b) {
     final now = DateTime.now();
-    int age = now.year - birthday.year;
-    if (now.month < birthday.month ||
-        (now.month == birthday.month && now.day < birthday.day)) {
+    int age = now.year - b.year;
+    if (now.month < b.month || (now.month == b.month && now.day < b.day)) {
       age--;
     }
     return age;
@@ -667,100 +704,136 @@ class _BirthdayStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final age = _calculatedAge();
-    final isUnder13 = age < 13;
+    final b = birthday;
+    final isUnder13 = b != null && _ageFor(b) < 13;
     return Padding(
       padding: EdgeInsets.all(20.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: 24.h),
-
-          Text(
-            'Your birthday will not be shown to the public.',
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 14.sp,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          if (isUnder13) ...[
-            SizedBox(height: 8.h),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(color: Colors.red.shade200),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 24.h),
+            Text(
+              'Your birthday is optional and will not be shown to the public.',
+              style: TextStyle(
+                color: Colors.black54,
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.red.shade400,
-                    size: 18.r,
-                  ),
-                  SizedBox(width: 8.w),
-                  Expanded(
-                    child: Text(
-                      'You must be at least 13 years old to use Boomerang.',
-                      style: TextStyle(
-                        color: Colors.red.shade700,
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w500,
+            ),
+            SizedBox(height: 24.h),
+            Center(
+              child: Image.asset(
+                'assets/cake.png',
+                width: 140.r,
+                height: 140.r,
+              ),
+            ),
+            SizedBox(height: 24.h),
+            GestureDetector(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: b ?? DateTime(2000, 1, 1),
+                  firstDate: DateTime(1900),
+                  lastDate: DateTime.now(),
+                );
+                if (picked != null) onChanged(picked);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF6F6F6),
+                  borderRadius: BorderRadius.circular(16.r),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        b == null
+                            ? 'Add your birthday (optional)'
+                            : '${b.month}/${b.day}/${b.year}',
+                        style: TextStyle(
+                          fontSize: 16.sp,
+                          color: b == null ? Colors.black45 : Colors.black87,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const Icon(
+                      Icons.calendar_today_rounded,
+                      color: Colors.black54,
+                    ),
+                  ],
+                ),
               ),
             ),
+            if (isUnder13) ...[
+              SizedBox(height: 12.h),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8.r),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.red.shade400,
+                      size: 18.r,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        'You must be at least 13 years old to use Boomerang.',
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            SizedBox(height: 16.h),
+            // COPPA age-gate: a simple confirmation, no exact DOB required.
+            InkWell(
+              onTap: () => onAgeConfirmedChanged(!ageConfirmed),
+              borderRadius: BorderRadius.circular(12.r),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 4.h),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: ageConfirmed,
+                      onChanged: (v) => onAgeConfirmedChanged(v ?? false),
+                      activeColor: Colors.black,
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 12.h),
+                        child: Text(
+                          'I confirm that I am at least 13 years old.',
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 16.h),
           ],
-          SizedBox(height: 24.h),
-          Center(
-            child: Image.asset('assets/cake.png', width: 160.r, height: 160.r),
-          ),
-
-          SizedBox(height: 24.h),
-          GestureDetector(
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: birthday,
-                firstDate: DateTime(1900),
-                lastDate: DateTime.now(),
-              );
-              if (picked != null) onChanged(picked);
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6F6F6),
-                borderRadius: BorderRadius.circular(16.r),
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${birthday.month}/${birthday.day}/${birthday.year}',
-                      style: TextStyle(
-                        fontSize: 16.sp,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.calendar_today_rounded,
-                    color: Colors.black54,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: 16.h),
-          _BirthdayPickers(birthday: birthday, onChanged: onChanged),
-          SizedBox(height: 16.h),
-        ],
+        ),
       ),
     );
   }
@@ -768,34 +841,71 @@ class _BirthdayStep extends StatelessWidget {
 
 class _GenderStep extends StatelessWidget {
   const _GenderStep({required this.gender, required this.onChanged});
-  final String gender;
-  final ValueChanged<String> onChanged;
+
+  /// null = not specified, '' = explicitly "Prefer not to say".
+  final String? gender;
+  final ValueChanged<String?> onChanged;
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.all(20.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(height: 40.h),
-          GestureDetector(
-            onTap: () => onChanged('male'),
-            child: _GenderChoice(
-              label: 'Male',
-              active: gender == 'male',
-              icon: Icons.male,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(height: 16.h),
+            Text(
+              'Gender is optional. You can skip this or pick "Prefer not to '
+              'say".',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.black54,
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-          SizedBox(height: 40.h),
-          GestureDetector(
-            onTap: () => onChanged('female'),
-            child: _GenderChoice(
-              label: 'Female',
-              active: gender == 'female',
-              icon: Icons.female,
+            SizedBox(height: 24.h),
+            GestureDetector(
+              onTap: () => onChanged('male'),
+              child: _GenderChoice(
+                label: 'Male',
+                active: gender == 'male',
+                icon: Icons.male,
+              ),
             ),
-          ),
-        ],
+            SizedBox(height: 24.h),
+            GestureDetector(
+              onTap: () => onChanged('female'),
+              child: _GenderChoice(
+                label: 'Female',
+                active: gender == 'female',
+                icon: Icons.female,
+              ),
+            ),
+            SizedBox(height: 28.h),
+            // Selecting this stores no gender ('' acts as an explicit decline).
+            OutlinedButton(
+              onPressed: () => onChanged(gender == '' ? null : ''),
+              style: OutlinedButton.styleFrom(
+                shape: const StadiumBorder(),
+                padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 14.h),
+                side: BorderSide(
+                  color: gender == '' ? Colors.black : Colors.black26,
+                  width: gender == '' ? 2 : 1,
+                ),
+                foregroundColor: Colors.black,
+              ),
+              child: Text(
+                'Prefer not to say',
+                style: TextStyle(
+                  fontSize: 15.sp,
+                  fontWeight:
+                      gender == '' ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -882,118 +992,6 @@ class _AvatarPickerState extends State<_AvatarPicker> {
             _path == null
                 ? Icon(Icons.person, size: widget.radius, color: Colors.black26)
                 : null,
-      ),
-    );
-  }
-}
-
-class _BirthdayPickers extends StatelessWidget {
-  const _BirthdayPickers({required this.birthday, required this.onChanged});
-  final DateTime birthday;
-  final ValueChanged<DateTime> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final years = List<int>.generate(now.year - 1899, (i) => 1900 + i);
-    final months = const [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final daysInMonth = DateUtils.getDaysInMonth(birthday.year, birthday.month);
-    final days = List<int>.generate(daysInMonth, (i) => i + 1);
-
-    final monthController = FixedExtentScrollController(
-      initialItem: birthday.month - 1,
-    );
-    final dayController = FixedExtentScrollController(
-      initialItem: birthday.day - 1,
-    );
-    final yearController = FixedExtentScrollController(
-      initialItem: birthday.year - 1900,
-    );
-
-    TextStyle itemStyle(bool isSelected) => TextStyle(
-      fontSize: isSelected ? 28.sp : 20.sp,
-      fontWeight: FontWeight.w700,
-      color: isSelected ? Colors.black : Colors.black45,
-    );
-
-    return SizedBox(
-      height: 220.h,
-      child: Row(
-        children: [
-          Expanded(
-            child: CupertinoPicker.builder(
-              scrollController: monthController,
-              itemExtent: 44.h,
-              onSelectedItemChanged: (i) {
-                final newMonth = i + 1;
-                final maxDay = DateUtils.getDaysInMonth(
-                  birthday.year,
-                  newMonth,
-                );
-                final newDay = birthday.day.clamp(1, maxDay);
-                onChanged(DateTime(birthday.year, newMonth, newDay));
-              },
-              childCount: months.length,
-              itemBuilder: (context, index) {
-                final selected = index == birthday.month - 1;
-                return Center(
-                  child: Text(months[index], style: itemStyle(selected)),
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: CupertinoPicker.builder(
-              scrollController: dayController,
-              itemExtent: 44.h,
-              onSelectedItemChanged: (i) {
-                final newDay = i + 1;
-                onChanged(DateTime(birthday.year, birthday.month, newDay));
-              },
-              childCount: days.length,
-              itemBuilder: (context, index) {
-                final selected = index == birthday.day - 1;
-                return Center(
-                  child: Text('${days[index]}', style: itemStyle(selected)),
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: CupertinoPicker.builder(
-              scrollController: yearController,
-              itemExtent: 44.h,
-              onSelectedItemChanged: (i) {
-                final newYear = years[i];
-                final maxDay = DateUtils.getDaysInMonth(
-                  newYear,
-                  birthday.month,
-                );
-                final newDay = birthday.day.clamp(1, maxDay);
-                onChanged(DateTime(newYear, birthday.month, newDay));
-              },
-              childCount: years.length,
-              itemBuilder: (context, index) {
-                final y = years[index];
-                final selected = y == birthday.year;
-                return Center(child: Text('$y', style: itemStyle(selected)));
-              },
-            ),
-          ),
-        ],
       ),
     );
   }

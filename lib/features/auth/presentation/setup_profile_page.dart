@@ -37,15 +37,12 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
         ),
         title: const Text('Fill Your Profile'),
       ),
+      // Scaffold (adjustResize + resizeToAvoidBottomInset) already lifts for
+      // the keyboard; do not also pad by viewInsets.bottom.
       body: SafeArea(
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(
-            24.w,
-            16.h,
-            24.w,
-            16.h + MediaQuery.viewInsetsOf(context).bottom,
-          ),
+          padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 16.h),
           child: Column(
             children: [
               SizedBox(height: 16.h),

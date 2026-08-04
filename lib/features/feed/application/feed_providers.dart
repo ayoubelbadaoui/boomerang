@@ -28,6 +28,10 @@ final feedRepoProvider = Provider<FeedRepo>((ref) {
 
 /// Max time feed fetch waits for auth-scoped stream dependencies (following /
 /// blocked) during account/session transitions before using a safe fallback.
+/// How long a feed fetch waits for following/blocked lists before falling
+/// back to empty sets. On a cold session the first Firestore reads pay ~1s
+/// of channel setup, so 400ms silently degraded every first Home page to
+/// exploration-only content (deps timed out, then resolved moments later).
 final feedDependencyMaxWaitProvider = Provider<Duration>(
-  (_) => const Duration(milliseconds: 1200),
+  (_) => const Duration(milliseconds: 1500),
 );

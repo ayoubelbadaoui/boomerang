@@ -1,4 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:boomerang/core/utils/color_opacity.dart';
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
+import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
 import 'package:boomerang/core/widgets/boomerang_pager_shimmer.dart';
 import 'package:boomerang/features/feed/application/feed_controller.dart';
@@ -8,7 +14,6 @@ import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomeran
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
@@ -56,8 +61,10 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   // How many upcoming POSTER images to prefetch ahead of the current page.
   // Poster prefetch is cheap (bounded by the image cache) and is what keeps the
   // feed looking smooth — a sharp poster shows instantly while each page's own
-  // video controller initializes. (Video prewarming was removed: it span up an
-  // ExoPlayer per upcoming item and OOM-crashed the app while scrolling.)
+  // video controller initializes. (Controller-based video prewarming was
+  // removed: it span up an ExoPlayer per upcoming item and OOM-crashed the app
+  // while scrolling. Video FILE prefetch via BoomerangVideoCache is safe — it
+  // is a plain HTTP download to disk, no decoder instances.)
   static const int _initialPrewarmCount = 4;
   static const int _rollingPrewarmBatch = 3;
   static const int _prewarmTriggerRemaining = 2;
@@ -71,9 +78,10 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initSurfaceCursor();
       _advancePrewarmWindow(fromIndex: 0, count: _initialPrewarmCount);
+      _warmVideosAfter(0);
       _fetchNext();
     });
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    ImmersiveSystemUi.enter();
   }
 
   bool _isOwnerLockedFromMe(Map<String, dynamic> data) {
@@ -92,10 +100,7 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    ImmersiveSystemUi.leave();
     _pageController.dispose();
     super.dispose();
   }
@@ -208,7 +213,19 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
   void _warmPosterFor(int index) {
     final poster = _docs[index].data['imageUrl'] as String?;
     if (poster == null || poster.isEmpty) return;
-    precacheImage(NetworkImage(poster), context);
+    precacheImage(cachedNetworkImageProvider(poster), context);
+  }
+
+  /// Disk-prefetch the next two videos so page swipes play instantly.
+  void _warmVideosAfter(int pageIndex) {
+    final urls = <String>[
+      for (var i = pageIndex + 1;
+          i <= pageIndex + 2 && i < _docs.length;
+          i++)
+        if ((_docs[i].data['videoUrl'] as String?)?.isNotEmpty ?? false)
+          _docs[i].data['videoUrl'] as String,
+    ];
+    BoomerangVideoCache.instance.prefetch(urls);
   }
 
   void _ensureRollingPrewarm(int pageIndex) {
@@ -298,10 +315,13 @@ class _BoomerangPagerPageState extends ConsumerState<BoomerangPagerPage> {
         body: PageView.builder(
           controller: _pageController,
           scrollDirection: Axis.vertical,
-          allowImplicitScrolling: true,
+          // Adjacent-page controller init OOMs Android (3 ExoPlayers). File
+          // prefetch via _warmVideosAfter keeps swipe latency low instead.
+          allowImplicitScrolling: !Platform.isAndroid,
           onPageChanged: (i) {
             setState(() => _currentPage = i);
             _ensureRollingPrewarm(i);
+            _warmVideosAfter(i);
             if (_docs.length - i <= 3) _fetchNext();
           },
           itemCount: _docs.length + (_hasMore ? 1 : 0),
@@ -355,46 +375,87 @@ class _PostPageState extends ConsumerState<_PostPage> {
   VideoPlayerController? _controller;
   bool _showPosterOverlay = true;
   bool _initialized = false;
+  int _initGen = 0;
 
   @override
   void initState() {
     super.initState();
-    final videoUrl = widget.data['videoUrl'] as String?;
-    if (videoUrl != null && videoUrl.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        ..initialize()
-            .then((_) {
-              if (!mounted) return;
-              _initialized = true;
-              setState(() {});
-              _controller?.setLooping(true);
-              _controller?.setVolume(0.0);
-              if (widget.isActive) _controller?.play();
-              _controller?.addListener(_onVideoTickForPoster);
-              _schedulePosterFallback();
-            })
-            .catchError((Object _) {
-              if (mounted) setState(() {});
-            });
+    if (widget.isActive) {
+      final videoUrl = widget.data['videoUrl'] as String?;
+      if (videoUrl != null && videoUrl.isNotEmpty) {
+        _initVideo(videoUrl);
+      }
     }
+  }
+
+  Future<void> _initVideo(String videoUrl) async {
+    final gen = ++_initGen;
+    final controller = await BoomerangVideoCache.instance.createController(
+      videoUrl,
+    );
+    if (!mounted || gen != _initGen || !widget.isActive) {
+      unawaited(controller.dispose());
+      return;
+    }
+    _controller?.removeListener(_onVideoTickForPoster);
+    unawaited(_controller?.dispose());
+    _controller = controller;
+    controller
+        .initialize()
+        .then((_) {
+          if (!mounted || gen != _initGen || !widget.isActive) {
+            unawaited(controller.dispose());
+            if (_controller == controller) _controller = null;
+            return;
+          }
+          _initialized = true;
+          setState(() {});
+          _controller?.setLooping(true);
+          _controller?.setVolume(0.0);
+          if (widget.isActive) _controller?.play();
+          _controller?.addListener(_onVideoTickForPoster);
+          _schedulePosterFallback();
+        })
+        .catchError((Object _) {
+          if (mounted && gen == _initGen) setState(() {});
+        });
+  }
+
+  void _disposeVideo() {
+    _initGen++;
+    _controller?.removeListener(_onVideoTickForPoster);
+    _controller?.dispose();
+    _controller = null;
+    _initialized = false;
+    _showPosterOverlay = true;
   }
 
   @override
   void didUpdateWidget(covariant _PostPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive != oldWidget.isActive && _initialized) {
-      if (widget.isActive) {
+    if (widget.isActive == oldWidget.isActive) return;
+    if (widget.isActive) {
+      if (_initialized) {
         _controller?.play();
       } else {
-        _controller?.pause();
+        final videoUrl = widget.data['videoUrl'] as String?;
+        if (videoUrl != null && videoUrl.isNotEmpty) {
+          _initVideo(videoUrl);
+        }
       }
+    } else if (Platform.isAndroid) {
+      // Keep only the active decoder on Android; poster + disk cache cover
+      // return visits. iOS can keep the paused controller for snappier swipe.
+      _disposeVideo();
+      if (mounted) setState(() {});
+    } else if (_initialized) {
+      _controller?.pause();
     }
   }
 
   @override
   void dispose() {
-    _controller?.removeListener(_onVideoTickForPoster);
-    _controller?.dispose();
+    _disposeVideo();
     super.dispose();
   }
 
@@ -529,12 +590,13 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
     final image = widget.image;
     if (image == null || image.isEmpty || _posterResolved) return;
     try {
-      await precacheImage(NetworkImage(image), context);
+      await precacheImage(cachedNetworkImageProvider(image), context);
     } catch (_) {
       // Treat load failures as resolved so UI does not block.
     } finally {
-      if (!mounted || _posterResolved) return;
-      setState(() => _posterResolved = true);
+      if (mounted && !_posterResolved) {
+        setState(() => _posterResolved = true);
+      }
     }
   }
 
@@ -581,6 +643,7 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
   void _onDoubleTap() async {
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
     if (uid == null || _likeBusy) return;
+    setState(() => _likeBusy = true);
     final likedBy =
         (widget.data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final wasLiked = _likedOverride ?? likedBy.contains(uid);
@@ -599,12 +662,16 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
 
     if (wasLiked) {
       await Future.delayed(const Duration(milliseconds: 600));
-      if (mounted) setState(() => _showHeart = false);
+      if (mounted) {
+        setState(() {
+          _showHeart = false;
+          _likeBusy = false;
+        });
+      }
       return;
     }
 
     final me = ref.read(currentUserProfileProvider).value;
-    setState(() => _likeBusy = true);
     try {
       final result = await ref
           .read(boomerangRepoProvider)
@@ -624,6 +691,15 @@ class _PostPageWithTickerState extends ConsumerState<_PostPageWithTicker>
           _likesOverride = result.likes;
         });
         widget.onLikeChanged?.call(result.liked, result.likes);
+      } else if (mounted) {
+        setState(() {
+          _likedOverride = wasLiked;
+          _likesOverride = currentLikes < 0 ? 0 : currentLikes;
+        });
+        widget.onLikeChanged?.call(
+          wasLiked,
+          currentLikes < 0 ? 0 : currentLikes,
+        );
       }
     } catch (_) {
       if (mounted) {

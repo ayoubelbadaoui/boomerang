@@ -1,4 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:boomerang/core/utils/image_precache.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
+import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
 import 'package:boomerang/core/utils/color_opacity.dart';
@@ -48,6 +54,13 @@ class _PaginatedBoomerangListState
   final _controller = ScrollController();
   final _localLiked = <String, bool>{};
   final _localLikeCounts = <String, int>{};
+  final _precachedPosterIds = <String>{};
+  final _prefetchedVideoIds = <String>{};
+  int _lastWarmCount = 0;
+  List<RankedPost> _visibleItems = const [];
+
+  static const _loadMoreThreshold = 1200.0;
+  static const _estimatedCardHeight = 520.0;
 
   @override
   void initState() {
@@ -68,11 +81,73 @@ class _PaginatedBoomerangListState
     ref
         .read(feedControllerProvider(FeedSurface.home).notifier)
         .maybeApplyDeferredReorder(atTopBoundary: atTopBoundary);
-    const threshold = 300.0;
     if (_controller.position.maxScrollExtent - _controller.position.pixels <=
-        threshold) {
+        _loadMoreThreshold) {
       ref.read(feedControllerProvider(FeedSurface.home).notifier).fetchNext();
     }
+    _precacheAhead(_visibleItems);
+  }
+
+  String? _posterUrlForPost(RankedPost post) {
+    final url = post.raw['imageUrl'];
+    if (url is String && url.isNotEmpty) return url;
+    return null;
+  }
+
+  String? _videoUrlForPost(RankedPost post) {
+    final url = post.raw['videoUrl'];
+    if (url is String && url.isNotEmpty) return url;
+    return null;
+  }
+
+  /// Warms the video disk cache for the next couple of posts so playback
+  /// starts locally instead of paying a full network download at 50%
+  /// visibility. Kept to 2 files — these are full downloads, unlike posters.
+  void _warmVideosForRange(List<RankedPost> items, int fromIndex) {
+    if (items.isEmpty) return;
+    final start = fromIndex.clamp(0, items.length);
+    final end = (start + 3).clamp(0, items.length);
+    final urls = <String>[
+      for (var i = start; i < end; i++)
+        if (_videoUrlForPost(items[i]) != null &&
+            _prefetchedVideoIds.add(items[i].id))
+          _videoUrlForPost(items[i])!,
+    ];
+    BoomerangVideoCache.instance.prefetch(urls.take(2));
+  }
+
+  void _warmPostersForRange(
+    List<RankedPost> items,
+    int fromIndex, {
+    int count = 8,
+  }) {
+    if (!mounted || items.isEmpty) return;
+    final start = fromIndex.clamp(0, items.length);
+    final end = (start + count).clamp(0, items.length);
+    final urls = <String>[];
+    for (var i = start; i < end; i++) {
+      final post = items[i];
+      final url = _posterUrlForPost(post);
+      if (url != null && _precachedPosterIds.add(post.id)) {
+        urls.add(url);
+      }
+    }
+    if (urls.isEmpty) return;
+    final cacheW = computeCacheWidthForLogicalWidth(
+      MediaQuery.sizeOf(context).width,
+      MediaQuery.devicePixelRatioOf(context),
+      maxPx: 2000,
+    );
+    // ignore: discarded_futures
+    precacheImages(urls, context, concurrency: 4, cacheWidth: cacheW);
+  }
+
+  void _precacheAhead(List<RankedPost> items) {
+    if (!_controller.hasClients || items.isEmpty) return;
+    final firstVisible =
+        (_controller.offset / _estimatedCardHeight).floor().clamp(0, items.length);
+    _warmPostersForRange(items, firstVisible, count: 6);
+    _warmVideosForRange(items, firstVisible + 1);
   }
 
   Future<void> _refresh() async {
@@ -166,6 +241,18 @@ class _PaginatedBoomerangListState
     final isLoadingInitial =
         visibleItems.isEmpty && (isLoading || feedState.pageIndex == 0);
 
+    if (visibleItems.length != _lastWarmCount) {
+      _lastWarmCount = visibleItems.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _warmPostersForRange(visibleItems, 0, count: 10);
+        _warmVideosForRange(visibleItems, 0);
+      });
+    }
+    _visibleItems = visibleItems;
+
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+
     return RefreshIndicator(
       color: Colors.black,
       onRefresh: _refresh,
@@ -173,6 +260,10 @@ class _PaginatedBoomerangListState
         physics: const AlwaysScrollableScrollPhysics(),
         primary: false,
         controller: _controller,
+        // Android MediaCodec budgets are tighter than iOS — keep fewer cards
+        // mounted so offscreen ExoPlayers do not accumulate into OOM.
+        cacheExtent:
+            viewportHeight * (Platform.isAndroid ? 1.0 : 2.5),
         addAutomaticKeepAlives: false,
         padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
         itemCount:
@@ -223,36 +314,38 @@ class _PaginatedBoomerangListState
               overrideLiked ?? globalLike?.liked ?? likedBy.contains(meUid);
           final rawLikes = (post.raw['likes'] ?? 0) as int;
           final effectiveLikes = likesOverride ?? globalLike?.likes ?? rawLikes;
-          return _BoomerangCard(
-            key: ValueKey(post.id),
-            id: post.id,
-            data: post.raw,
-            likedOverride: isLiked,
-            likesOverride: effectiveLikes,
-            onToggleLike: (liked, likes) {
-              final safeLikes = likes < 0 ? 0 : likes;
-              setState(() {
-                _localLiked[post.id] = liked;
-                _localLikeCounts[post.id] = safeLikes;
-              });
-              if (meUid.isNotEmpty) {
+          return RepaintBoundary(
+            child: _BoomerangCard(
+              key: ValueKey(post.id),
+              id: post.id,
+              data: post.raw,
+              likedOverride: isLiked,
+              likesOverride: effectiveLikes,
+              onToggleLike: (liked, likes) {
+                final safeLikes = likes < 0 ? 0 : likes;
+                setState(() {
+                  _localLiked[post.id] = liked;
+                  _localLikeCounts[post.id] = safeLikes;
+                });
+                if (meUid.isNotEmpty) {
+                  ref
+                      .read(feedControllerProvider(FeedSurface.home).notifier)
+                      .updatePostLikeOptimistic(
+                        postId: post.id,
+                        userId: meUid,
+                        liked: liked,
+                        likes: safeLikes,
+                      );
+                }
                 ref
-                    .read(feedControllerProvider(FeedSurface.home).notifier)
-                    .updatePostLikeOptimistic(
+                    .read(postLikeUiControllerProvider.notifier)
+                    .setStateForPost(
                       postId: post.id,
-                      userId: meUid,
                       liked: liked,
                       likes: safeLikes,
                     );
-              }
-              ref
-                  .read(postLikeUiControllerProvider.notifier)
-                  .setStateForPost(
-                    postId: post.id,
-                    liked: liked,
-                    likes: safeLikes,
-                  );
-            },
+              },
+            ),
           );
         },
       ),
@@ -303,9 +396,6 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
         (data['likedBy'] as List?)?.cast<String>() ?? const <String>[];
     final isLiked =
         widget.likedOverride ?? (me != null && likedBy.contains(me.uid));
-    debugPrint(
-      'card build: $id isLiked=$isLiked source=${widget.likedOverride != null ? 'override' : 'firestore'} likes=$likes',
-    );
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -401,8 +491,12 @@ class _BoomerangCardState extends ConsumerState<_BoomerangCard> {
                       _SvgCircleBtn(
                         asset: 'assets/svgs/share.svg',
                         onTap:
-                            () =>
-                                _showShareSheet(context, data, boomerangId: id),
+                            () => _showShareSheet(
+                              context,
+                              data,
+                              boomerangId: id,
+                              currentUid: me?.uid,
+                            ),
                       ),
                     ],
                   ),
@@ -567,42 +661,33 @@ class _BookmarkButton extends ConsumerWidget {
     if (me == null) {
       return const SizedBox.shrink();
     }
-    return StreamBuilder<bool>(
-      stream: ref
-          .watch(savedRepoProvider)
-          .watchIsSaved(userId: me.uid, boomerangId: postId),
-      initialData: false,
-      builder: (context, snap) {
-        final saved = snap.data ?? false;
-        return InkWell(
-          onTap: () async {
-            await ref
-                .read(savedRepoProvider)
-                .toggleSave(
-                  userId: me.uid,
-                  boomerangId: postId,
-                  boomerangData: data,
-                );
-          },
-          customBorder: const CircleBorder(),
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              shape: BoxShape.circle,
-            ),
-            padding: EdgeInsets.all(12.r),
-            child: SvgPicture.asset(
-              'assets/svgs/Bookmark.svg',
-              width: 24.r,
-              height: 24.r,
-              colorFilter: ColorFilter.mode(
-                saved ? Colors.yellow : Colors.white,
-                BlendMode.srcIn,
-              ),
-            ),
-          ),
+    final savedIds = ref.watch(savedBoomerangIdsProvider).value ?? const {};
+    final saved = savedIds.contains(postId);
+    return InkWell(
+      onTap: () async {
+        await ref.read(savedRepoProvider).toggleSave(
+          userId: me.uid,
+          boomerangId: postId,
+          boomerangData: data,
         );
       },
+      customBorder: const CircleBorder(),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          shape: BoxShape.circle,
+        ),
+        padding: EdgeInsets.all(12.r),
+        child: SvgPicture.asset(
+          'assets/svgs/Bookmark.svg',
+          width: 24.r,
+          height: 24.r,
+          colorFilter: ColorFilter.mode(
+            saved ? Colors.yellow : Colors.white,
+            BlendMode.srcIn,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -801,10 +886,16 @@ void _showShareSheet(
   BuildContext context,
   Map<String, dynamic> data, {
   required String boomerangId,
+  String? currentUid,
 }) {
   final videoUrl = data['videoUrl'] as String?;
   final shareText = videoUrl ?? 'Check out this Boomerang!';
   final userId = (data['userId'] ?? '') as String;
+  final authorName = (data['userName'] ?? 'user').toString();
+  final authorAvatar = data['userAvatar'] as String?;
+  final authorHandle = '@${authorName.replaceAll(' ', '_').toLowerCase()}';
+  final canReport =
+      userId.isNotEmpty && currentUid != null && currentUid != userId;
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.white,
@@ -883,18 +974,23 @@ void _showShareSheet(
                   }
                 },
               ),
-              _ShareOption(
-                icon: Icons.flag_outlined,
-                label: 'Report',
-                onTap: () {
-                  Navigator.pop(context);
-                  showReportSheet(
-                    context,
-                    reportedUid: userId,
-                    boomerangId: boomerangId,
-                  );
-                },
-              ),
+              if (canReport)
+                _ShareOption(
+                  icon: Icons.flag_outlined,
+                  label: 'Report',
+                  onTap: () {
+                    Navigator.pop(context);
+                    showReportSheet(
+                      context,
+                      reportedUid: userId,
+                      boomerangId: boomerangId,
+                      showBlockOption: true,
+                      reportedName: authorName,
+                      reportedAvatar: authorAvatar,
+                      reportedHandle: authorHandle,
+                    );
+                  },
+                ),
             ],
           ),
         ),
@@ -1000,6 +1096,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   bool _visible = false;
   bool _initialized = false;
   bool _posterResolved = false;
+  int _initGen = 0;
 
   /// Once true, keep showing the card while video initializes (no shimmer flash).
   bool _mediaUnlocked = false;
@@ -1077,7 +1174,10 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
         _controller?.play();
       }
     } else {
-      _controller?.pause();
+      // Release MediaCodec/ExoPlayer while offscreen — pause alone still
+      // retains a decoder and OOMs Android when cacheExtent keeps many cards.
+      _disposeController();
+      if (mounted) setState(() {});
     }
     _emitReadyIfChanged();
   }
@@ -1085,19 +1185,44 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   Future<void> _initController() async {
     final url = widget.videoUrl;
     if (url == null || url.isEmpty) return;
+    // Dispose any previous controller first: _disposeController bumps
+    // _initGen, so it must run before we capture this attempt's generation
+    // or the guards below would cancel our own init.
+    _disposeController();
+    final gen = _initGen;
     _videoReady = false;
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    final initClock = Stopwatch()..start();
+    final controller = await BoomerangVideoCache.instance.createController(
+      url,
+    );
+    if (!mounted || gen != _initGen || !_visible) {
+      unawaited(controller.dispose());
+      return;
+    }
     _controller = controller;
     try {
       await controller.initialize();
-      if (!mounted) return;
+      PerfLog.event(
+        'media.feedVideoInit',
+        'source=${controller.dataSourceType.name} '
+            'took=${initClock.elapsedMilliseconds}ms',
+      );
+      if (!mounted || gen != _initGen || !_visible) {
+        unawaited(controller.dispose());
+        if (_controller == controller) {
+          _controller = null;
+          _initialized = false;
+          _videoReady = false;
+        }
+        return;
+      }
       _initialized = true;
       await controller.setLooping(true);
       await controller.setVolume(0.0);
       if (_visible) await controller.play();
-      if (mounted) setState(() => _videoReady = true);
+      if (mounted && gen == _initGen) setState(() => _videoReady = true);
     } catch (_) {
-      if (mounted) {
+      if (mounted && gen == _initGen) {
         setState(() => _videoInitFailed = true);
       }
     } finally {
@@ -1106,6 +1231,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   }
 
   void _disposeController() {
+    _initGen++;
     _controller?.dispose();
     _controller = null;
     _videoReady = false;
@@ -1129,8 +1255,8 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
           MediaQuery.devicePixelRatioOf(context),
           maxPx: 2000,
         );
-        return Image.network(
-          widget.posterUrl!,
+        return BoomerangCachedImage(
+          url: widget.posterUrl!,
           fit: BoxFit.cover,
           cacheWidth: cacheW,
           frameBuilder: (context, child, frame, wasSyncLoaded) {

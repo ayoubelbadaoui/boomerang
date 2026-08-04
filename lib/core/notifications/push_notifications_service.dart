@@ -1,7 +1,9 @@
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:boomerang/core/navigation/notification_navigation.dart';
 import 'package:boomerang/core/notifications/in_app_notification.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
 import 'package:boomerang/features/chat/application/chat_providers.dart';
 import 'package:boomerang/infrastructure/providers.dart';
 import 'package:boomerang/router.dart';
@@ -12,7 +14,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
 /// Boots push notifications:
-/// - Requests permission (required on iOS)
+/// - Requests permission (required on iOS / Android 13+)
 /// - Ensures foreground presentation on iOS
 /// - Saves the FCM token under users/{uid}/deviceTokens/{token}
 /// - Keeps the token in sync on refresh
@@ -56,7 +58,34 @@ class _PushNotificationsBootstrap {
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
 
+  static const _androidChannel = AndroidNotificationChannel(
+    'boomerang_push',
+    'Boomerang Notifications',
+    description: 'Push notifications for Boomerang',
+    importance: Importance.max,
+  );
+
+  static const _contentTypes = {
+    'like',
+    'comment',
+    'reply',
+  };
+  static const _activityTypes = {
+    'follow',
+    'follow_back',
+    'follow_request',
+  };
+
+  bool _localReady = false;
+  bool _routingReady = false;
+  NotificationNavIntent? _pendingIntent;
+
   void initialize() {
+    // Create the Android channel once at cold start (before auth) so early
+    // FCM deliveries have a defined high-importance channel.
+    // ignore: discarded_futures
+    _ensureLocalNotifications();
+
     // React to auth changes and keep token saved when signed in
     ref.listen(authStateProvider, (prev, next) async {
       final user = next.asData?.value;
@@ -64,14 +93,21 @@ class _PushNotificationsBootstrap {
         developer.log(
           '[notification push] ⚠️ No user signed in - FCM token will not be saved',
         );
+        _routingReady = false;
         return;
       }
       developer.log(
         '[notification push] 👤 User signed in: ${user.uid} - Configuring notifications...',
       );
-      await _configurePermissionsAndPresentation();
-      await _initLocalNotifications();
-      await _saveCurrentTokenForUser(user.uid);
+      await PerfLog.track(
+        'push.permissions',
+        _configurePermissionsAndPresentation,
+      );
+      await PerfLog.track('push.localInit', _ensureLocalNotifications);
+      await PerfLog.track(
+        'push.saveToken',
+        () => _saveCurrentTokenForUser(user.uid),
+      );
     });
 
     // Also try to get token immediately if user is already signed in
@@ -82,11 +118,20 @@ class _PushNotificationsBootstrap {
         '[notification push] 👤 User already signed in: ${currentUser.uid} - Getting token...',
       );
       _configurePermissionsAndPresentation().then((_) {
-        _initLocalNotifications().then((_) {
+        _ensureLocalNotifications().then((_) {
           _saveCurrentTokenForUser(currentUser.uid);
         });
       });
     }
+
+    // Wait until profile gates settle before applying notification deep links.
+    ref.listen(userHasNicknameProvider, (prev, next) {
+      _maybeEnableRouting();
+    });
+    ref.listen(userProfileCompleteProvider, (prev, next) {
+      _maybeEnableRouting();
+    });
+    _maybeEnableRouting();
 
     // Token refresh handling
     _messaging.onTokenRefresh.listen((token) async {
@@ -136,30 +181,106 @@ class _PushNotificationsBootstrap {
       await _showLocalNotification(message);
     });
 
-    // Background tap → navigate to conversation
+    // Background tap → navigate
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
-    // App was terminated and opened via notification
+    // App was terminated and opened via notification — defer until routing ready.
     _messaging.getInitialMessage().then((message) {
       if (message != null) _handleNotificationTap(message);
     });
   }
 
-  void _handleNotificationTap(RemoteMessage message) {
-    final type = message.data['type'] as String?;
-    final conversationId = message.data['conversationId'] as String?;
-    if (type == 'chat_message' && conversationId != null) {
-      ref.read(routerProvider).push('/chat/$conversationId');
-      return;
-    }
-    const socialTypes = {'like', 'comment', 'reply', 'follow', 'follow_back', 'follow_request'};
-    if (type != null && socialTypes.contains(type)) {
-      ref.read(routerProvider).go('/home');
+  void _maybeEnableRouting() {
+    final auth = ref.read(authStateProvider);
+    final hasNickname = ref.read(userHasNicknameProvider);
+    final profileComplete = ref.read(userProfileCompleteProvider);
+    final user = auth.asData?.value;
+    final ready =
+        user != null &&
+        hasNickname.asData?.value == true &&
+        profileComplete.asData?.value == true;
+    if (!ready) return;
+    if (_routingReady) return;
+    _routingReady = true;
+    final pending = _pendingIntent;
+    _pendingIntent = null;
+    if (pending != null) {
+      _dispatchIntent(pending);
     }
   }
 
-  Future<void> _initLocalNotifications() async {
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  void _handleNotificationTap(RemoteMessage message) {
+    final intent = _intentFromRemote(message);
+    if (intent == null) return;
+    _queueOrDispatch(intent);
+  }
+
+  NotificationNavIntent? _intentFromRemote(RemoteMessage message) {
+    final type = message.data['type'] as String?;
+    final conversationId = message.data['conversationId'] as String?;
+    if (type == 'chat_message' &&
+        conversationId != null &&
+        conversationId.isNotEmpty) {
+      return NotificationNavIntent(
+        kind: NotificationNavKind.chat,
+        id: conversationId,
+      );
+    }
+    final resourceId = message.data['resourceId'] as String?;
+    if (type != null &&
+        _contentTypes.contains(type) &&
+        resourceId != null &&
+        resourceId.isNotEmpty) {
+      return NotificationNavIntent(
+        kind: NotificationNavKind.boomerang,
+        id: resourceId,
+      );
+    }
+    if (type != null && _activityTypes.contains(type)) {
+      return const NotificationNavIntent(kind: NotificationNavKind.activity);
+    }
+    return null;
+  }
+
+  void _queueOrDispatch(NotificationNavIntent intent) {
+    if (!_routingReady) {
+      _pendingIntent = intent;
+      return;
+    }
+    _dispatchIntent(intent);
+  }
+
+  void _dispatchIntent(NotificationNavIntent intent) {
+    // Prefer a pending intent for HomeShell-owned surfaces (activity list),
+    // and go_router for deep routes that already exist.
+    switch (intent.kind) {
+      case NotificationNavKind.chat:
+        final id = intent.id;
+        if (id == null || id.isEmpty) return;
+        ref.read(routerProvider).go('/home');
+        ref.read(routerProvider).push('/chat/$id');
+        return;
+      case NotificationNavKind.boomerang:
+        final id = intent.id;
+        if (id == null || id.isEmpty) {
+          ref.read(pendingNotificationNavProvider.notifier).state =
+              const NotificationNavIntent(kind: NotificationNavKind.activity);
+          ref.read(routerProvider).go('/home');
+          return;
+        }
+        ref.read(routerProvider).go('/home');
+        ref.read(routerProvider).push('/boomerang/$id');
+        return;
+      case NotificationNavKind.activity:
+        ref.read(pendingNotificationNavProvider.notifier).state = intent;
+        ref.read(routerProvider).go('/home');
+        return;
+    }
+  }
+
+  Future<void> _ensureLocalNotifications() async {
+    if (_localReady) return;
+    const androidInit = AndroidInitializationSettings('@drawable/ic_stat_boomerang');
     const iosInit = DarwinInitializationSettings();
     const initSettings = InitializationSettings(
       android: androidInit,
@@ -170,18 +291,20 @@ class _PushNotificationsBootstrap {
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
 
-    // Android channel setup
-    const androidChannel = AndroidNotificationChannel(
-      'boomerang_push',
-      'Boomerang Notifications',
-      description: 'Push notifications for Boomerang',
-      importance: Importance.max,
-    );
     await _local
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >()
-        ?.createNotificationChannel(androidChannel);
+        ?.createNotificationChannel(_androidChannel);
+
+    // Local notification cold-start (foreground → process death → tap).
+    final launch = await _local.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      final response = launch!.notificationResponse;
+      if (response != null) _onLocalNotificationTap(response);
+    }
+
+    _localReady = true;
   }
 
   Future<void> _configurePermissionsAndPresentation() async {
@@ -281,11 +404,29 @@ class _PushNotificationsBootstrap {
     if (payload == null || payload.isEmpty) return;
     if (payload.startsWith('chat:')) {
       final conversationId = payload.substring(5);
-      ref.read(routerProvider).push('/chat/$conversationId');
+      if (conversationId.isEmpty) return;
+      _queueOrDispatch(
+        NotificationNavIntent(
+          kind: NotificationNavKind.chat,
+          id: conversationId,
+        ),
+      );
+      return;
+    }
+    if (payload.startsWith('boomerang:')) {
+      final id = payload.substring(10);
+      _queueOrDispatch(
+        NotificationNavIntent(
+          kind: NotificationNavKind.boomerang,
+          id: id.isEmpty ? null : id,
+        ),
+      );
       return;
     }
     if (payload.startsWith('social:')) {
-      ref.read(routerProvider).go('/home');
+      _queueOrDispatch(
+        const NotificationNavIntent(kind: NotificationNavKind.activity),
+      );
     }
   }
 
@@ -304,6 +445,8 @@ class _PushNotificationsBootstrap {
   }
 
   Future<void> _showLocalNotification(RemoteMessage message) async {
+    await _ensureLocalNotifications();
+
     final title = message.notification?.title
         ?? message.data['senderName'] as String?
         ?? 'Boomerang';
@@ -322,11 +465,12 @@ class _PushNotificationsBootstrap {
 
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
-        'boomerang_push',
-        'Boomerang Notifications',
+        _androidChannel.id,
+        _androidChannel.name,
+        channelDescription: _androidChannel.description,
         importance: Importance.max,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_stat_boomerang',
         largeIcon: largeIcon,
         playSound: true,
       ),
@@ -341,12 +485,16 @@ class _PushNotificationsBootstrap {
     String payload = '';
     if (type == 'chat_message') {
       payload = 'chat:${message.data['conversationId'] ?? ''}';
-    } else if (const {'like', 'comment', 'reply', 'follow', 'follow_back', 'follow_request'}.contains(type)) {
+    } else if (_contentTypes.contains(type)) {
+      payload = 'boomerang:${message.data['resourceId'] ?? ''}';
+    } else if (_activityTypes.contains(type)) {
       payload = 'social:${message.data['resourceId'] ?? ''}';
     }
 
+    // Millisecond id (31-bit) so bursts in the same second don't replace each
+    // other on Android's NotificationManager.
     await _local.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF,
       title,
       body,
       details,

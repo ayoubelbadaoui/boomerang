@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:boomerang/core/navigation/home_tab_navigation.dart';
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
 import 'package:boomerang/features/feed/application/upload_controller.dart';
 import 'package:boomerang/infrastructure/providers.dart';
-import 'package:boomerang/core/navigation/home_tab_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,7 +89,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
     _speed = widget.initialSpeed;
     _filterIdx = _resolveInitialFilter();
     _filterScrollCtrl = FixedExtentScrollController(initialItem: _filterIdx);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    ImmersiveSystemUi.enter();
     _controller = VideoPlayerController.file(widget.inputFile)
       ..initialize().then((_) {
         if (!mounted) return;
@@ -181,10 +182,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    ImmersiveSystemUi.leave();
     _controller?.removeListener(_tick);
     _controller?.removeListener(_onVideoTickForPoster);
     _disposePlaybackTimers();
@@ -199,12 +197,16 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
     return f.ffmpeg;
   }
 
+  bool _publishing = false;
+
   void _onCreate() {
-    if (ref.read(uploadControllerProvider).isActive) return;
+    if (_publishing || ref.read(uploadControllerProvider).isActive) return;
+    _publishing = true;
     FocusScope.of(context).unfocus();
 
     final me = ref.read(currentUserProfileProvider).value;
     if (me == null) {
+      _publishing = false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please log in first.')),
       );
@@ -248,7 +250,7 @@ class _BoomerangEditorPageState extends ConsumerState<BoomerangEditorPage> {
   @override
   Widget build(BuildContext context) {
     final ready = _controller?.value.isInitialized == true;
-    final pad = MediaQuery.paddingOf(context);
+    final pad = MediaQuery.viewPaddingOf(context);
     final speedOptions = <double>[0.5, 1.0, 1.5, 2.0];
 
     return Scaffold(

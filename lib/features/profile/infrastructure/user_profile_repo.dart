@@ -1,3 +1,4 @@
+import 'package:boomerang/core/storage/storage_metadata.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -202,11 +203,11 @@ class UserProfileRepo {
   }
 
   Future<void> upsertCurrentUserProfile({
-    required String gender,
-    required DateTime birthday,
     required String fullName,
     required String nickname,
     required String email,
+    String? gender,
+    DateTime? birthday,
     String? avatarUrl,
 
     /// Stored as Firestore `isPrivate`. Defaults to public (`false`) when omitted.
@@ -226,8 +227,15 @@ class UserProfileRepo {
       final existingData = Map<String, dynamic>.from(existing.data() ?? {});
       final previousAliases = _aliasesFromData(existingData);
       final Map<String, dynamic> data = Map<String, dynamic>.from(existingData);
-      data['gender'] = gender;
-      data['birthday'] = birthday.toIso8601String();
+      // Gender and birthday are optional (App Store Guideline 5.1.1(v)): only
+      // persist them when the user actually provided a value. Never overwrite
+      // an existing value with null/empty.
+      if (gender != null && gender.trim().isNotEmpty) {
+        data['gender'] = gender.trim();
+      }
+      if (birthday != null) {
+        data['birthday'] = birthday.toIso8601String();
+      }
       data['isPrivate'] = isPrivate;
       data['fullName'] = safeFullName;
       data['fullNameLower'] = fullNameLower;
@@ -289,7 +297,8 @@ class UserProfileRepo {
     if (uid == null) throw StateError('No authenticated user');
     final ref = _storage.ref().child('users/$uid/avatar.jpg');
     try {
-      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+      // Fixed path (overwritten on change) — bounded cache, not immutable.
+      await ref.putFile(file, mutableMediaMetadata('image/jpeg'));
       return ref.getDownloadURL();
     } catch (e, stackTrace) {
       developer.log(

@@ -97,33 +97,35 @@ class FirestoreFeedRepo implements FeedRepo {
   }) async {
     final useChronologicalFallback = cursor?.fallbackChronological ?? false;
     if (!useChronologicalFallback) {
+      if (cursor == null) {
+        // First page: fetch score-ranked and chronological orderings in
+        // parallel and MERGE them — scored (hot, recent) posts first, then
+        // the rest by recency. Only a tiny slice of posts ever carries a
+        // `rankScore` (the scheduler scores a rolling 7-day window), so the
+        // score query alone would surface only those few and hide everything
+        // else. Merging guarantees the full public catalogue is reachable.
+        final results = await Future.wait([
+          _boomerangs.fetchPublicByRankScorePage(limit: limit),
+          _boomerangs.fetchPublicByCreatedAtPage(limit: limit),
+        ]);
+        return _packDiscoveryFirstPage(
+          scoreDocs: results[0].docs,
+          timeDocs: results[1].docs,
+          myUid: myUid,
+          blockedIds: blockedIds,
+          requested: limit,
+        );
+      }
       final snap = await _boomerangs.fetchPublicByRankScorePage(
-        startAfterScore: cursor?.lastRankScore,
+        startAfterScore: cursor.lastRankScore,
         limit: limit,
       );
-      if (snap.docs.isNotEmpty) {
-        return _packDiscoveryByScore(
-          docs: snap.docs,
-          myUid: myUid,
-          blockedIds: blockedIds,
-          requested: limit,
-        );
-      }
-      // First call exhausted the score index entirely — fall back to time.
-      if (cursor == null) {
-        final fallback = await _boomerangs.fetchPublicByCreatedAtPage(
-          startAfterMillis: null,
-          limit: limit,
-        );
-        return _packDiscoveryByTime(
-          docs: fallback.docs,
-          myUid: myUid,
-          blockedIds: blockedIds,
-          requested: limit,
-        );
-      }
-      // Mid-pagination ran out of scored docs.
-      return CandidatePool.empty;
+      return _packDiscoveryByScore(
+        docs: snap.docs,
+        myUid: myUid,
+        blockedIds: blockedIds,
+        requested: limit,
+      );
     }
     // Continue chronological pagination once we've already fallen back.
     final snap = await _boomerangs.fetchPublicByCreatedAtPage(
@@ -135,6 +137,63 @@ class FirestoreFeedRepo implements FeedRepo {
       myUid: myUid,
       blockedIds: blockedIds,
       requested: limit,
+    );
+  }
+
+  /// Merges the first score-ranked page with the first chronological page:
+  /// scored posts (in score order) come first, then chronological posts with
+  /// duplicates dropped. Continuation is always chronological — the feed
+  /// controller dedups by id, so scored posts re-seen in the time stream are
+  /// harmless.
+  CandidatePool _packDiscoveryFirstPage({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> scoreDocs,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> timeDocs,
+    required String myUid,
+    required Set<String> blockedIds,
+    required int requested,
+  }) {
+    final byId = <String, RankedPost>{};
+    final ordered = <RankedPost>[];
+
+    void take(QueryDocumentSnapshot<Map<String, dynamic>> d) {
+      if (byId.containsKey(d.id)) return;
+      final data = d.data();
+      if (!_passesFilters(
+        data: data,
+        myUid: myUid,
+        blockedIds: blockedIds,
+        followingIds: const <String>{},
+      )) {
+        return;
+      }
+      final post = _mapDoc(d.id, data);
+      byId[d.id] = post;
+      ordered.add(post);
+    }
+
+    for (final d in scoreDocs) {
+      take(d);
+    }
+    int? lastMs;
+    for (final d in timeDocs) {
+      take(d);
+      final t = BoomerangRepo.createdAtMillis(d.data()['createdAt']);
+      if (t != null) lastMs = t;
+    }
+
+    // The chronological page bounds pagination: if it filled, there is more
+    // to page through chronologically; otherwise the whole catalogue fit.
+    final hasMore = timeDocs.length >= requested;
+    return CandidatePool(
+      posts: ordered,
+      hasMore: hasMore,
+      nextCursor: hasMore
+          ? DiscoveryCursor(
+              lastRankScore: null,
+              lastCreatedAtMs: lastMs,
+              fallbackChronological: true,
+            )
+          : null,
     );
   }
 
@@ -163,17 +222,25 @@ class FirestoreFeedRepo implements FeedRepo {
       final t = BoomerangRepo.createdAtMillis(data['createdAt']);
       if (t != null) lastMs = t;
     }
-    final hasMore = docs.length >= requested;
+    // A full page means more scored posts may remain; a partial page means the
+    // scored set is drained, so transition to a chronological pass (from the
+    // newest post) to surface the far larger pool of unscored posts instead of
+    // ending the feed. Either way there is always more to show.
+    final scoredFull = docs.length >= requested;
     return CandidatePool(
       posts: posts,
-      nextCursor: hasMore
+      hasMore: true,
+      nextCursor: scoredFull
           ? DiscoveryCursor(
               lastRankScore: lastScore,
               lastCreatedAtMs: lastMs,
               fallbackChronological: false,
             )
-          : null,
-      hasMore: hasMore,
+          : const DiscoveryCursor(
+              lastRankScore: null,
+              lastCreatedAtMs: null,
+              fallbackChronological: true,
+            ),
     );
   }
 
@@ -258,36 +325,40 @@ class FirestoreFeedRepo implements FeedRepo {
   }) async {
     final useChronologicalFallback = cursor?.fallbackChronological ?? false;
     if (!useChronologicalFallback) {
+      if (cursor?.lastExplorationScore == null) {
+        // First exploration page: MERGE score-ranked and chronological pages
+        // (mirrors fetchDiscoveryCandidates) so the vast majority of posts —
+        // which never carry a rankScore — remain reachable instead of being
+        // hidden behind the score-only ordering.
+        final results = await Future.wait([
+          _boomerangs.fetchPublicByRankScorePage(limit: limit),
+          _boomerangs.fetchPublicByCreatedAtPage(
+            startAfterMillis: cursor?.lastExplorationCreatedAtMs,
+            limit: limit,
+          ),
+        ]);
+        return _packHomeExplorationFirstPage(
+          scoreDocs: results[0].docs,
+          timeDocs: results[1].docs,
+          myUid: myUid,
+          followingIds: followingIds,
+          blockedIds: blockedIds,
+          requested: limit,
+          previous: cursor,
+        );
+      }
       final snap = await _boomerangs.fetchPublicByRankScorePage(
-        startAfterScore: cursor?.lastExplorationScore,
+        startAfterScore: cursor!.lastExplorationScore,
         limit: limit,
       );
-      if (snap.docs.isNotEmpty) {
-        return _packHomeExplorationByScore(
-          docs: snap.docs,
-          myUid: myUid,
-          followingIds: followingIds,
-          blockedIds: blockedIds,
-          requested: limit,
-          previous: cursor,
-        );
-      }
-      // No rankScore yet (or exhausted right away): chronological fallback.
-      if (cursor == null || cursor.lastExplorationScore == null) {
-        final fallback = await _boomerangs.fetchPublicByCreatedAtPage(
-          startAfterMillis: cursor?.lastExplorationCreatedAtMs,
-          limit: limit,
-        );
-        return _packHomeExplorationByTime(
-          docs: fallback.docs,
-          myUid: myUid,
-          followingIds: followingIds,
-          blockedIds: blockedIds,
-          requested: limit,
-          previous: cursor,
-        );
-      }
-      return CandidatePool.empty;
+      return _packHomeExplorationByScore(
+        docs: snap.docs,
+        myUid: myUid,
+        followingIds: followingIds,
+        blockedIds: blockedIds,
+        requested: limit,
+        previous: cursor,
+      );
     }
     final snap = await _boomerangs.fetchPublicByCreatedAtPage(
       startAfterMillis: cursor?.lastExplorationCreatedAtMs,
@@ -333,17 +404,83 @@ class FirestoreFeedRepo implements FeedRepo {
       final t = BoomerangRepo.createdAtMillis(data['createdAt']);
       if (t != null) lastMs = t;
     }
-    final hasMore = docs.length >= requested;
+    // Partial page ⇒ scored set drained ⇒ transition to chronological so
+    // unscored posts still surface (mirrors _packDiscoveryByScore).
+    final scoredFull = docs.length >= requested;
     return CandidatePool(
       posts: posts,
-      hasMore: hasMore,
-      nextCursor: hasMore
+      hasMore: true,
+      nextCursor: scoredFull
           ? HomeCursor(
               lastFollowingCreatedAtMs: previous?.lastFollowingCreatedAtMs,
               lastExplorationScore: lastScore,
               lastExplorationCreatedAtMs: lastMs,
               followingExhausted: true,
               fallbackChronological: false,
+            )
+          : HomeCursor(
+              lastFollowingCreatedAtMs: previous?.lastFollowingCreatedAtMs,
+              lastExplorationScore: null,
+              lastExplorationCreatedAtMs: null,
+              followingExhausted: true,
+              fallbackChronological: true,
+            ),
+    );
+  }
+
+  /// Home-exploration analogue of [_packDiscoveryFirstPage]: scored posts
+  /// first, then chronological, both excluding followed authors and self.
+  CandidatePool _packHomeExplorationFirstPage({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> scoreDocs,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> timeDocs,
+    required String myUid,
+    required Set<String> followingIds,
+    required Set<String> blockedIds,
+    required int requested,
+    required HomeCursor? previous,
+  }) {
+    final byId = <String, RankedPost>{};
+    final ordered = <RankedPost>[];
+
+    void take(QueryDocumentSnapshot<Map<String, dynamic>> d) {
+      if (byId.containsKey(d.id)) return;
+      final data = d.data();
+      final authorId = _asString(data['userId']);
+      if (followingIds.contains(authorId) || authorId == myUid) return;
+      if (!_passesFilters(
+        data: data,
+        myUid: myUid,
+        blockedIds: blockedIds,
+        followingIds: followingIds,
+      )) {
+        return;
+      }
+      final post = _mapDoc(d.id, data);
+      byId[d.id] = post;
+      ordered.add(post);
+    }
+
+    for (final d in scoreDocs) {
+      take(d);
+    }
+    int? lastMs;
+    for (final d in timeDocs) {
+      take(d);
+      final t = BoomerangRepo.createdAtMillis(d.data()['createdAt']);
+      if (t != null) lastMs = t;
+    }
+
+    final hasMore = timeDocs.length >= requested;
+    return CandidatePool(
+      posts: ordered,
+      hasMore: hasMore,
+      nextCursor: hasMore
+          ? HomeCursor(
+              lastFollowingCreatedAtMs: previous?.lastFollowingCreatedAtMs,
+              lastExplorationScore: null,
+              lastExplorationCreatedAtMs: lastMs,
+              followingExhausted: true,
+              fallbackChronological: true,
             )
           : null,
     );

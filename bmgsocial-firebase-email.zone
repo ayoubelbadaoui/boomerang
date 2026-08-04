@@ -1,0 +1,8 @@
+; Firebase Auth email domain verification for bmgsocial.net
+; Import into Cloudflare → DNS → Records → Import
+; Keep "Proxy imported DNS records" UNCHECKED
+
+bmgsocial.net.                          3600 IN TXT   "v=spf1 include:_spf.firebasemail.com ~all"
+bmgsocial.net.                          3600 IN TXT   "firebase=boomerang-fec61"
+firebase1._domainkey.bmgsocial.net.     3600 IN CNAME mail-bmgsocial-net.dkim1._domainkey.firebasemail.com.
+firebase2._domainkey.bmgsocial.net.     3600 IN CNAME mail-bmgsocial-net.dkim2._domainkey.firebasemail.com.

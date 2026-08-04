@@ -19,6 +19,7 @@ import 'package:boomerang/features/profile/infrastructure/user_search_repo.dart'
 import 'package:boomerang/features/feed/infrastructure/hashtag_repo.dart';
 import 'package:boomerang/features/profile/infrastructure/saved_repo.dart';
 import 'package:boomerang/core/auth/session_storage.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
 import 'package:boomerang/core/auth/multi_account_manager.dart';
 import 'package:boomerang/core/auth/user_session.dart';
 import 'package:boomerang/features/moderation/application/moderation_providers.dart';
@@ -123,7 +124,11 @@ final userProfileCompleteProvider = FutureProvider<bool>((ref) async {
   if (!doc.exists) return false;
   final data = doc.data();
   if (data == null) return false;
-  return data['gender'] != null && data['birthday'] != null;
+  // Gender and birthday are optional (App Store Guideline 5.1.1(v)); a profile
+  // counts as complete once it has a usable nickname. Onboarding must not be
+  // blocked on collecting personal info that isn't essential to core function.
+  final nickname = (data['nickname'] ?? data['username'] ?? '') as String;
+  return nickname.trim().isNotEmpty;
 });
 
 /// Does the current user have a valid nickname persisted?
@@ -252,7 +257,17 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) async* {
     }
     final fs = ref.read(firestoreProvider);
     try {
+      final profileClock = Stopwatch()..start();
+      var firstProfileEmit = true;
       await for (final snap in fs.collection('users').doc(u.uid).snapshots()) {
+        if (firstProfileEmit) {
+          firstProfileEmit = false;
+          PerfLog.event(
+            'deps.currentUserProfile FIRST-SNAPSHOT',
+            'took=${profileClock.elapsedMilliseconds}ms '
+                'fromCache=${snap.metadata.isFromCache} exists=${snap.exists}',
+          );
+        }
         if (!snap.exists || snap.data() == null) {
           yield null;
         } else {
@@ -396,6 +411,17 @@ final savedRepoProvider = Provider<SavedRepo>((ref) {
   return SavedRepo(fs);
 });
 
+/// Single Firestore listener for all saved post IDs (avoids per-card streams).
+final savedBoomerangIdsProvider = StreamProvider<Set<String>>((ref) {
+  final me = ref.watch(currentUserProfileProvider).value;
+  if (me == null) return const Stream.empty();
+  return ref
+      .watch(savedRepoProvider)
+      .watchSaved(me.uid)
+      .map((snap) => snap.docs.map((d) => d.id).toSet())
+      .handleError((_, __) => const <String>{});
+});
+
 final userSearchRepoProvider = Provider<UserSearchRepo>((ref) {
   final fs = ref.watch(firestoreProvider);
   return UserSearchRepo(fs);
@@ -417,12 +443,24 @@ final followingIdsProvider = StreamProvider<Set<String>>((ref) {
   final me = ref.watch(currentUserProfileProvider).value;
   if (me == null) return const Stream.empty();
   final fs = ref.watch(firestoreProvider);
+  final clock = Stopwatch()..start();
+  var firstEmit = true;
   return fs
       .collection('following')
       .doc(me.uid)
       .collection('users')
       .snapshots()
-      .map((snap) => snap.docs.map((d) => d.id).toSet())
+      .map((snap) {
+        if (firstEmit) {
+          firstEmit = false;
+          PerfLog.event(
+            'deps.followingIds FIRST-SNAPSHOT',
+            'count=${snap.docs.length} took=${clock.elapsedMilliseconds}ms '
+                'fromCache=${snap.metadata.isFromCache}',
+          );
+        }
+        return snap.docs.map((d) => d.id).toSet();
+      })
       .handleError((e, st) {});
 });
 

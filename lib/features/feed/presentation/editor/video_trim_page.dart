@@ -277,7 +277,9 @@ class _VideoTrimPageState extends ConsumerState<VideoTrimPage> {
     final theme = Theme.of(context);
     final safeBottom = MediaQuery.paddingOf(context).bottom;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_processing,
+      child: Scaffold(
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -285,6 +287,7 @@ class _VideoTrimPageState extends ConsumerState<VideoTrimPage> {
         elevation: 0,
         foregroundColor: Colors.white,
         systemOverlayStyle: SystemUiOverlayStyle.light,
+        automaticallyImplyLeading: !_processing,
         title: Text(
           'Trim',
           style: TextStyle(
@@ -388,6 +391,7 @@ class _VideoTrimPageState extends ConsumerState<VideoTrimPage> {
           ],
         ),
       ),
+    ),
     );
   }
 }

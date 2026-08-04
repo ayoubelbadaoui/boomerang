@@ -18,9 +18,15 @@ class _CreateTabState extends ConsumerState<CreateTab> {
   bool _isProcessing = false;
 
   Future<void> _openCamera() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const BoomerangCameraPage()));
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    try {
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const BoomerangCameraPage()));
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
   Future<void> _importFromGallery() async {

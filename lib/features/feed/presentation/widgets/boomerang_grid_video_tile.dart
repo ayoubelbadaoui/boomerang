@@ -1,5 +1,6 @@
 import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:flutter/material.dart';
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -45,6 +46,7 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
   bool _videoReady = false;
   bool _initFailed = false;
   bool _visible = false;
+  int _initGen = 0;
 
   bool get _hasVideo =>
       widget.videoUrl != null && widget.videoUrl!.isNotEmpty;
@@ -72,33 +74,52 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
         _controller?.play();
       }
     } else {
-      _controller?.pause();
+      // Dispose offscreen decoders — Android grid can mount many tiles.
+      _disposeController();
+      if (mounted) setState(() {});
     }
   }
 
   Future<void> _initController() async {
     final url = widget.videoUrl;
     if (url == null || url.isEmpty) return;
+    // Dispose any previous controller first: _disposeController bumps
+    // _initGen, so it must run before we capture this attempt's generation
+    // or the guards below would cancel our own init.
+    _disposeController();
+    final gen = _initGen;
     _videoReady = false;
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    final controller = await BoomerangVideoCache.instance.createController(
+      url,
+    );
+    if (!mounted || gen != _initGen || !_visible) {
+      await controller.dispose();
+      return;
+    }
     _controller = controller;
     try {
       await controller.initialize();
-      if (!mounted) {
+      if (!mounted || gen != _initGen || !_visible) {
         await controller.dispose();
+        if (_controller == controller) {
+          _controller = null;
+          _initialized = false;
+          _videoReady = false;
+        }
         return;
       }
       _initialized = true;
       await controller.setLooping(true);
       await controller.setVolume(0.0);
       if (_visible) await controller.play();
-      if (mounted) setState(() => _videoReady = true);
+      if (mounted && gen == _initGen) setState(() => _videoReady = true);
     } catch (_) {
-      if (mounted) setState(() => _initFailed = true);
+      if (mounted && gen == _initGen) setState(() => _initFailed = true);
     }
   }
 
   void _disposeController() {
+    _initGen++;
     _controller?.dispose();
     _controller = null;
     _initialized = false;

@@ -107,6 +107,34 @@ void main() {
       expect(pool.posts.map((p) => p.id).toList(), <String>['good']);
     });
 
+    test('surfaces unscored posts when only a few carry a rankScore', () async {
+      // Regression: the ranking scheduler only scores a rolling recent window,
+      // so the vast majority of posts have no rankScore. A score-ordered query
+      // hides them entirely; the first page must merge in chronological posts.
+      await _seedPost(fs,
+          id: 'scored', userId: 'u1', createdAt: now, rankScore: 0.9);
+      for (var i = 0; i < 5; i++) {
+        await _seedPost(fs,
+            id: 'unscored$i',
+            userId: 'u$i',
+            createdAt: now.subtract(Duration(hours: i + 1)));
+      }
+
+      final pool = await repo.fetchDiscoveryCandidates(
+        myUid: 'me',
+        blockedIds: const <String>{},
+      );
+      // Every post is reachable on the first page — scored ones are not
+      // allowed to hide the unscored majority. (Score-first ordering is a
+      // production Firestore guarantee; the in-memory fake's ordering of
+      // missing fields is not authoritative, so we assert presence only.)
+      final ids = pool.posts.map((p) => p.id).toSet();
+      expect(ids, contains('scored'));
+      for (var i = 0; i < 5; i++) {
+        expect(ids, contains('unscored$i'));
+      }
+    });
+
     test('excludes private posts', () async {
       await _seedPost(fs,
           id: 'public',

@@ -36,6 +36,14 @@
       "collectionGroup": "boomerangs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "ownerIsPrivate", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "boomerangs",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]

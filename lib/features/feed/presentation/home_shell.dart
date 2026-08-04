@@ -18,6 +18,7 @@ import 'package:boomerang/features/feed/presentation/editor/gallery_import_flow.
 import 'package:boomerang/features/feed/presentation/widgets/upload_progress_bar.dart';
 import 'package:boomerang/features/feed/presentation/camera/boomerang_camera_page.dart';
 import 'package:boomerang/core/navigation/home_tab_navigation.dart';
+import 'package:boomerang/core/navigation/notification_navigation.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -44,11 +45,37 @@ class _HomeShellState extends ConsumerState<HomeShell>
         setState(() => _currentIndex = next);
       }
     });
+    ref.listenManual(pendingNotificationNavProvider, (prev, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _consumeNotificationIntent(next);
+      });
+    });
     WidgetsBinding.instance.addObserver(this);
     // The Activity may have just been recreated after being reclaimed while a
     // gallery picker was open — recover any dropped selection on first frame.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _recoverLostGalleryVideo(),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _recoverLostGalleryVideo();
+      final pending = ref.read(pendingNotificationNavProvider);
+      if (pending != null) _consumeNotificationIntent(pending);
+    });
+  }
+
+  void _consumeNotificationIntent(NotificationNavIntent intent) {
+    ref.read(pendingNotificationNavProvider.notifier).state = null;
+    if (intent.kind == NotificationNavKind.activity) {
+      _openNotifications();
+    }
+  }
+
+  void _openNotifications() {
+    final uid = ref.read(currentUserProfileProvider).value?.uid ?? '';
+    if (uid.isNotEmpty) {
+      ref.read(notificationsRepoProvider).markAllRead(uid: uid);
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificationsPage()),
     );
   }
 
@@ -150,15 +177,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                 elevation: 0,
                 title: const Text('Home'),
                 actions: [
-                  _NotificationBell(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsPage(),
-                        ),
-                      );
-                    },
-                  ),
+                  _NotificationBell(onTap: _openNotifications),
                 ],
               )
               : null,

@@ -83,7 +83,7 @@ class _InAppNotificationOverlayState
       }
     });
 
-    final topPadding = MediaQuery.paddingOf(context).top;
+    final topPadding = MediaQuery.viewPaddingOf(context).top;
 
     return Stack(
       children: [

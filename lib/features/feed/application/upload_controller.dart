@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer' show log;
 import 'dart:io';
 
+import 'package:boomerang/core/storage/storage_metadata.dart';
 import 'package:boomerang/features/feed/infrastructure/boomerang_processor.dart';
 import 'package:boomerang/features/profile/application/user_boomerangs_controller.dart';
 import 'package:boomerang/features/profile/domain/user_profile.dart';
@@ -369,7 +370,9 @@ class UploadController extends Notifier<UploadState> {
       'Uploading video to Firebase Storage path=$storagePath',
       name: _logName,
     );
-    final task = storage.ref(storagePath).putFile(File(filePath));
+    final task = storage
+        .ref(storagePath)
+        .putFile(File(filePath), immutableMediaMetadata('video/mp4'));
 
     task.snapshotEvents.listen(
       (snap) {
@@ -446,7 +449,10 @@ class UploadController extends Notifier<UploadState> {
         'boomerangs/posters/poster_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
       log('Uploading poster to Firebase Storage', name: _logName);
-      final posterTask = await posterRef.putFile(File(posterPath));
+      final posterTask = await posterRef.putFile(
+        File(posterPath),
+        immutableMediaMetadata('image/jpeg'),
+      );
       final url = await posterTask.ref.getDownloadURL();
       log('Poster upload finished', name: _logName);
       return url;

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:developer' show log;
 
+import 'package:boomerang/core/feed/feed_debug.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -225,6 +227,7 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         return;
       }
       final requestUid = me.uid;
+      final fetchClock = Stopwatch()..start();
       log(
         '[FEEDDBG] fetchNext ENTER surface=${_surface.name} uid=$requestUid '
         'page=${current.pageIndex} buffer=${current.buffer.length} '
@@ -232,13 +235,23 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
         'cursor=${current.nextCursor.runtimeType}',
         name: 'FeedController',
       );
-      final followingIds = await _resolveFollowingIds(requestUid: requestUid);
-      final blockedIds = await _resolveBlockedIds(requestUid: requestUid);
-      log(
-        '[FEEDDBG] deps resolved surface=${_surface.name} '
-        'following=${followingIds.length} blocked=${blockedIds.length}',
-        name: 'FeedController',
+      final deps = await PerfLog.track(
+        'feed.resolveDeps',
+        () => Future.wait([
+          _resolveFollowingIds(requestUid: requestUid),
+          _resolveBlockedIds(requestUid: requestUid),
+        ]),
+        detail: 'surface=${_surface.name} page=${current.pageIndex}',
       );
+      final followingIds = deps[0];
+      final blockedIds = deps[1];
+      if (kFeedDebug) {
+        log(
+          '[FEEDDBG] deps resolved surface=${_surface.name} '
+          'following=${followingIds.length} blocked=${blockedIds.length}',
+          name: 'FeedController',
+        );
+      }
       final liveUidAfterDeps = ref.read(firebaseAuthProvider).currentUser?.uid;
       if (liveUidAfterDeps != requestUid) {
         log(
@@ -277,12 +290,18 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
           'cursor=${nextCursor.runtimeType}',
           name: 'FeedController',
         );
-        final pool = await _fetchPool(
-          repo: repo,
-          cursor: nextCursor,
-          myUid: requestUid,
-          followingIds: followingIds,
-          blockedIds: blockedIds,
+        final pool = await PerfLog.track(
+          'feed.fetchPool',
+          () => _fetchPool(
+            repo: repo,
+            cursor: nextCursor,
+            myUid: requestUid,
+            followingIds: followingIds,
+            blockedIds: blockedIds,
+          ),
+          detail:
+              'surface=${_surface.name} page=${current.pageIndex} '
+              'following=${followingIds.length}',
         );
         log(
           '[FEEDDBG] pool OK surface=${_surface.name} '
@@ -365,6 +384,12 @@ class FeedController extends FamilyAsyncNotifier<FeedState, FeedSurface> {
           pageIndex: current.pageIndex + 1,
           rankingVersion: rankingVersion,
         ),
+      );
+      PerfLog.event(
+        'feed PAGE-READY',
+        'surface=${_surface.name} page=${current.pageIndex} '
+            'emitted=${pageSlice.length} totalItems=${mergedItems.length} '
+            'took=${fetchClock.elapsedMilliseconds}ms',
       );
       _consecutiveFetchFailures = 0;
     } catch (e, st) {

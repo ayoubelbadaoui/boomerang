@@ -32,6 +32,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   bool _acceptedPrivacy = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -75,15 +76,12 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   : () => context.pop(),
         ),
       ),
+      // Scaffold (adjustResize + resizeToAvoidBottomInset) already lifts for
+      // the keyboard; do not also pad by viewInsets.bottom.
       body: SafeArea(
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(
-            24.w,
-            12.h,
-            24.w,
-            12.h + MediaQuery.viewInsetsOf(context).bottom,
-          ),
+          padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 12.h),
           child: Form(
             key: _formKey,
             child: Column(
@@ -215,8 +213,9 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   ),
                 SizedBox(height: 16.h),
                 PrimaryButton(
-                  loading: state.loading,
+                  loading: state.loading || _submitting,
                   onPressed: () async {
+                    if (_submitting) return;
                     if (credentialsLocked) {
                       context.go(SetupFlowPage.routeName);
                       return;
@@ -233,63 +232,76 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                       return;
                     }
 
-                    final prevUser = ref.read(firebaseAuthProvider).currentUser;
-                    final profileCandidate =
-                        ref.read(currentUserProfileProvider).value;
-                    final prevProfile =
-                        prevUser != null &&
-                                profileCandidate != null &&
-                                profileCandidate.uid == prevUser.uid
-                            ? profileCandidate
-                            : null;
-                    UserSession? prevSession;
-                    if (prevUser != null) {
-                      prevSession = UserSession(
-                        uid: prevUser.uid,
-                        email: prevProfile?.email ?? prevUser.email ?? '',
-                        displayName:
-                            prevProfile?.fullName.isNotEmpty == true
-                                ? prevProfile!.fullName
-                                : prevProfile?.nickname ??
-                                    prevUser.displayName ??
-                                    '',
-                        photoUrl: prevProfile?.avatarUrl ?? prevUser.photoURL,
-                        lastLogin: DateTime.now(),
-                      );
-                    }
-
-                    await ref
-                        .read(authControllerProvider.notifier)
-                        .signup(
-                          _email.text,
-                          _password.text,
-                          _name.text,
-                          previousAccount: prevSession,
+                    setState(() => _submitting = true);
+                    var keepLocked = false;
+                    try {
+                      final prevUser =
+                          ref.read(firebaseAuthProvider).currentUser;
+                      final profileCandidate =
+                          ref.read(currentUserProfileProvider).value;
+                      final prevProfile =
+                          prevUser != null &&
+                                  profileCandidate != null &&
+                                  profileCandidate.uid == prevUser.uid
+                              ? profileCandidate
+                              : null;
+                      UserSession? prevSession;
+                      if (prevUser != null) {
+                        prevSession = UserSession(
+                          uid: prevUser.uid,
+                          email: prevProfile?.email ?? prevUser.email ?? '',
+                          displayName:
+                              prevProfile?.fullName.isNotEmpty == true
+                                  ? prevProfile!.fullName
+                                  : prevProfile?.nickname ??
+                                      prevUser.displayName ??
+                                      '',
+                          photoUrl:
+                              prevProfile?.avatarUrl ?? prevUser.photoURL,
+                          lastLogin: DateTime.now(),
                         );
-                    if (!mounted) return;
-                    final result = ref.read(authControllerProvider);
-                    final signedInUser =
-                        ref.read(authStateProvider).asData?.value;
-                    final signupSucceeded =
-                        result.error == null &&
-                        result.success != null &&
-                        signedInUser != null;
-                    if (signupSucceeded) {
-                      final container = ProviderScope.containerOf(
-                        context,
-                        listen: false,
-                      );
-                      invalidateUserScopedProviders(container);
-                      container.invalidate(profileControllerProvider);
-                      container.invalidate(userBoomerangsControllerProvider);
-                      container.invalidate(storedAccountsProvider);
-                      ref.read(homeTabIndexProvider.notifier).state = 0;
-                      _storeConsent(ref);
-                      context.go(
-                        addAccountMode
-                            ? HomeShell.routeName
-                            : SetupFlowPage.routeName,
-                      );
+                      }
+
+                      await ref
+                          .read(authControllerProvider.notifier)
+                          .signup(
+                            _email.text,
+                            _password.text,
+                            _name.text,
+                            previousAccount: prevSession,
+                          );
+                      if (!mounted) return;
+                      final result = ref.read(authControllerProvider);
+                      final signedInUser =
+                          ref.read(authStateProvider).asData?.value;
+                      final signupSucceeded =
+                          result.error == null &&
+                          result.success != null &&
+                          signedInUser != null;
+                      if (signupSucceeded) {
+                        // Stay locked through navigation so a second tap
+                        // cannot fire while the route is still mounted.
+                        keepLocked = true;
+                        final container = ProviderScope.containerOf(
+                          context,
+                          listen: false,
+                        );
+                        invalidateUserScopedProviders(container);
+                        container.invalidate(profileControllerProvider);
+                        container.invalidate(userBoomerangsControllerProvider);
+                        container.invalidate(storedAccountsProvider);
+                        ref.read(homeTabIndexProvider.notifier).state = 0;
+                        _storeConsent(ref);
+                        context.go(
+                          addAccountMode
+                              ? HomeShell.routeName
+                              : SetupFlowPage.routeName,
+                        );
+                      }
+                    } finally {
+                      if (mounted && !keepLocked) {
+                        setState(() => _submitting = false);
+                      }
                     }
                   },
                   child: Text(

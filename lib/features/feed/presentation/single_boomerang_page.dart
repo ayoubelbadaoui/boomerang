@@ -1,3 +1,4 @@
+import 'package:boomerang/core/utils/immersive_system_ui.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
 import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
 import 'package:video_player/video_player.dart';
 
 class SingleBoomerangPage extends ConsumerStatefulWidget {
@@ -31,6 +33,7 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
   @override
   void initState() {
     super.initState();
+    ImmersiveSystemUi.enter();
     _loadPost();
   }
 
@@ -78,26 +81,28 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
     if (_videoInitStarted) return;
     if (url == null || url.isEmpty) return;
     _videoInitStarted = true;
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-    _videoController = controller;
-    controller
-      ..initialize().then((_) {
-        if (mounted) {
-          setState(() {});
-          controller.setLooping(true);
-          controller.play();
-        }
-      })
-      ..setVolume(0);
+    // ignore: discarded_futures
+    BoomerangVideoCache.instance.createController(url).then((controller) {
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+      _videoController = controller;
+      controller
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {});
+            controller.setLooping(true);
+            controller.play();
+          }
+        })
+        ..setVolume(0);
+    });
   }
 
   void _closePage() {
     if (_isClosing || !mounted) return;
     _isClosing = true;
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
     Navigator.of(context).pop();
   }
 
@@ -112,6 +117,7 @@ class _SingleBoomerangPageState extends ConsumerState<SingleBoomerangPage> {
 
   @override
   void dispose() {
+    ImmersiveSystemUi.leave();
     _videoController?.dispose();
     super.dispose();
   }

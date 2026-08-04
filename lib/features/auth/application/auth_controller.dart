@@ -6,7 +6,9 @@ import 'package:boomerang/features/auth/domain/auth_state.dart';
 import 'package:boomerang/features/auth/domain/auth_user.dart';
 import 'package:boomerang/features/auth/infrastructure/auth_repo.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:boomerang/core/utils/auth_debug_log.dart';
 import 'package:boomerang/core/utils/auth_error_mapper.dart';
+import 'package:boomerang/core/utils/perf_log.dart';
 
 class AuthController extends StateNotifier<AuthState> {
   AuthController(this._repo, this._accountManager) : super(const AuthState());
@@ -23,9 +25,12 @@ class AuthController extends StateNotifier<AuthState> {
     String password, {
     UserSession? previousAccount,
   }) async {
+    if (state.loading) return;
+    final loginClock = Stopwatch()..start();
     try {
       state = const AuthState(loading: true);
 
+      PerfLog.event('login START');
       dev.log('[multi-account] login START for $emailOrUsername');
 
       if (previousAccount != null) {
@@ -33,10 +38,16 @@ class AuthController extends StateNotifier<AuthState> {
           '[multi-account] login: storing previous account '
           '${previousAccount.uid} (${previousAccount.displayName})',
         );
-        await _accountManager.addAccount(previousAccount);
+        await PerfLog.track(
+          'login.storePreviousAccount',
+          () => _accountManager.addAccount(previousAccount),
+        );
       }
 
-      final user = await _repo.signIn(emailOrUsername, password);
+      final user = await PerfLog.track(
+        'login.signIn',
+        () => _repo.signIn(emailOrUsername, password),
+      );
       dev.log('[multi-account] login: signIn OK uid=${user.uid}');
 
       final resolvedEmail = user.email?.trim() ?? '';
@@ -44,19 +55,33 @@ class AuthController extends StateNotifier<AuthState> {
         throw StateError('Authenticated account is missing an email.');
       }
 
-      await _accountManager.addAccount(
-        UserSession(
-          uid: user.uid,
-          email: resolvedEmail,
-          displayName: user.name ?? '',
-          lastLogin: DateTime.now(),
+      await PerfLog.track(
+        'login.persistSession',
+        () => _accountManager.addAccount(
+          UserSession(
+            uid: user.uid,
+            email: resolvedEmail,
+            displayName: user.name ?? '',
+            lastLogin: DateTime.now(),
+          ),
+          password: password,
         ),
-        password: password,
       );
       dev.log('[multi-account] login: addAccount DONE');
 
+      PerfLog.event(
+        'login DONE',
+        'totalMs=${loginClock.elapsedMilliseconds}',
+      );
       state = const AuthState(success: 'Logged in successfully');
-    } catch (e) {
+    } catch (e, st) {
+      AuthDebugLog.authFailed(
+        flow: 'login',
+        error: e,
+        stackTrace: st,
+        identifier: emailOrUsername,
+        step: 'auth_controller',
+      );
       dev.log('[multi-account] login FAILED: $e');
       state = AuthState(error: AuthErrorMapper.map(e));
     }
@@ -68,6 +93,7 @@ class AuthController extends StateNotifier<AuthState> {
     String name, {
     UserSession? previousAccount,
   }) async {
+    if (state.loading) return;
     try {
       state = const AuthState(loading: true);
 
@@ -88,7 +114,14 @@ class AuthController extends StateNotifier<AuthState> {
       );
 
       state = const AuthState(success: 'Account created successfully');
-    } catch (e) {
+    } catch (e, st) {
+      AuthDebugLog.authFailed(
+        flow: 'signup',
+        error: e,
+        stackTrace: st,
+        identifier: email,
+        step: 'auth_controller',
+      );
       state = AuthState(error: AuthErrorMapper.map(e));
     }
   }

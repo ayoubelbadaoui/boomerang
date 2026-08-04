@@ -777,13 +777,14 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomSafe = MediaQuery.paddingOf(context).bottom;
+    // Full gesture/cutout inset — half-padding clipped the composer on Android.
+    final bottomSafe = MediaQuery.viewPaddingOf(context).bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         16.w,
         8.h,
         16.w,
-        16.h + (bottomSafe > 0 ? bottomSafe * 0.5 : 0),
+        16.h + bottomSafe,
       ),
       child: Row(
         children: [
