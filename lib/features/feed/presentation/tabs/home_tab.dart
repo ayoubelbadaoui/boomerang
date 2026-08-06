@@ -1097,6 +1097,11 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   bool _initialized = false;
   bool _posterResolved = false;
   int _initGen = 0;
+  Timer? _disposeTimer;
+
+  static const _playThreshold = 0.45;
+  static const _pauseThreshold = 0.2;
+  static const _disposeDelay = Duration(milliseconds: 900);
 
   /// Once true, keep showing the card while video initializes (no shimmer flash).
   bool _mediaUnlocked = false;
@@ -1120,6 +1125,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     }
     if (widget.videoUrl != oldWidget.videoUrl) {
       _videoInitFailed = false;
+      _cancelDisposeTimer();
       _disposeController();
       if (_visible) _initController();
       _emitReadyIfChanged();
@@ -1162,24 +1168,44 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     widget.onFullyReady?.call(ready);
   }
 
-  void _onVisibilityChanged(VisibilityInfo info) {
-    final nowVisible = info.visibleFraction >= 0.5;
-    if (nowVisible == _visible) return;
-    _visible = nowVisible;
+  void _cancelDisposeTimer() {
+    _disposeTimer?.cancel();
+    _disposeTimer = null;
+  }
 
-    if (_visible) {
+  void _scheduleDispose() {
+    _cancelDisposeTimer();
+    _disposeTimer = Timer(_disposeDelay, () {
+      if (!mounted || _visible) return;
+      // Release MediaCodec/ExoPlayer only after the card has stayed
+      // offscreen — immediate dispose on every scroll flicker kills looping.
+      _disposeController();
+      if (mounted) setState(() {});
+      _emitReadyIfChanged();
+    });
+  }
+
+  void _onVisibilityChanged(VisibilityInfo info) {
+    final fraction = info.visibleFraction;
+
+    if (!_visible && fraction >= _playThreshold) {
+      _visible = true;
+      _cancelDisposeTimer();
       if (!_initialized) {
         _initController();
       } else {
         _controller?.play();
       }
-    } else {
-      // Release MediaCodec/ExoPlayer while offscreen — pause alone still
-      // retains a decoder and OOMs Android when cacheExtent keeps many cards.
-      _disposeController();
-      if (mounted) setState(() {});
+      _emitReadyIfChanged();
+      return;
     }
-    _emitReadyIfChanged();
+
+    if (_visible && fraction < _pauseThreshold) {
+      _visible = false;
+      _controller?.pause();
+      _scheduleDispose();
+      _emitReadyIfChanged();
+    }
   }
 
   Future<void> _initController() async {
@@ -1240,6 +1266,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
   @override
   void dispose() {
+    _cancelDisposeTimer();
     _disposeController();
     super.dispose();
   }

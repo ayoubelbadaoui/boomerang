@@ -120,9 +120,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     );
   }
 
+  final _isLoading = false;
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -255,8 +259,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   : prevProfile?.nickname ??
                                       prevUser.displayName ??
                                       '',
-                          photoUrl:
-                              prevProfile?.avatarUrl ?? prevUser.photoURL,
+                          photoUrl: prevProfile?.avatarUrl ?? prevUser.photoURL,
                           lastLogin: DateTime.now(),
                         );
                       }

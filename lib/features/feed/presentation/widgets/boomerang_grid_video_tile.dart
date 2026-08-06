@@ -1,19 +1,17 @@
+import 'dart:async';
+
 import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:flutter/material.dart';
 import 'package:boomerang/core/video/boomerang_video_cache.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-/// A grid cell that shows the boomerang poster and, once the tile is at least
-/// half visible, autoplays the clip muted and looping — mirroring the Home
-/// feed's [VisibilityDetector] playback so Discover BMGs animate the same way
-/// instead of staying static.
+/// A grid cell that shows the boomerang poster and, once the tile is
+/// sufficiently visible, autoplays the clip muted and looping.
 ///
-/// The poster ([BoomerangGridThumbnail]) is always the base layer (preserving
-/// the shimmer + decode behaviour and giving an instant frame), and the video
-/// fades in on top when ready. Playback is paused when the tile scrolls out of
-/// view and the controller is disposed with the widget, so only on-screen
-/// tiles hold a decoder.
+/// Visibility uses hysteresis + a delayed decoder release so brief scroll
+/// flickers (and Discover masonry rebuilds) do not tear down playback and
+/// make the whole grid look like it is refreshing.
 class BoomerangGridVideoTile extends StatefulWidget {
   const BoomerangGridVideoTile({
     super.key,
@@ -25,7 +23,10 @@ class BoomerangGridVideoTile extends StatefulWidget {
     this.phaseShift = 0,
 
     /// Fraction of the tile that must be visible before playback starts.
-    this.playThreshold = 0.5,
+    this.playThreshold = 0.4,
+
+    /// Fraction below which playback pauses. Must be < [playThreshold].
+    this.pauseThreshold = 0.15,
   });
 
   final String postId;
@@ -35,6 +36,7 @@ class BoomerangGridVideoTile extends StatefulWidget {
   final int? cacheWidth;
   final double phaseShift;
   final double playThreshold;
+  final double pauseThreshold;
 
   @override
   State<BoomerangGridVideoTile> createState() => _BoomerangGridVideoTileState();
@@ -47,6 +49,9 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
   bool _initFailed = false;
   bool _visible = false;
   int _initGen = 0;
+  Timer? _disposeTimer;
+
+  static const _disposeDelay = Duration(milliseconds: 900);
 
   bool get _hasVideo =>
       widget.videoUrl != null && widget.videoUrl!.isNotEmpty;
@@ -56,27 +61,50 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
     super.didUpdateWidget(oldWidget);
     if (widget.videoUrl != oldWidget.videoUrl) {
       _initFailed = false;
+      _cancelDisposeTimer();
       _disposeController();
       if (_visible && _hasVideo) _initController();
     }
   }
 
-  void _onVisibilityChanged(VisibilityInfo info) {
-    final nowVisible = info.visibleFraction >= widget.playThreshold;
-    if (nowVisible == _visible) return;
-    _visible = nowVisible;
-    if (!_hasVideo) return;
+  void _cancelDisposeTimer() {
+    _disposeTimer?.cancel();
+    _disposeTimer = null;
+  }
 
-    if (_visible) {
+  void _scheduleDispose() {
+    _cancelDisposeTimer();
+    _disposeTimer = Timer(_disposeDelay, () {
+      if (!mounted || _visible) return;
+      _disposeController();
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _onVisibilityChanged(VisibilityInfo info) {
+    final fraction = info.visibleFraction;
+    if (!_hasVideo) {
+      _visible = fraction >= widget.playThreshold;
+      return;
+    }
+
+    if (!_visible && fraction >= widget.playThreshold) {
+      _visible = true;
+      _cancelDisposeTimer();
       if (!_initialized) {
         _initController();
       } else {
         _controller?.play();
       }
-    } else {
-      // Dispose offscreen decoders — Android grid can mount many tiles.
-      _disposeController();
-      if (mounted) setState(() {});
+      return;
+    }
+
+    if (_visible && fraction < widget.pauseThreshold) {
+      _visible = false;
+      // Keep the decoded frame on screen; only release the decoder after the
+      // tile has stayed offscreen long enough that scroll thrash is over.
+      _controller?.pause();
+      _scheduleDispose();
     }
   }
 
@@ -128,6 +156,7 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
 
   @override
   void dispose() {
+    _cancelDisposeTimer();
     _disposeController();
     super.dispose();
   }
@@ -153,16 +182,12 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
               usePlainNetwork: false,
             ),
             if (showVideo)
-              AnimatedOpacity(
-                opacity: 1.0,
-                duration: const Duration(milliseconds: 260),
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: _controller!.value.size.width,
-                    height: _controller!.value.size.height,
-                    child: VideoPlayer(_controller!),
-                  ),
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.size.width,
+                  height: _controller!.value.size.height,
+                  child: VideoPlayer(_controller!),
                 ),
               ),
           ],

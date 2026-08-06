@@ -348,90 +348,22 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
           crossAxisCount: 2,
           mainAxisSpacing: 16.h,
           crossAxisSpacing: 16.w,
+          // Keep offscreen work modest — video tiles already pause/dispose
+          // with hysteresis; a huge cacheExtent just mounts more decoders.
+          cacheExtent: MediaQuery.sizeOf(context).height,
           itemCount: visible.length + (state.hasMore ? 1 : 0),
           itemBuilder: (context, i) {
             if (i >= visible.length) {
               return const _DiscoverGridLoadingTile();
             }
             final post = visible[i];
-            final d = post.raw;
-            final fallbackName = (d['userName'] ?? '') as String;
-            final liveName = ref.watch(
-              userDisplayNameByIdProvider(post.authorId),
-            );
-            final name =
-                liveName?.trim().isNotEmpty == true
-                    ? liveName!.trim()
-                    : fallbackName;
-            final poster = (d['imageUrl'] ?? '') as String;
-            final video = (d['videoUrl'] ?? '') as String;
-            final avatar = d['userAvatar'] as String?;
-            final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
-            final tileWidth =
-                (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
-            final cacheW = computeCacheWidthForLogicalWidth(
-              tileWidth,
-              MediaQuery.of(context).devicePixelRatio,
-              maxPx: 1200,
-            );
-            return GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder:
-                        (_) => BoomerangPagerPage(
-                          initialId: post.id,
-                          initialData: d,
-                          feedSurface: FeedSurface.discovery,
-                        ),
-                  ),
-                );
-              },
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AspectRatio(
-                    aspectRatio: aspectRatio,
-                    child: BoomerangGridVideoTile(
-                      postId: post.id,
-                      videoUrl: video.isNotEmpty ? video : null,
-                      imageUrl: poster.isNotEmpty ? poster : null,
-                      borderRadius: BorderRadius.circular(18.r),
-                      cacheWidth: cacheW,
-                      phaseShift: i * 0.025,
-                    ),
-                  ),
-                  SizedBox(height: 8.h),
-                  Row(
-                    children: [
-                      LiveAvatar(
-                        userId: post.authorId,
-                        fallbackUrl: avatar,
-                        size: 24.r,
-                      ),
-                      SizedBox(width: 8.w),
-                      Expanded(
-                        child: InkWell(
-                          onTap:
-                              () => openUserProfilePage(
-                                context,
-                                ref,
-                                userId: post.authorId,
-                              ),
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            return _DiscoverBmgTile(
+              key: ValueKey(post.id),
+              postId: post.id,
+              authorId: post.authorId,
+              data: post.raw,
+              index: i,
+              feedSurface: FeedSurface.discovery,
             );
           },
         ),
@@ -473,6 +405,105 @@ class _DiscoverGridLoadingTile extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One Discover cell. Kept as its own [ConsumerWidget] so live name/avatar
+/// watches rebuild only this tile — not the whole masonry grid (which was
+/// tearing down every visible video on each profile stream update).
+class _DiscoverBmgTile extends ConsumerWidget {
+  const _DiscoverBmgTile({
+    super.key,
+    required this.postId,
+    required this.authorId,
+    required this.data,
+    required this.index,
+    this.feedSurface,
+  });
+
+  final String postId;
+  final String authorId;
+  final Map<String, dynamic> data;
+  final int index;
+  final FeedSurface? feedSurface;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fallbackName = (data['userName'] ?? '') as String;
+    final liveName = ref.watch(userDisplayNameByIdProvider(authorId));
+    final name =
+        liveName?.trim().isNotEmpty == true ? liveName!.trim() : fallbackName;
+    final poster = (data['imageUrl'] ?? '') as String;
+    final video = (data['videoUrl'] ?? '') as String;
+    final avatar = data['userAvatar'] as String?;
+    final aspectRatio = index.isEven ? 9 / 14 : 9 / 11;
+    final tileWidth = (MediaQuery.sizeOf(context).width - (16.w * 3)) / 2;
+    final cacheW = computeCacheWidthForLogicalWidth(
+      tileWidth,
+      MediaQuery.devicePixelRatioOf(context),
+      maxPx: 1200,
+    );
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder:
+                (_) => BoomerangPagerPage(
+                  initialId: postId,
+                  initialData: data,
+                  feedSurface: feedSurface,
+                ),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AspectRatio(
+            aspectRatio: aspectRatio,
+            child: BoomerangGridVideoTile(
+              postId: postId,
+              videoUrl: video.isNotEmpty ? video : null,
+              imageUrl: poster.isNotEmpty ? poster : null,
+              borderRadius: BorderRadius.circular(18.r),
+              cacheWidth: cacheW,
+              phaseShift: index * 0.025,
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Row(
+            children: [
+              LiveAvatar(
+                userId: authorId,
+                fallbackUrl: avatar,
+                size: 24.r,
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: InkWell(
+                  onTap:
+                      () => openUserProfilePage(
+                        context,
+                        ref,
+                        userId: authorId,
+                      ),
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -545,79 +576,12 @@ class _BmgGridContent extends ConsumerWidget {
               final d = docs[i].data();
               final id = docs[i].id;
               final authorId = (d['userId'] ?? '') as String;
-              final fallbackName = (d['userName'] ?? '') as String;
-              final liveName = ref.watch(userDisplayNameByIdProvider(authorId));
-              final name =
-                  liveName?.trim().isNotEmpty == true
-                      ? liveName!.trim()
-                      : fallbackName;
-              final poster = (d['imageUrl'] ?? '') as String;
-              final video = (d['videoUrl'] ?? '') as String;
-              final avatar = (d['userAvatar'] as String?);
-              final aspectRatio = i.isEven ? 9 / 14 : 9 / 11;
-              final tileWidth =
-                  (MediaQuery.of(context).size.width - (16.w * 3)) / 2;
-              final cacheW = computeCacheWidthForLogicalWidth(
-                tileWidth,
-                MediaQuery.of(context).devicePixelRatio,
-                maxPx: 1200,
-              );
-
-              return GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder:
-                          (_) =>
-                              BoomerangPagerPage(initialId: id, initialData: d),
-                    ),
-                  );
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AspectRatio(
-                      aspectRatio: aspectRatio,
-                      child: BoomerangGridVideoTile(
-                        postId: id,
-                        videoUrl: video.isNotEmpty ? video : null,
-                        imageUrl: poster.isNotEmpty ? poster : null,
-                        borderRadius: BorderRadius.circular(18.r),
-                        cacheWidth: cacheW,
-                        phaseShift: i * 0.025,
-                      ),
-                    ),
-                    SizedBox(height: 8.h),
-                    Row(
-                      children: [
-                        LiveAvatar(
-                          userId: authorId,
-                          fallbackUrl: avatar,
-                          size: 24.r,
-                        ),
-                        SizedBox(width: 8.w),
-                        Expanded(
-                          child: InkWell(
-                            onTap:
-                                () => openUserProfilePage(
-                                  context,
-                                  ref,
-                                  userId: authorId,
-                                ),
-                            child: Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              return _DiscoverBmgTile(
+                key: ValueKey(id),
+                postId: id,
+                authorId: authorId,
+                data: d,
+                index: i,
               );
             },
           ),
