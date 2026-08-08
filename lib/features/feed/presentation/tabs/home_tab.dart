@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:boomerang/core/utils/image_precache.dart';
 import 'package:boomerang/core/utils/perf_log.dart';
 import 'package:boomerang/core/video/boomerang_video_cache.dart';
+import 'package:boomerang/core/video/home_inline_playback_coordinator.dart';
+import 'package:boomerang/core/video/inline_video_resume.dart';
 import 'package:boomerang/core/widgets/boomerang_cached_image.dart';
 import 'package:boomerang/core/widgets/hashtag_caption.dart';
 import 'package:boomerang/core/widgets/live_avatar.dart';
@@ -58,6 +60,7 @@ class _PaginatedBoomerangListState
   final _prefetchedVideoIds = <String>{};
   int _lastWarmCount = 0;
   List<RankedPost> _visibleItems = const [];
+  bool _fetchArmed = true;
 
   static const _loadMoreThreshold = 1200.0;
   static const _estimatedCardHeight = 520.0;
@@ -81,9 +84,16 @@ class _PaginatedBoomerangListState
     ref
         .read(feedControllerProvider(FeedSurface.home).notifier)
         .maybeApplyDeferredReorder(atTopBoundary: atTopBoundary);
-    if (_controller.position.maxScrollExtent - _controller.position.pixels <=
-        _loadMoreThreshold) {
-      ref.read(feedControllerProvider(FeedSurface.home).notifier).fetchNext();
+    final distanceToEnd =
+        _controller.position.maxScrollExtent - _controller.position.pixels;
+    if (distanceToEnd > _loadMoreThreshold) {
+      _fetchArmed = true;
+    } else if (_fetchArmed) {
+      final state = ref.read(feedControllerProvider(FeedSurface.home)).value;
+      if (state != null && !state.isLoading && state.hasMore) {
+        _fetchArmed = false;
+        ref.read(feedControllerProvider(FeedSurface.home).notifier).fetchNext();
+      }
     }
     _precacheAhead(_visibleItems);
   }
@@ -151,15 +161,28 @@ class _PaginatedBoomerangListState
   }
 
   Future<void> _refresh() async {
+    _fetchArmed = true;
     await ref.read(feedControllerProvider(FeedSurface.home).notifier).refresh();
   }
 
   void _retryLoad() {
+    _fetchArmed = true;
     ref.invalidate(feedControllerProvider(FeedSurface.home));
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(feedControllerProvider(FeedSurface.home), (prev, next) {
+      final wasLoading = prev?.asData?.value.isLoading ?? false;
+      final nowLoading = next.asData?.value.isLoading ?? false;
+      if (wasLoading && !nowLoading) {
+        _fetchArmed = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _onScroll();
+        });
+      }
+    });
+
     final blockedSet =
         ref.watch(blockedUsersProvider).value?.toSet() ?? const <String>{};
     final followingAsync = ref.watch(followingIdsProvider);
@@ -1093,11 +1116,13 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   VideoPlayerController? _controller;
   bool _videoReady = false;
   bool _videoInitFailed = false;
-  bool _visible = false;
+  /// Card clears the visibility floor (candidate for a play slot).
+  bool _inViewport = false;
   bool _initialized = false;
   bool _posterResolved = false;
   int _initGen = 0;
   Timer? _disposeTimer;
+  late final InlineVideoResumeBinder _resumeBinder;
 
   static const _playThreshold = 0.45;
   static const _pauseThreshold = 0.2;
@@ -1107,16 +1132,36 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   bool _mediaUnlocked = false;
   bool _lastEmittedReady = false;
 
+  bool get _hasVideo =>
+      widget.videoUrl != null && widget.videoUrl!.isNotEmpty;
+
+  bool get _hasPlaySlot =>
+      HomeInlinePlaybackCoordinator.instance.isActive(widget.postId);
+
+  /// Viewport-eligible and ranked in the Home top-3 play set.
+  bool get _shouldPlay => _inViewport && _hasPlaySlot && _hasVideo;
+
   @override
   void initState() {
     super.initState();
     _posterResolved = widget.posterUrl == null || widget.posterUrl!.isEmpty;
+    _resumeBinder = InlineVideoResumeBinder(onResumeRequested: _resumeIfNeeded);
+    _resumeBinder.start();
     WidgetsBinding.instance.addPostFrameCallback((_) => _emitReadyIfChanged());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resumeBinder.syncTickerMode(context);
   }
 
   @override
   void didUpdateWidget(covariant _BoomerangMedia oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.postId != oldWidget.postId) {
+      HomeInlinePlaybackCoordinator.instance.unregister(oldWidget.postId);
+    }
     if (widget.videoUrl != oldWidget.videoUrl ||
         widget.posterUrl != oldWidget.posterUrl ||
         widget.postId != oldWidget.postId) {
@@ -1127,13 +1172,29 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
       _videoInitFailed = false;
       _cancelDisposeTimer();
       _disposeController();
-      if (_visible) _initController();
+      _applyPlaybackState();
       _emitReadyIfChanged();
     }
     if (widget.posterUrl != oldWidget.posterUrl) {
       _posterResolved = widget.posterUrl == null || widget.posterUrl!.isEmpty;
       _emitReadyIfChanged();
     }
+  }
+
+  /// Phone calls, audio focus, and route overlays pause the platform player
+  /// without clearing viewport/slot state. Restart looping when safe.
+  void _resumeIfNeeded() {
+    if (!mounted || !_shouldPlay) return;
+    if (!TickerMode.of(context)) return;
+
+    if (_initialized) {
+      final c = _controller;
+      if (c != null && c.value.isInitialized && !c.value.isPlaying) {
+        unawaited(c.play());
+      }
+      return;
+    }
+    _initController();
   }
 
   bool _computeReady() {
@@ -1150,7 +1211,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
     final posterOk = !hasPoster || _posterResolved;
     if (!posterOk) return false;
 
-    if (!_visible) {
+    if (!_shouldPlay) {
       _mediaUnlocked = true;
       return true;
     }
@@ -1176,52 +1237,99 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
   void _scheduleDispose() {
     _cancelDisposeTimer();
     _disposeTimer = Timer(_disposeDelay, () {
-      if (!mounted || _visible) return;
+      if (!mounted || _shouldPlay) return;
       // Release MediaCodec/ExoPlayer only after the card has stayed
-      // offscreen — immediate dispose on every scroll flicker kills looping.
+      // without a play slot — immediate dispose on every scroll flicker
+      // kills looping consistency.
       _disposeController();
       if (mounted) setState(() {});
       _emitReadyIfChanged();
     });
   }
 
+  double _centerDistancePx() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !box.attached) {
+      return double.infinity;
+    }
+    final topLeft = box.localToGlobal(Offset.zero);
+    final cardCenterY = topLeft.dy + box.size.height / 2;
+    final viewCenterY = MediaQuery.sizeOf(context).height / 2;
+    return (cardCenterY - viewCenterY).abs();
+  }
+
+  void _onSlotChanged() {
+    if (!mounted) return;
+    _applyPlaybackState();
+    _emitReadyIfChanged();
+  }
+
   void _onVisibilityChanged(VisibilityInfo info) {
     final fraction = info.visibleFraction;
 
-    if (!_visible && fraction >= _playThreshold) {
-      _visible = true;
+    if (!_inViewport && fraction >= _playThreshold) {
+      _inViewport = true;
+    } else if (_inViewport && fraction < _pauseThreshold) {
+      _inViewport = false;
+    }
+
+    if (_hasVideo) {
+      // Only viewport-eligible cards compete for the top-3 slots.
+      HomeInlinePlaybackCoordinator.instance.update(
+        id: widget.postId,
+        visibleFraction: _inViewport ? fraction : 0.0,
+        centerDistance: _centerDistancePx(),
+        onChanged: _onSlotChanged,
+      );
+    } else {
+      HomeInlinePlaybackCoordinator.instance.unregister(widget.postId);
+    }
+
+    _applyPlaybackState();
+    _emitReadyIfChanged();
+  }
+
+  void _applyPlaybackState() {
+    if (_shouldPlay) {
       _cancelDisposeTimer();
       if (!_initialized) {
         _initController();
       } else {
-        _controller?.play();
+        final c = _controller;
+        if (c != null && c.value.isInitialized && !c.value.isPlaying) {
+          unawaited(c.play());
+        }
       }
-      _emitReadyIfChanged();
       return;
     }
 
-    if (_visible && fraction < _pauseThreshold) {
-      _visible = false;
-      _controller?.pause();
+    final c = _controller;
+    if (c != null && c.value.isInitialized && c.value.isPlaying) {
+      unawaited(c.pause());
+    }
+    // Don't reset the timer on every visibility tick — that would keep
+    // offscreen decoders alive for the entire scroll gesture.
+    if (_controller != null && _disposeTimer == null) {
       _scheduleDispose();
-      _emitReadyIfChanged();
     }
   }
 
   Future<void> _initController() async {
     final url = widget.videoUrl;
     if (url == null || url.isEmpty) return;
+    if (!_shouldPlay) return;
     // Dispose any previous controller first: _disposeController bumps
     // _initGen, so it must run before we capture this attempt's generation
     // or the guards below would cancel our own init.
     _disposeController();
     final gen = _initGen;
     _videoReady = false;
+    _videoInitFailed = false;
     final initClock = Stopwatch()..start();
     final controller = await BoomerangVideoCache.instance.createController(
       url,
     );
-    if (!mounted || gen != _initGen || !_visible) {
+    if (!mounted || gen != _initGen || !_shouldPlay) {
       unawaited(controller.dispose());
       return;
     }
@@ -1233,7 +1341,7 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
         'source=${controller.dataSourceType.name} '
             'took=${initClock.elapsedMilliseconds}ms',
       );
-      if (!mounted || gen != _initGen || !_visible) {
+      if (!mounted || gen != _initGen || !_shouldPlay) {
         unawaited(controller.dispose());
         if (_controller == controller) {
           _controller = null;
@@ -1243,9 +1351,10 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
         return;
       }
       _initialized = true;
+      _videoInitFailed = false;
       await controller.setLooping(true);
       await controller.setVolume(0.0);
-      if (_visible) await controller.play();
+      if (_shouldPlay) await controller.play();
       if (mounted && gen == _initGen) setState(() => _videoReady = true);
     } catch (_) {
       if (mounted && gen == _initGen) {
@@ -1266,6 +1375,8 @@ class _BoomerangMediaState extends State<_BoomerangMedia> {
 
   @override
   void dispose() {
+    HomeInlinePlaybackCoordinator.instance.unregister(widget.postId);
+    _resumeBinder.stop();
     _cancelDisposeTimer();
     _disposeController();
     super.dispose();

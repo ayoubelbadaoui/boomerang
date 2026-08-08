@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:boomerang/core/utils/color_opacity.dart';
 import 'package:boomerang/core/utils/immersive_system_ui.dart';
 import 'package:boomerang/core/video/boomerang_video_cache.dart';
+import 'package:boomerang/core/video/inline_video_resume.dart';
 import 'package:boomerang/core/widgets/boomerang_overlay.dart';
 import 'package:boomerang/features/feed/presentation/widgets/fullscreen_boomerang_media.dart';
 import 'package:boomerang/infrastructure/providers.dart';
@@ -114,10 +117,13 @@ class _PostPageState extends ConsumerState<_PostPage> {
   VideoPlayerController? _controller;
   bool _showPosterOverlay = true;
   bool _initialized = false;
+  late final InlineVideoResumeBinder _resumeBinder;
 
   @override
   void initState() {
     super.initState();
+    _resumeBinder = InlineVideoResumeBinder(onResumeRequested: _resumeIfNeeded);
+    _resumeBinder.start();
     final videoUrl = widget.data['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
       // ignore: discarded_futures
@@ -142,6 +148,21 @@ class _PostPageState extends ConsumerState<_PostPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resumeBinder.syncTickerMode(context);
+  }
+
+  void _resumeIfNeeded() {
+    if (!mounted || !widget.isActive || !_initialized) return;
+    if (!TickerMode.of(context)) return;
+    final c = _controller;
+    if (c != null && c.value.isInitialized && !c.value.isPlaying) {
+      unawaited(c.play());
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant _PostPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isActive != oldWidget.isActive && _initialized) {
@@ -155,6 +176,7 @@ class _PostPageState extends ConsumerState<_PostPage> {
 
   @override
   void dispose() {
+    _resumeBinder.stop();
     _controller?.removeListener(_onVideoTickForPoster);
     _controller?.dispose();
     super.dispose();

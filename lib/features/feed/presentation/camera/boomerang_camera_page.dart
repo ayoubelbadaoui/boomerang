@@ -520,6 +520,13 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     _startRecording();
   }
 
+  void _showRecordError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
   Future<void> _startRecording() async {
     final c = _cam;
     if (c == null || !c.value.isInitialized || _starting || _recording) return;
@@ -554,6 +561,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
       _starting = false;
       _stopWhenStarted = false;
       debugPrint('Record start error: $e');
+      _showRecordError('Could not start recording. Please try again.');
     }
   }
 
@@ -612,6 +620,7 @@ class _BoomerangCameraPageState extends State<BoomerangCameraPage>
     } catch (e) {
       _navigating = false;
       debugPrint('Record stop error: $e');
+      _showRecordError('Could not save recording. Please try again.');
     }
   }
 

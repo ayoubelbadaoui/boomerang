@@ -26,6 +26,12 @@ class BoomerangVideoCache {
 
   final Set<String> _inFlight = <String>{};
 
+  /// Shared options so multiple muted grid / feed players can run together.
+  /// Without [VideoPlayerOptions.mixWithOthers], Android ExoPlayer treats each
+  /// new [VideoPlayerController.play] as exclusive and pauses the others —
+  /// which looks like "only one Discover tile loops".
+  static final _playerOptions = VideoPlayerOptions(mixWithOthers: true);
+
   /// Returns a controller playing from the local cache when the video is
   /// already downloaded, else a network controller. A cache miss also kicks
   /// off a background download so the next view of the same video is instant.
@@ -33,13 +39,19 @@ class BoomerangVideoCache {
     try {
       final cached = await _cache.getFileFromCache(url);
       if (cached != null && await cached.file.exists()) {
-        return VideoPlayerController.file(cached.file);
+        return VideoPlayerController.file(
+          cached.file,
+          videoPlayerOptions: _playerOptions,
+        );
       }
     } catch (_) {
       // Cache lookup failure must never block playback.
     }
     unawaited(warm(url));
-    return VideoPlayerController.networkUrl(Uri.parse(url));
+    return VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      videoPlayerOptions: _playerOptions,
+    );
   }
 
   /// Downloads [url] into the cache if it isn't there yet. Deduped across

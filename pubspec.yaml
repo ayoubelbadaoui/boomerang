@@ -51,7 +51,9 @@ dependencies:
   flutter_hooks: ^0.21.2
   image_picker: ^1.2.0
   image_cropper: ^11.0.0
-  camera: ^0.11.2
+  camera: ^0.11.3
+  # >=0.6.24+4: mute recording must not require RECORD_AUDIO on Android.
+  camera_android_camerax: ^0.6.24+4
   video_player: ^2.10.0
   share_plus: ^12.0.0
   intl: ^0.20.2

@@ -275,6 +275,11 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
   final _controller = ScrollController();
   static int _lastWarmedHash = 0;
 
+  /// Disarmed while a page request is in flight / just fired so short feeds
+  /// (always within the end threshold) cannot hammer [fetchNext] and rebuild
+  /// the masonry on every isLoading toggle.
+  bool _fetchArmed = true;
+
   @override
   void initState() {
     super.initState();
@@ -291,15 +296,21 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
   void _onScroll() {
     if (!_controller.hasClients) return;
     const threshold = 1200.0;
-    if (_controller.position.maxScrollExtent - _controller.position.pixels <=
-        threshold) {
-      ref
-          .read(feedControllerProvider(FeedSurface.discovery).notifier)
-          .fetchNext();
+    final distanceToEnd =
+        _controller.position.maxScrollExtent - _controller.position.pixels;
+    if (distanceToEnd > threshold) {
+      _fetchArmed = true;
+      return;
     }
+    if (!_fetchArmed) return;
+    final state = ref.read(feedControllerProvider(FeedSurface.discovery)).value;
+    if (state == null || state.isLoading || !state.hasMore) return;
+    _fetchArmed = false;
+    ref.read(feedControllerProvider(FeedSurface.discovery).notifier).fetchNext();
   }
 
   Future<void> _refresh() async {
+    _fetchArmed = true;
     await ref
         .read(feedControllerProvider(FeedSurface.discovery).notifier)
         .refresh();
@@ -307,16 +318,46 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final feedAsync = ref.watch(feedControllerProvider(FeedSurface.discovery));
-    if (!feedAsync.hasValue) {
+    // Omit isLoading from the select so pagination toggles do not rebuild
+    // every mounted video tile (same items + hasMore ⇒ no notify).
+    final slice = ref.watch(
+      feedControllerProvider(FeedSurface.discovery).select((async) {
+        final v = async.asData?.value;
+        if (v == null) return null;
+        return (v.items, v.hasMore);
+      }),
+    );
+    if (slice == null) {
       return const DiscoverExploreGridShimmer();
     }
-    final state = feedAsync.value!;
-    final visible = state.items
+    final (items, hasMore) = slice;
+
+    // Re-arm after each completed page so short content can still chain
+    // without scrolling, but never while isLoading (fetchNext no-ops anyway).
+    ref.listen(feedControllerProvider(FeedSurface.discovery), (prev, next) {
+      final wasLoading = prev?.asData?.value.isLoading ?? false;
+      final nowLoading = next.asData?.value.isLoading ?? false;
+      if (wasLoading && !nowLoading) {
+        _fetchArmed = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _onScroll();
+        });
+      }
+    });
+
+    final visible = items
         .where((p) => !widget.blockedSet.contains(p.authorId))
         .toList(growable: false);
 
-    if (visible.isEmpty && !state.isLoading) {
+    if (visible.isEmpty) {
+      final loading = ref.watch(
+        feedControllerProvider(FeedSurface.discovery).select(
+          (async) => async.asData?.value.isLoading ?? false,
+        ),
+      );
+      if (loading) {
+        return const DiscoverExploreGridShimmer();
+      }
       return const Center(child: Text('No posts to discover yet'));
     }
 
@@ -351,7 +392,7 @@ class _RankedBmgGridState extends ConsumerState<_RankedBmgGrid> {
           // Keep offscreen work modest — video tiles already pause/dispose
           // with hysteresis; a huge cacheExtent just mounts more decoders.
           cacheExtent: MediaQuery.sizeOf(context).height,
-          itemCount: visible.length + (state.hasMore ? 1 : 0),
+          itemCount: visible.length + (hasMore ? 1 : 0),
           itemBuilder: (context, i) {
             if (i >= visible.length) {
               return const _DiscoverGridLoadingTile();

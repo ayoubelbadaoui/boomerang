@@ -1,8 +1,9 @@
 import 'dart:async';
 
+import 'package:boomerang/core/video/boomerang_video_cache.dart';
+import 'package:boomerang/core/video/inline_video_resume.dart';
 import 'package:boomerang/core/widgets/boomerang_grid_thumbnail.dart';
 import 'package:flutter/material.dart';
-import 'package:boomerang/core/video/boomerang_video_cache.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -23,10 +24,10 @@ class BoomerangGridVideoTile extends StatefulWidget {
     this.phaseShift = 0,
 
     /// Fraction of the tile that must be visible before playback starts.
-    this.playThreshold = 0.4,
+    this.playThreshold = 0.25,
 
     /// Fraction below which playback pauses. Must be < [playThreshold].
-    this.pauseThreshold = 0.15,
+    this.pauseThreshold = 0.05,
   });
 
   final String postId;
@@ -50,11 +51,25 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
   bool _visible = false;
   int _initGen = 0;
   Timer? _disposeTimer;
+  late final InlineVideoResumeBinder _resumeBinder;
 
   static const _disposeDelay = Duration(milliseconds: 900);
 
   bool get _hasVideo =>
       widget.videoUrl != null && widget.videoUrl!.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _resumeBinder = InlineVideoResumeBinder(onResumeRequested: _resumeIfNeeded);
+    _resumeBinder.start();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resumeBinder.syncTickerMode(context);
+  }
 
   @override
   void didUpdateWidget(covariant BoomerangGridVideoTile oldWidget) {
@@ -81,6 +96,23 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
     });
   }
 
+  /// Phone calls, audio focus, and route overlays pause the platform player
+  /// without clearing [_visible]. Restart looping (or retry init) when safe.
+  void _resumeIfNeeded() {
+    if (!mounted || !_visible || !_hasVideo) return;
+    if (!TickerMode.of(context)) return;
+
+    if (_initialized) {
+      final c = _controller;
+      if (c != null && c.value.isInitialized && !c.value.isPlaying) {
+        unawaited(c.play());
+      }
+      return;
+    }
+    // Prior init may have failed during a call / codec blip — try again.
+    _initController();
+  }
+
   void _onVisibilityChanged(VisibilityInfo info) {
     final fraction = info.visibleFraction;
     if (!_hasVideo) {
@@ -105,6 +137,18 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
       // tile has stayed offscreen long enough that scroll thrash is over.
       _controller?.pause();
       _scheduleDispose();
+      return;
+    }
+
+    // Still considered visible but paused (focus blip / exclusive audio race
+    // before mixWithOthers) — nudge looping back on.
+    if (_visible &&
+        fraction >= widget.playThreshold &&
+        _initialized &&
+        _controller != null &&
+        _controller!.value.isInitialized &&
+        !_controller!.value.isPlaying) {
+      unawaited(_controller!.play());
     }
   }
 
@@ -117,6 +161,7 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
     _disposeController();
     final gen = _initGen;
     _videoReady = false;
+    _initFailed = false;
     final controller = await BoomerangVideoCache.instance.createController(
       url,
     );
@@ -137,6 +182,7 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
         return;
       }
       _initialized = true;
+      _initFailed = false;
       await controller.setLooping(true);
       await controller.setVolume(0.0);
       if (_visible) await controller.play();
@@ -156,6 +202,7 @@ class _BoomerangGridVideoTileState extends State<BoomerangGridVideoTile> {
 
   @override
   void dispose() {
+    _resumeBinder.stop();
     _cancelDisposeTimer();
     _disposeController();
     super.dispose();
